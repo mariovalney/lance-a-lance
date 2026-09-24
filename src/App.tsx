@@ -153,7 +153,7 @@ const Gate: FC = () => {
   if (state.kind === "anonymous") {
     return (
       <div className="h-full">
-        <SignInScreen signupOpen={state.signupOpen} resetOpen={state.resetOpen} />
+        <SignInScreen signupOpen={state.signupOpen} resetOpen={state.resetOpen} googleOpen={state.googleOpen} />
       </div>
     );
   }

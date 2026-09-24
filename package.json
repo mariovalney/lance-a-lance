@@ -23,7 +23,8 @@
     "e2e:home": "node tests/e2e/home.cjs",
     "e2e:pwa": "node tests/e2e/pwa.cjs",
     "e2e:account": "node tests/e2e/account.cjs",
-    "e2e:reset": "node tests/e2e/reset.cjs"
+    "e2e:reset": "node tests/e2e/reset.cjs",
+    "e2e:google": "node tests/e2e/google.cjs"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",

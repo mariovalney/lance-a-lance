@@ -111,12 +111,34 @@ export interface AuthConfig {
   signupOpen: boolean;
   /** False when the server has no SMTP, so there is no way to send a link. */
   resetOpen: boolean;
+  /** False when the server has no GOOGLE_CLIENT_ID, so there is nowhere to go. */
+  googleOpen: boolean;
 }
 
+export const CLOSED_CONFIG: AuthConfig = { signupOpen: false, resetOpen: false, googleOpen: false };
+
 export async function fetchConfig(): Promise<AuthConfig> {
-  const body = await call<{ signupEnabled: boolean; resetEnabled: boolean }>("/auth/config");
-  return { signupOpen: Boolean(body?.signupEnabled), resetOpen: Boolean(body?.resetEnabled) };
+  const body = await call<{ signupEnabled: boolean; resetEnabled: boolean; googleEnabled: boolean }>("/auth/config");
+  return {
+    signupOpen: Boolean(body?.signupEnabled),
+    resetOpen: Boolean(body?.resetEnabled),
+    googleOpen: Boolean(body?.googleEnabled),
+  };
 }
+
+/** Where the button goes. A redirect, not a fetch: the flow leaves the app. */
+export const GOOGLE_SIGN_IN = "/api/auth/google";
+
+/** What the server can send back on `/?erro=...` when the flow does not end well. */
+const GOOGLE_ERRORS: Record<string, string> = {
+  google_unavailable: "Entrar com o Google não está disponível aqui.",
+  google_state: "A entrada pelo Google demorou demais. Tente de novo.",
+  google_failed: "Não deu para entrar com o Google. Tente de novo.",
+  email_unverified: "O Google não confirmou esse e-mail, então ele não serve para entrar aqui.",
+  signup_closed: "As inscrições estão fechadas.",
+};
+
+export const messageForError = (code: string): string => GOOGLE_ERRORS[code] ?? "Não deu certo. Tente de novo.";
 
 /** Always resolves, whether or not the address has an account. */
 export async function requestPasswordReset(email: string): Promise<void> {
