@@ -29,3 +29,6 @@ dist-ssr
 # E2E outputs and raw Lichess dumps (large, reproducible)
 tests/e2e/.out/
 /data/
+
+# Compiled server
+server/dist
