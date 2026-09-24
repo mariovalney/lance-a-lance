@@ -24,6 +24,11 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+
+# Easypanel passes the commit it is building as a build arg. The footer shows
+# the first seven characters of it, which is how a deploy is told apart from
+# the one before. Outside Easypanel the build reads the checkout instead.
+ARG GIT_SHA=""
 RUN pnpm build && pnpm build:server
 
 # Drop the dev dependencies from the tree that ships.

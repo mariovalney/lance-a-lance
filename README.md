@@ -84,6 +84,8 @@ There is no `SESSION_SECRET`: the cookie carries nothing but an opaque random to
 
 The database migrations run themselves at boot. The container is stateless, so it needs no volume; only Postgres does.
 
+The home screen footer shows the first seven characters of the commit the build came from. Easypanel hands that commit to the `Dockerfile` as the `GIT_SHA` build arg; outside it, the build reads the checkout instead. It is a build arg, not a runtime variable: the value goes into the bundle while the image is being built.
+
 Domain: `https://lance-a-lance.amestris.cloud`. There is no Google sign-in yet; when there is, it will use `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and the callback `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
 
 ## Copying your progress

@@ -35,6 +35,12 @@ export const HomeScreen: FC<{ onStart: (ref: LessonRef) => void; onPuzzles: () =
           ))}
         </div>
       </section>
+
+      {__APP_VERSION__ && (
+        <footer className="text-center text-[11px] text-muted-foreground">
+          versão <span className="font-mono tabular">{__APP_VERSION__}</span>
+        </footer>
+      )}
     </div>
   );
 };
