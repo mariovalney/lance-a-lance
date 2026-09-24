@@ -2,8 +2,8 @@
 //
 //   URL=http://127.0.0.1:3111 pnpm e2e:account
 //
-// Expects a server whose database has no users yet, so the first signup is
-// allowed. Seeds progress in one browser, signs up, checks the progress
+// Needs a server that still accepts signups: a database with no users yet, or
+// SIGNUP_ENABLED=true. Seeds progress in one browser, signs up, checks the progress
 // reached the API, signs in from a second browser and checks it came back,
 // then exports the backup and imports it into a third, empty browser.
 const fs = require("node:fs");

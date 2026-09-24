@@ -50,6 +50,12 @@ O `e2e:pwa` serve o `dist/` sozinho, como os outros. O `e2e:account` precisa de 
 
 O `e2e:reset` precisa de um servidor com SMTP apontado para o coletor de e-mails de teste. Suba o coletor com `node tests/e2e/smtp-sink.cjs 2526 /tmp/sink.json`, depois o servidor com `SMTP_HOST=127.0.0.1 SMTP_PORT=2526 APP_URL=http://127.0.0.1:3444 SIGNUP_ENABLED=true`, e rode `URL=http://127.0.0.1:3444 SINK=/tmp/sink.json pnpm e2e:reset`.
 
+## CI
+
+O `.github/workflows/ci.yml` roda em todo pull request e em todo push na `main`, e não em branch solto. São dois jobs: o primeiro faz typecheck, lint, valida as 59 lições e monta o app e o servidor; o segundo roda os testes de navegador, incluindo conta e recuperação de senha contra um Postgres e um coletor de e-mail de verdade.
+
+O `e2e:walkthrough` fica de fora, porque leva uns 12 minutos. Ele tem workflow próprio, `walkthrough.yml`, disparado à mão em Actions, com campos para escolher o commit, pular lições e rodar em modo escuro. Vale a pena para mudança no motor de lições, no tabuleiro, nas telas de exercício ou na pontuação. O conteúdo em si já é coberto pelo `pnpm validate` em todo PR.
+
 ## Deploy
 
 O `Dockerfile` monta o PWA e o servidor numa imagem só, que sobe no Easypanel como um app service. O Node serve os arquivos estáticos e a API na mesma origem, então não tem nginx nem CORS no meio.

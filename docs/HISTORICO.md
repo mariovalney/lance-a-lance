@@ -350,6 +350,12 @@ O plano original tinha duas fases: primeiro um PWA com o progresso só no aparel
 8. **Recuperação de senha.** Por e-mail, com nodemailer. O token vive em `password_resets`, guardado só como hash, vale 30 minutos e serve uma vez. Gastá-lo troca a senha e apaga todas as sessões da conta, na mesma transação. O `/api/auth/forgot` responde igual exista ou não a conta, para não virar um jeito de descobrir quem está cadastrado. Sem `SMTP_HOST`, o recurso inteiro se desliga, interface incluída, em vez de aparecer e falhar.
 9. **Deploy.** O `Dockerfile` monta as duas metades numa imagem só, para subir no Easypanel como um app service. O container é sem estado: não precisa de volume.
 
+### CI
+
+Decidido com o Mário: roda em pull request e em push na `main`, nunca em branch solto. Entram typecheck, lint, a validação das 59 lições, os dois builds e todos os testes de navegador menos um, com Postgres e coletor de e-mail de verdade nos que precisam.
+
+O walkthrough fica fora, por levar uns 12 minutos, o que é caro demais para todo PR. Ele tem workflow próprio, disparado à mão quando a mudança é grande o bastante. A validação por código já pega quase todo erro de conteúdo sem abrir navegador, que é o argumento para essa divisão.
+
 ### Como o progresso se junta
 
 A regra continua a mesma de antes: vence a cópia com o `updatedAt` mais novo. Na prática:

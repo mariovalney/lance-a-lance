@@ -18,7 +18,8 @@ Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 
 - `pnpm build:pwa`: the installable build, into `dist/`. `pnpm build:server` compiles `server/` into `server/dist`. `pnpm start` runs the compiled server, which serves both.
 - `pnpm gen:icons`: regenerates `public/*.png` from `assets/*.svg`. Only needed after editing those SVGs.
 - E2E (Playwright, run `npx playwright install chromium` once): `pnpm e2e:prepare` first, then `pnpm e2e:walkthrough` (env: `DONE` = comma list of lesson ids to mark done, `MAX_LESSONS`, `SHOTS=1`, `SCHEME=dark`), `pnpm e2e:trainer`, `pnpm e2e:history`, `pnpm e2e:auto`, `pnpm e2e:home`. Outputs go to `tests/e2e/.out/`.
-- `pnpm e2e:pwa` needs `pnpm build:pwa` first and serves `dist/` itself. `pnpm e2e:account` needs a running server whose database has no users yet: `URL=http://127.0.0.1:3111 pnpm e2e:account`.
+- `pnpm e2e:pwa` serves `dist/` itself, like the rest. `pnpm e2e:account` and `pnpm e2e:reset` need a running server: `URL=http://127.0.0.1:3111 pnpm e2e:account`. Reset also needs `tests/e2e/smtp-sink.cjs` and `SINK=`.
+- CI (`.github/workflows/ci.yml`) runs on pull requests and on pushes to main: typecheck, lint, validate, both builds, then every E2E except the walkthrough, with a Postgres service and the mail sink. The walkthrough is `.github/workflows/walkthrough.yml`, triggered by hand, because it takes about twelve minutes. Do not move it into CI.
 
 ## Architecture in one screen
 
