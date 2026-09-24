@@ -360,6 +360,8 @@ The walkthrough stays out, taking about twelve minutes, which is too expensive f
 
 ### How progress merges
 
+This is how it worked while the app could be used without an account. Section 12 replaced it.
+
 The rule is the one from before: the copy with the newer `updatedAt` wins. In practice:
 
 - Signing in on a device that already has progress, to an empty account, pushes the progress up to the account.
@@ -391,3 +393,22 @@ What went: `build:artifact`, `scripts/to-artifact.mjs`, `vite-plugin-singlefile`
 The part that took the work was none of those: the E2E tests opened a single HTML file over `file://`, and `file://` has no origin, so no service worker, no per-site `localStorage` and no working `fetch`. They all moved onto `dist/` served over HTTP, by a small server in `tests/e2e/env.cjs` that each script starts for itself.
 
 The progress that lived in the Artifact database (993 XP, 10 lessons, a rating of 1017 and 10 history rows) was pulled out by a Claude on claude.ai, which read the database and assembled the JSON in the shape the importer expects. The first 7 history rows did not exist: they are puzzles played before the chunked log existed, and were never written. That is why the counter said 17 played while the list showed 10, in the Artifact and in the app. On import the counters were recomputed from the 10 rows that survived, starting from the ordinary 800, so the history has no hole in it.
+
+## 12. The app behind the account
+
+In September 2026, after a session where the badge said "Neste aparelho" and the progress was still on screen after signing out, Mário asked two things in a row: make signing in mandatory, and, once that was settled, stop keeping a copy in the browser at all when there is a database.
+
+The badge went first. It had five states and two of them printed the same words, so it said "Neste aparelho" both for "you are not signed in" and for "the cloud refused a write". Neither is something the reader can act on, and with an account always required the first one stops existing. There is no badge now: a failed write is caught by the next one or by the load on the next boot.
+
+Then the browser copy. It was the app's memory before there were accounts, and it stayed on as a mirror afterwards, which made two problems:
+
+- On a browser two people share, the copy had no owner. Whoever signed in next found it, and because the reconcile compared `updatedAt`, one person's XP could be pushed into another person's account.
+- It made the account the second source of truth instead of the only one.
+
+The first version of the fix tagged the copy with the account that owned it. Mário went further: with a database, the browser keeps nothing. So `ProgressProvider` only writes to `localStorage` when the page has no API behind it, which is the static host the browser checks serve. Behind an account, what would be the browser's copy is a `Map` in memory, thrown away with the tab, and the puzzle log pages come from the account.
+
+That leaves one thing to get right. A dead `fetch` means two opposite things: on a static host there is no API to reach and progress is in the browser, while on the real site it means the phone is offline and there is nothing here to show. They cannot be told apart at the moment of failure, so the app remembers, in `lance-a-lance:api:v1`, that this origin answered JSON once. After that a dead fetch is `ApiOffline` and the app says "Sem conexão" with a way to try again, instead of opening an empty course that looks like lost progress. Before that, and it can only be before the first successful load, it is `ApiUnavailable` and the browser is the store.
+
+The cost is the offline promise, and it was accepted knowingly: an installed app with no network now opens on the offline screen rather than on the cached course. The alternative kept a copy in the browser, which is exactly what was being removed.
+
+Signing out clears whatever progress keys the browser still holds. Nothing is written there while an account is open, so what it finds is a copy from before this change, and leaving the app leaves nothing behind. Sound and board coordinates stay: they are the device's, not the account's.

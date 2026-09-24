@@ -2,21 +2,54 @@
  * Talks to the API in server/. Same origin as the page, so the session cookie
  * rides along on its own and there is nothing to store in the browser.
  *
- * Every call has to survive there being no API at all: inside the claude.ai
- * artifact, and on any plain static host, `/api/...` answers with the app's own
- * HTML or a 404. `ApiUnavailable` is how that case is told apart from a real
- * failure, so the interface can hide the account section instead of showing an
- * error the reader cannot act on.
+ * Every call has to survive there being no API at all: on a plain static host
+ * `/api/...` answers with the app's own HTML or a 404. `ApiUnavailable` is how
+ * that case is told apart from a real failure, so the interface can hide the
+ * account section instead of showing an error the reader cannot act on.
+ *
+ * A dead fetch means one of two very different things, and the app treats them
+ * in opposite ways: on a static host there is no API to reach and progress
+ * stays in the browser, while on the real site it means the phone is offline,
+ * and there the browser keeps no progress to fall back on. So the first JSON
+ * answer from this origin is remembered, and after that a dead fetch is
+ * `ApiOffline`.
  */
 export interface Account {
   id: string;
   email: string;
 }
 
+const API_SEEN = "lance-a-lance:api:v1";
+
+function rememberApi(): void {
+  try {
+    if (localStorage.getItem(API_SEEN) !== "1") localStorage.setItem(API_SEEN, "1");
+  } catch {
+    /* a browser that keeps nothing reads as a static host while it is offline */
+  }
+}
+
+function apiSeen(): boolean {
+  try {
+    return localStorage.getItem(API_SEEN) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** There is no API behind this page at all. */
 export class ApiUnavailable extends Error {
   constructor() {
     super("no API behind this page");
     this.name = "ApiUnavailable";
+  }
+}
+
+/** There is an API, and it cannot be reached right now. */
+export class ApiOffline extends Error {
+  constructor() {
+    super("Sem conexão com o servidor. Tente de novo.");
+    this.name = "ApiOffline";
   }
 }
 
@@ -51,13 +84,18 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
       credentials: "same-origin",
     });
   } catch {
-    // Offline, or nothing listening.
-    throw new ApiUnavailable();
+    // Nothing listening, or nothing to listen through.
+    throw apiSeen() ? new ApiOffline() : new ApiUnavailable();
   }
 
   // A static host answers a missing route with the app shell, not with JSON.
-  if (!response.headers.get("content-type")?.includes("application/json")) throw new ApiUnavailable();
+  // A proxy in front of a server that is down answers with an error page, which
+  // is not JSON either, but does say so in the status.
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw response.ok && !apiSeen() ? new ApiUnavailable() : new ApiOffline();
+  }
 
+  rememberApi();
   const body = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
   if (response.ok) return body as T;
   if (response.status === 401) return body as T;

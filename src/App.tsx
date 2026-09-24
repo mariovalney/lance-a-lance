@@ -13,6 +13,7 @@ import { ResultScreen } from "@/components/result/ResultScreen";
 import { PuzzleTrainer } from "@/components/trainer/PuzzleTrainer";
 import { ResetScreen } from "@/components/home/ResetScreen";
 import { SignInScreen } from "@/components/home/SignInScreen";
+import { OfflineScreen } from "@/components/home/OfflineScreen";
 
 type Route =
   | { name: "home" }
@@ -106,7 +107,9 @@ const Shell: FC = () => {
 
 /**
  * Nothing but the password reset link is reachable without an account, and the
- * progress store only mounts once there is one to load it into.
+ * progress store only mounts once there is one to load it into. Progress is
+ * the account's alone, so a server that cannot be reached leaves nothing to
+ * show and says so.
  *
  * The exception is a page with no API behind it, a plain static host, where
  * there are no accounts to sign in to and progress stays in this browser.
@@ -135,6 +138,14 @@ const Gate: FC = () => {
     return (
       <div className="grid h-full place-items-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Carregando" />
+      </div>
+    );
+  }
+
+  if (state.kind === "offline") {
+    return (
+      <div className="h-full">
+        <OfflineScreen />
       </div>
     );
   }
