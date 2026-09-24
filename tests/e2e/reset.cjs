@@ -13,6 +13,7 @@
 const fs = require("node:fs");
 const { chromium } = require("playwright");
 const { OUT } = require("./env.cjs");
+const { addUser, ensureAdmin, givePassword } = require("./accounts.cjs");
 
 const BASE = process.env.URL ?? "http://127.0.0.1:3444";
 const SINK = process.env.SINK ?? "/tmp/sink.json";
@@ -56,12 +57,16 @@ function linkFromMailbox(since) {
   await page.goto(BASE + "/", { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
 
-  // An account to lose the password of. Signup may be closed by now, so this
-  // goes through the API rather than the interface.
-  const created = await page.request.post(BASE + "/api/auth/signup", { data: { email: ACCOUNT, password: OLD_PASSWORD } });
-  if (!created.ok()) throw new Error(`could not create the test account: ${created.status()} ${await created.text()}`);
+  // An account to lose the password of. Signing up is closed, so the admin
+  // liberates the address and the first link is what gives it a password at
+  // all, which is also how a real person starts here.
+  await ensureAdmin(page.request, BASE);
+  await addUser(page.request, BASE, ACCOUNT);
+  await givePassword(page, BASE, SINK, ACCOUNT, OLD_PASSWORD);
+  const firstSignIn = await page.request.post(BASE + "/api/auth/login", { data: { email: ACCOUNT, password: OLD_PASSWORD } });
+  check(firstSignIn.ok(), `the address the admin liberated got a password (${firstSignIn.status()})`);
   await ctx.clearCookies();
-  await page.reload({ waitUntil: "networkidle" });
+  await page.goto(BASE + "/", { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
 
   /* ---------- ask for the link ---------- */

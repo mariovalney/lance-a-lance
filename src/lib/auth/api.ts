@@ -17,6 +17,8 @@
 export interface Account {
   id: string;
   email: string;
+  /** Opens /admin, where the accounts are managed. The first account is it. */
+  isAdmin: boolean;
 }
 
 const API_SEEN = "lance-a-lance:api:v1";
@@ -62,6 +64,9 @@ const MESSAGES: Record<string, string> = {
   signup_closed: "As inscrições estão fechadas.",
   too_many_attempts: "Tentativas demais. Espere alguns minutos.",
   invalid_token: "Este link não vale mais. Peça outro.",
+  forbidden: "Esta parte é só para quem administra.",
+  cannot_remove_self: "Você não pode tirar a si mesmo da administração.",
+  not_found: "Essa conta não existe mais.",
   reset_unavailable: "Este site não está configurado para enviar e-mail.",
   server_error: "O servidor não respondeu direito. Tente de novo.",
 };
@@ -163,4 +168,35 @@ export async function signup(email: string, password: string): Promise<Account> 
 
 export async function logout(): Promise<void> {
   await call<{ ok: boolean }>("/auth/logout", { method: "POST" });
+}
+
+/* ---------- the admin page ---------- */
+
+export interface ManagedUser {
+  id: string;
+  email: string;
+  isAdmin: boolean;
+  createdAt: string;
+  hasPassword: boolean;
+  providers: string[];
+  xp: number;
+  lessons: number;
+  lastSeen: string | null;
+}
+
+export async function fetchUsers(): Promise<ManagedUser[]> {
+  const body = await call<{ users: ManagedUser[] }>("/admin/users");
+  return body?.users ?? [];
+}
+
+export async function addUser(email: string): Promise<void> {
+  await call<{ user: Account }>("/admin/users", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+export async function removeUser(id: string): Promise<void> {
+  await call<{ ok: boolean }>(`/admin/users/${id}`, { method: "DELETE" });
+}
+
+export async function setUserAdmin(id: string, isAdmin: boolean): Promise<void> {
+  await call<{ user: Account }>(`/admin/users/${id}/admin`, { method: "POST", body: JSON.stringify({ isAdmin }) });
 }

@@ -18,12 +18,6 @@ export const env = {
   production,
   port: Number(process.env.PORT ?? 3000),
   databaseUrl: required("DATABASE_URL"),
-  /**
-   * Signup is closed by default, because the site is public. It is allowed
-   * anyway while the users table is empty, so the first account can always be
-   * created on a fresh deploy without flipping anything.
-   */
-  signupEnabled: flag("SIGNUP_ENABLED", false),
   /** Easypanel terminates TLS in front of this, so the cookie is Secure there. */
   cookieSecure: flag("COOKIE_SECURE", production),
   /** The built PWA. */

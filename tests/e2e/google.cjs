@@ -2,7 +2,7 @@
 // in tests/e2e/google-sink.cjs.
 //
 //   node tests/e2e/google-sink.cjs 2626 &
-//   DATABASE_URL=... PORT=3111 COOKIE_SECURE=false SIGNUP_ENABLED=true \
+//   DATABASE_URL=... PORT=3111 COOKIE_SECURE=false \
 //     APP_URL=http://127.0.0.1:3111 GOOGLE_CLIENT_ID=test-client-id \
 //     GOOGLE_CLIENT_SECRET=test-client-secret \
 //     GOOGLE_AUTH_URL=http://127.0.0.1:2626/authorize \
@@ -12,18 +12,19 @@
 //
 //   URL=http://127.0.0.1:3111 GOOGLE=http://127.0.0.1:2626 pnpm e2e:google
 //
-// Needs a server that still accepts signups. With DATABASE_URL set it also
+// Signing up is closed, so the addresses here are liberated by the admin
+// first, which is what production does. With DATABASE_URL set the script also
 // starts a second server of its own, without GOOGLE_CLIENT_ID, to prove the
 // feature turns itself off.
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const { chromium } = require("playwright");
 const { OUT, ROOT } = require("./env.cjs");
+const { ADMIN_EMAIL, PASSWORD: ADMIN_PASSWORD, addUser, ensureAdmin } = require("./accounts.cjs");
 
 const BASE = process.env.URL ?? "http://127.0.0.1:3111";
 const FAKE = process.env.GOOGLE ?? "http://127.0.0.1:2626";
 const STAMP = Date.now();
-const PASSWORD = "a-good-password";
 const XP = 240;
 
 const problems = [];
@@ -121,11 +122,15 @@ const waitForHealth = async (base) => {
   check(await first.getByRole("link", { name: "Entrar com Google" }).isVisible(), "the sign in screen offers Google");
   await first.screenshot({ path: OUT + "/google-signin.png" });
 
-  /* ---------- a new account through Google ---------- */
+  /* ---------- an address the admin liberated, entering with Google -------- */
+  const admin = await browser.newContext(phone);
+  await ensureAdmin(admin.request, BASE);
   const fresh = `google-${STAMP}@exemplo.com`;
+  await addUser(admin.request, BASE, fresh);
+
   await nextIdentity(first, { sub: `sub-${STAMP}-a`, email: fresh, email_verified: true });
   await signInWithGoogle(first);
-  check((await xpOnScreen(first)) === 0, `Google signs in and the account starts empty (${await xpOnScreen(first)} XP)`);
+  check((await xpOnScreen(first)) === 0, `Google opens the address the admin liberated (${await xpOnScreen(first)} XP)`);
   check((await accountOnScreen(first)) === fresh, "the account carries the address Google gave");
   await first.screenshot({ path: OUT + "/google-signed-in.png" });
 
@@ -138,40 +143,54 @@ const waitForHealth = async (base) => {
   await signInWithGoogle(again);
   check((await xpOnScreen(again)) === XP, `the same Google identity comes back to the same account (${await xpOnScreen(again)} XP)`);
 
-  /* ---------- a verified email links to the password account ---------- */
-  const shared = `senha-${STAMP}@exemplo.com`;
-  const setup = await browser.newContext(phone);
-  const created = await setup.request.post(BASE + "/api/auth/signup", { data: { email: shared, password: PASSWORD } });
-  check(created.ok(), `the password account was created (${created.status()})`);
-  await setup.request.put(BASE + "/api/progress", { data: progressFor(XP) });
-  await setup.close();
+  /* ---------- a verified email links to the account with a password ------- */
+  // The admin's own account is the one with both a password and progress, so
+  // it is what proves that linking keeps everything where it was.
+  await admin.request.put(BASE + "/api/progress", { data: progressFor(XP) });
 
   const linking = await open(browser);
-  await nextIdentity(linking, { sub: `sub-${STAMP}-b`, email: shared, email_verified: true });
+  await nextIdentity(linking, { sub: `sub-${STAMP}-b`, email: ADMIN_EMAIL, email_verified: true });
   await signInWithGoogle(linking);
-  check((await accountOnScreen(linking)) === shared, "Google lands on the account that already had the address");
+  check((await accountOnScreen(linking)) === ADMIN_EMAIL, "Google lands on the account that already had the address");
   check((await xpOnScreen(linking)) === XP, `and the progress of that account is intact (${await xpOnScreen(linking)} XP)`);
 
-  // Not a second account: the password still opens the same one.
+  // Not a second account: the address appears once in the list, and the
+  // password still opens the same one.
+  const listed = await (await linking.request.get(BASE + "/api/admin/users")).json();
+  const rows = (listed.users ?? []).filter((u) => u.email === ADMIN_EMAIL);
+  check(rows.length === 1, `the address is on one account only (${rows.length})`);
+  check(rows[0]?.providers?.includes("google") === true, "and that account now has both ways in");
+
   const byPassword = await open(browser);
-  await byPassword.getByPlaceholder("E-mail").fill(shared);
-  await byPassword.getByPlaceholder("Senha").fill(PASSWORD);
+  await byPassword.getByPlaceholder("E-mail").fill(ADMIN_EMAIL);
+  await byPassword.getByPlaceholder("Senha").fill(ADMIN_PASSWORD);
   await byPassword.getByRole("button", { name: "Entrar", exact: true }).click();
   await byPassword.waitForTimeout(2000);
   check((await xpOnScreen(byPassword)) === XP, "the password still opens that one account, so nothing was duplicated");
 
+  /* ---------- an address nobody liberated is refused ---------- */
+  const stranger = await open(browser);
+  const unknown = `desconhecido-${STAMP}@exemplo.com`;
+  await nextIdentity(stranger, { sub: `sub-${STAMP}-d`, email: unknown, email_verified: true });
+  await signInWithGoogle(stranger);
+  check(await stranger.getByText("As inscrições estão fechadas").isVisible(), "an address the admin never liberated is refused");
+  check((await stranger.locator("header").count()) === 0, "and nobody is signed in");
+
   /* ---------- an unverified email is refused ---------- */
   const unverified = await open(browser);
   const claimed = `naoverificado-${STAMP}@exemplo.com`;
+  await addUser(admin.request, BASE, claimed);
   await nextIdentity(unverified, { sub: `sub-${STAMP}-c`, email: claimed, email_verified: false });
   await signInWithGoogle(unverified);
   check(await unverified.getByText("O Google não confirmou esse e-mail").isVisible(), "an unverified email is refused, in Portuguese");
   check((await unverified.locator("header").count()) === 0, "and nobody is signed in");
   await unverified.screenshot({ path: OUT + "/google-unverified.png" });
 
-  // And it created nothing: signing in with a password there finds no account.
-  const absent = await unverified.request.post(BASE + "/api/auth/login", { data: { email: claimed, password: PASSWORD } });
-  check(absent.status() === 401, `no account was created for it (${absent.status()})`);
+  // The address was liberated, so the account exists, but it stays untouched:
+  // no identity was attached to it.
+  const after = await (await admin.request.get(BASE + "/api/admin/users")).json();
+  const target = (after.users ?? []).find((u) => u.email === claimed);
+  check(target?.providers?.length === 0, "and the account it claimed was left without it");
 
   /* ---------- a state that does not match is refused ---------- */
   const forged = await open(browser);

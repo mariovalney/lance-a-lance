@@ -63,8 +63,11 @@ function pwaPlugin(): Plugin[] {
       // and the sounds are synthesized, so the app works fully offline.
       globPatterns: ["**/*.{js,css,html,woff2,png,svg,ico,webmanifest}"],
       maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-      // Any path that is not a file falls back to the app shell.
+      // Only the addresses the app answers fall back to the shell. Anything
+      // else has to reach the server, which answers 404. Same list as
+      // CLIENT_ROUTES in server/src/index.ts and the routing in src/App.tsx.
       navigateFallback: "index.html",
+      navigateFallbackAllowlist: [/^\/$/, /^\/redefinir\/?$/, /^\/admin\/?$/],
       navigateFallbackDenylist: [/^\/api\//],
       cleanupOutdatedCaches: true,
     },

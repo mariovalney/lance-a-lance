@@ -112,7 +112,7 @@ jobs:
           GOOGLE_CLIENT_ID=test-client-id GOOGLE_CLIENT_SECRET=test-client-secret \
           node tests/e2e/google-sink.cjs 2626 &
           DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/lanceal \
-          PORT=3111 COOKIE_SECURE=false SIGNUP_ENABLED=true \
+          PORT=3111 COOKIE_SECURE=false \
           APP_URL=http://127.0.0.1:3111 \
           SMTP_HOST=127.0.0.1 SMTP_PORT=2526 SMTP_FROM=nao-responda@exemplo.com \
           GOOGLE_CLIENT_ID=test-client-id GOOGLE_CLIENT_SECRET=test-client-secret \
@@ -126,8 +126,10 @@ jobs:
             sleep 1
           done
 
+      # The first account claims the deploy and is the admin, so this one runs
+      # first: everything after it is an address that account liberated.
       - name: Accounts, sync and backup
-        run: URL=http://127.0.0.1:3111 pnpm e2e:account
+        run: URL=http://127.0.0.1:3111 SINK=/tmp/sink.json pnpm e2e:account
 
       - name: Password reset
         run: URL=http://127.0.0.1:3111 SINK=/tmp/sink.json pnpm e2e:reset
@@ -139,6 +141,9 @@ jobs:
           URL=http://127.0.0.1:3111 GOOGLE=http://127.0.0.1:2626 \
           DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/lanceal \
           pnpm e2e:google
+
+      - name: Managing the accounts, and the addresses the app answers
+        run: URL=http://127.0.0.1:3111 SINK=/tmp/sink.json pnpm e2e:admin
 
       # Screenshots and logs, to look at when something above goes red.
       - uses: actions/upload-artifact@v4

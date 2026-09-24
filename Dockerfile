@@ -7,8 +7,8 @@
 # Environment:
 #   DATABASE_URL     required, the Postgres connection string
 #   PORT             defaults to 3000
-#   SIGNUP_ENABLED   defaults to false; signup is allowed anyway while the
-#                    users table is empty, so the first account can be created
+#   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+#                    optional; without them signing in with Google is off
 #   COOKIE_SECURE    defaults to true, which is right behind Easypanel's TLS
 
 FROM node:22-alpine AS build
