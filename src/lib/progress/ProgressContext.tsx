@@ -4,15 +4,20 @@ import { useAuth } from "@/lib/auth/useAuth";
 import { BACKUP_VERSION, type Backup } from "@/lib/progress/backup";
 import { ProgressContext } from "@/lib/progress/context";
 import { START_RATING, applyPuzzle, applyRun } from "@/lib/progress/scoring";
-import { LOG_CHUNK, connectRemote, loadLocal, loadLocalLog, newest, saveLocal, saveLocalLog, type RemoteStore } from "@/lib/progress/storage";
 import {
-  emptyProgress,
-  type LessonRunResult,
-  type ProgressState,
-  type PuzzleLogEntry,
-  type PuzzleResult,
-  type SyncStatus,
-} from "@/lib/progress/types";
+  LOG_CHUNK,
+  clearLocal,
+  connectRemote,
+  loadLocal,
+  loadLocalLog,
+  loadOwner,
+  newest,
+  saveLocal,
+  saveLocalLog,
+  saveOwner,
+  type RemoteStore,
+} from "@/lib/progress/storage";
+import { emptyProgress, type LessonRunResult, type ProgressState, type PuzzleLogEntry, type PuzzleResult } from "@/lib/progress/types";
 
 /** Merge two copies of a log chunk, keeping every filled slot. */
 function mergeChunk(a: (PuzzleLogEntry | null)[] | null, b: (PuzzleLogEntry | null)[] | null): (PuzzleLogEntry | null)[] {
@@ -26,43 +31,38 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // reconcile against whatever that account already has.
   const identity = storageIdentity(auth.state);
   const [state, setState] = useState<ProgressState>(() => loadLocal() ?? emptyProgress());
-  // Tagged with the identity it describes, so that signing in or out shows
-  // "Conectando" again without having to write state from an effect.
-  const [syncState, setSyncState] = useState<{ for: string | null; status: SyncStatus }>({ for: null, status: "loading" });
-  const sync = syncState.for === identity ? syncState.status : "loading";
   const remoteRef = useRef<RemoteStore | null>(null);
   // Mirrors `state` synchronously: the recorders need the value they just wrote
   // before React re-renders. Every `setState` below updates this ref too.
   const stateRef = useRef(state);
 
-  const setSync = useCallback((status: SyncStatus) => setSyncState({ for: identity, status }), [identity]);
-
-  const push = useCallback(
-    (next: ProgressState) => {
-      const remote = remoteRef.current;
-      if (!remote) return;
-      setSync("syncing");
-      remote
-        .save(next)
-        .then(() => setSync("cloud"))
-        .catch(() => setSync("error"));
-    },
-    [setSync],
-  );
+  const push = useCallback((next: ProgressState) => {
+    // The local copy is already written by the callers, so a failed write here
+    // is caught by the next one, or by the reconcile on the next boot.
+    remoteRef.current?.save(next).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
-    // Still asking the server who is signed in: keep showing "Conectando".
+    // Still asking the server who is signed in: nothing to connect to yet.
     if (identity === null) return;
     let cancelled = false;
     remoteRef.current = null;
+    const account = identity.startsWith("account:") ? identity.slice("account:".length) : null;
+
     (async () => {
+      // A browser two people use: whatever is here belongs to whoever signed in
+      // last. An unclaimed copy is progress made before there was an account,
+      // so the first account to sign in here adopts it.
+      if (account && (loadOwner() ?? account) !== account) {
+        clearLocal();
+        const fresh = emptyProgress();
+        stateRef.current = fresh;
+        setState(fresh);
+      }
+
       try {
-        const remote = await connectRemote(identity.startsWith("account:"));
-        if (cancelled) return;
-        if (!remote) {
-          setSync("local");
-          return;
-        }
+        const remote = await connectRemote(account !== null);
+        if (cancelled || !remote) return;
         remoteRef.current = remote;
         const cloud = await remote.load();
         if (cancelled) return;
@@ -73,11 +73,9 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
           setState(winner);
           saveLocal(winner);
         }
-        if (winner && winner === local && local.updatedAt > (cloud?.updatedAt ?? -1)) {
-          push(local);
-        } else {
-          setSync("cloud");
-        }
+        if (winner && winner === local && local.updatedAt > (cloud?.updatedAt ?? -1)) push(local);
+        // From here on this copy is this account's, so nobody else adopts it.
+        if (account) saveOwner(account);
 
         // The puzzle history lives in its own documents, which the progress
         // document above does not carry. Reconcile them too, or signing in on a
@@ -99,13 +97,14 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
           }
         })();
       } catch {
-        if (!cancelled) setSync("error");
+        // The cloud is out of reach for now: this browser's copy carries on and
+        // reconciles on the next boot.
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [push, setSync, identity]);
+  }, [push, identity]);
 
   const recordRun = useCallback(
     (run: LessonRunResult) => {
@@ -226,8 +225,8 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
   );
 
   const value = useMemo(
-    () => ({ state, sync, recordRun, recordPuzzle, loadPuzzlePage, reset, exportBackup, importBackup }),
-    [state, sync, recordRun, recordPuzzle, loadPuzzlePage, reset, exportBackup, importBackup],
+    () => ({ state, recordRun, recordPuzzle, loadPuzzlePage, reset, exportBackup, importBackup }),
+    [state, recordRun, recordPuzzle, loadPuzzlePage, reset, exportBackup, importBackup],
   );
   return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>;
 };

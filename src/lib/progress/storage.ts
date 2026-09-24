@@ -1,6 +1,8 @@
 import { emptyProgress, type ProgressState, type PuzzleLogEntry } from "@/lib/progress/types";
 
 const LS_KEY = "lance-a-lance:progress:v1";
+/** Which account this browser's copy belongs to, if it belongs to one. */
+const OWNER_KEY = "lance-a-lance:owner:v1";
 
 function isProgress(value: unknown): value is ProgressState {
   return (
@@ -38,6 +40,43 @@ export function saveLocal(state: ProgressState): void {
     localStorage.setItem(LS_KEY, JSON.stringify(state));
   } catch {
     /* storage unavailable: the cloud copy (if any) still keeps progress */
+  }
+}
+
+/**
+ * The account whose copy is in this browser. Null when nobody has claimed it,
+ * which is progress made before signing in for the first time: that copy is
+ * adopted by the first account that signs in here.
+ */
+export function loadOwner(): string | null {
+  try {
+    return localStorage.getItem(OWNER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveOwner(account: string): void {
+  try {
+    localStorage.setItem(OWNER_KEY, account);
+  } catch {
+    /* storage unavailable: the cloud copy still keeps progress */
+  }
+}
+
+/**
+ * Wipes this browser's copy: the progress, every chunk of the puzzle log and
+ * the owner. Used when somebody signs out and when a different account signs
+ * in, so that a shared browser never hands one person's progress to another.
+ */
+export function clearLocal(): void {
+  try {
+    // Sound and board coordinates are this device's, not this account's, so
+    // they stay.
+    const doomed = Object.keys(localStorage).filter((key) => key === LS_KEY || key === OWNER_KEY || key.startsWith("lance-a-lance:puzzlelog:"));
+    for (const key of doomed) localStorage.removeItem(key);
+  } catch {
+    /* nothing to clear */
   }
 }
 

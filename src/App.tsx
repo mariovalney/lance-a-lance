@@ -1,7 +1,9 @@
 import { useState, type FC } from "react";
+import { Loader2 } from "lucide-react";
 import { findLesson, lessonCode, type LessonRef } from "@/content/curriculum";
 import type { LessonRunResult } from "@/lib/progress/types";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
+import { useAuth } from "@/lib/auth/useAuth";
 import { ProgressProvider } from "@/lib/progress/ProgressContext";
 import { useProgress } from "@/lib/progress/useProgress";
 import { followingLesson } from "@/lib/progress/availability";
@@ -10,6 +12,7 @@ import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { ResultScreen } from "@/components/result/ResultScreen";
 import { PuzzleTrainer } from "@/components/trainer/PuzzleTrainer";
 import { ResetScreen } from "@/components/home/ResetScreen";
+import { SignInScreen } from "@/components/home/SignInScreen";
 
 type Route =
   | { name: "home" }
@@ -35,7 +38,6 @@ function resetTokenFromUrl(): string | null {
 
 const Shell: FC = () => {
   const { state, recordRun } = useProgress();
-  const [resetToken, setResetToken] = useState(resetTokenFromUrl);
   const [route, setRoute] = useState<Route>({ name: "home" });
   const [runCounter, setRunCounter] = useState(0);
 
@@ -50,23 +52,6 @@ const Shell: FC = () => {
     setRoute({ name: "home" });
     window.scrollTo(0, 0);
   };
-
-  if (resetToken) {
-    return (
-      <div className="h-full">
-        <ResetScreen
-          token={resetToken}
-          onDone={() => {
-            // Drop the token from the address bar, so a reload or a shared
-            // screenshot does not carry it around.
-            window.history.replaceState(null, "", "/");
-            setResetToken(null);
-            goHome();
-          }}
-        />
-      </div>
-    );
-  }
 
   if (route.name === "lesson") {
     const ref = findLesson(route.lessonId);
@@ -119,11 +104,59 @@ const Shell: FC = () => {
   return <HomeScreen onStart={start} onPuzzles={() => setRoute({ name: "trainer" })} />;
 };
 
-const App: FC = () => (
-  <AuthProvider>
+/**
+ * Nothing but the password reset link is reachable without an account, and the
+ * progress store only mounts once there is one to load it into.
+ *
+ * The exception is a page with no API behind it, a plain static host, where
+ * there are no accounts to sign in to and progress stays in this browser.
+ */
+const Gate: FC = () => {
+  const { state } = useAuth();
+  const [resetToken, setResetToken] = useState(resetTokenFromUrl);
+
+  if (resetToken) {
+    return (
+      <div className="h-full">
+        <ResetScreen
+          token={resetToken}
+          onDone={() => {
+            // Drop the token from the address bar, so a reload or a shared
+            // screenshot does not carry it around.
+            window.history.replaceState(null, "", "/");
+            setResetToken(null);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (state.kind === "loading") {
+    return (
+      <div className="grid h-full place-items-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Carregando" />
+      </div>
+    );
+  }
+
+  if (state.kind === "anonymous") {
+    return (
+      <div className="h-full">
+        <SignInScreen signupOpen={state.signupOpen} resetOpen={state.resetOpen} />
+      </div>
+    );
+  }
+
+  return (
     <ProgressProvider>
       <Shell />
     </ProgressProvider>
+  );
+};
+
+const App: FC = () => (
+  <AuthProvider>
+    <Gate />
   </AuthProvider>
 );
 

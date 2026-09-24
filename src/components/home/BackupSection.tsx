@@ -1,6 +1,14 @@
 import { useRef, useState, type FC } from "react";
 import { Download, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { BackupError, countLoggedPuzzles, downloadBackup, parseBackup } from "@/lib/progress/backup";
@@ -9,15 +17,16 @@ import { useProgress } from "@/lib/progress/useProgress";
 type Note = { tone: "ok" | "bad"; text: string } | null;
 
 /**
- * Exports and imports the whole progress as one JSON file, in both builds. This
- * is how progress moves from the version published on claude.ai to the
- * installed app, and the safety net for a browser that clears site data.
+ * Exports and imports the whole progress as one JSON file, and, next to it,
+ * throws it all away. Both belong together: the export is what makes the reset
+ * safe, and it is the safety net for a browser that clears site data.
  */
 export const BackupSection: FC = () => {
-  const { exportBackup, importBackup } = useProgress();
+  const { exportBackup, importBackup, reset } = useProgress();
   const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
   const [note, setNote] = useState<Note>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const doExport = async () => {
     setBusy("export");
@@ -85,7 +94,38 @@ export const BackupSection: FC = () => {
             {note.text}
           </p>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start px-0 text-muted-foreground hover:bg-transparent hover:text-danger"
+          onClick={() => setConfirmReset(true)}
+        >
+          Zerar progresso
+        </Button>
       </div>
+
+      <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
+        <DialogContent className="max-w-[22rem] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-display">Zerar todo o progresso?</DialogTitle>
+            <DialogDescription>XP, estrelas, sequência de dias e lições concluídas voltam a zero. Não dá para desfazer.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <Button variant="ghost" className="h-11 w-full rounded-xl" onClick={() => setConfirmReset(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="h-11 w-full rounded-xl bg-danger font-bold text-destructive-foreground hover:bg-danger/90"
+              onClick={() => {
+                reset();
+                setConfirmReset(false);
+              }}
+            >
+              Zerar progresso
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

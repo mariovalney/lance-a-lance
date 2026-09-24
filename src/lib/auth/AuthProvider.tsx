@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from "react";
 import { ApiUnavailable, fetchAccount, fetchConfig, login, logout, signup } from "@/lib/auth/api";
 import { AuthContext, type AuthState } from "@/lib/auth/context";
+import { clearLocal } from "@/lib/progress/storage";
 
 /**
  * True when there cannot be an API to ask: a page opened from the file system,
@@ -49,6 +50,10 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const signOut = useCallback(async () => {
     await logout().catch(() => undefined);
+    // The account keeps the progress; this browser does not. Otherwise the next
+    // person to use it would find somebody else's XP waiting, and could carry
+    // it into their own account.
+    clearLocal();
     const config = await fetchConfig().catch(() => ({ signupOpen: false, resetOpen: false }));
     setState({ kind: "anonymous", ...config });
   }, []);

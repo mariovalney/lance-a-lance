@@ -3,16 +3,19 @@
 //   URL=http://127.0.0.1:3111 pnpm e2e:account
 //
 // Needs a server that still accepts signups: a database with no users yet, or
-// SIGNUP_ENABLED=true. Seeds progress in one browser, signs up, checks the progress
-// reached the API, signs in from a second browser and checks it came back,
-// then exports the backup and imports it into a third, empty browser.
+// SIGNUP_ENABLED=true. The app is behind the sign in screen, so every browser
+// here starts by getting in. Seeds progress in one browser, signs up, checks
+// the progress reached the API, signs in from a second browser and checks it
+// came back, then exports the backup and imports it into a second account.
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
 const { OUT } = require("./env.cjs");
 
 const BASE = process.env.URL ?? "http://127.0.0.1:3111";
-const EMAIL = process.env.EMAIL ?? `teste-${Date.now()}@exemplo.com`;
+const STAMP = Date.now();
+const EMAIL = process.env.EMAIL ?? `teste-${STAMP}@exemplo.com`;
+const OTHER = `teste-${STAMP}-b@exemplo.com`;
 const PASSWORD = "a-good-password";
 const XP = 240;
 
@@ -59,6 +62,15 @@ async function open(browser, { withProgress = false } = {}) {
   return page;
 }
 
+/** The sign in screen is the whole app until somebody is in. */
+async function getIn(page, email, { create = false } = {}) {
+  if (create) await page.getByRole("button", { name: "Ainda não tenho conta" }).click();
+  await page.getByPlaceholder("E-mail").fill(email);
+  await page.getByPlaceholder("Senha").fill(PASSWORD);
+  await page.getByRole("button", { name: create ? "Criar conta" : "Entrar", exact: true }).click();
+  await page.waitForTimeout(2000);
+}
+
 async function openSettings(page) {
   await page.getByRole("button", { name: "Ajustes" }).click();
   await page.waitForTimeout(400);
@@ -79,36 +91,27 @@ async function xpOnScreen(page) {
 
   /* ---------- first browser: has progress, creates the account ---------- */
   const first = await open(browser, { withProgress: true });
-  check((await xpOnScreen(first)) === XP, `the seeded progress showed up (${await xpOnScreen(first)} XP)`);
+  check(await first.getByText("Entre para o seu progresso").isVisible(), "with no account, the first screen asks to sign in");
+  check((await first.locator("header").count()) === 0, "with no account, the app is not behind the sign in screen");
+  await first.screenshot({ path: OUT + "/signin.png" });
 
-  await openSettings(first);
-  check(await first.getByText("Sem entrar, o progresso fica").isVisible(), "offers to sign in while nobody is");
-  await first.screenshot({ path: OUT + "/settings-anon.png" });
-  await first.getByRole("button", { name: "Ainda não tenho conta" }).click();
-  await first.getByPlaceholder("E-mail").fill(EMAIL);
-  await first.getByPlaceholder("Senha").fill(PASSWORD);
-  await first.getByRole("button", { name: "Criar conta", exact: true }).click();
-  await first.waitForTimeout(2000);
-  check(await first.getByText(EMAIL).isVisible(), "shows the address after signing up");
-  await first.screenshot({ path: OUT + "/settings-signed-in.png" });
+  await getIn(first, EMAIL, { create: true });
+  check((await xpOnScreen(first)) === XP, `the account adopted this browser's progress (${await xpOnScreen(first)} XP)`);
+  await first.screenshot({ path: OUT + "/account-signed-in.png" });
 
   // The local copy is newer than the empty account, so it gets pushed up.
   const stored = await (await first.request.get(BASE + "/api/progress")).json();
   check(stored.state?.xp === XP, `the server took the local progress (${stored.state?.xp} XP)`);
   check(stored.state?.records?.["coords-30s"] === 21, "the records went up with it");
 
+  await openSettings(first);
+  check(await first.getByText(EMAIL).isVisible(), "the settings show the account that is in");
+  await first.screenshot({ path: OUT + "/settings-signed-in.png" });
   await closeSettings(first);
-  await first.screenshot({ path: OUT + "/account-signed-in.png" });
 
   /* ---------- second browser: clean, signs in ---------- */
   const second = await open(browser);
-  check((await xpOnScreen(second)) === 0, "a fresh browser starts empty");
-  await openSettings(second);
-  await second.getByPlaceholder("E-mail").fill(EMAIL);
-  await second.getByPlaceholder("Senha").fill(PASSWORD);
-  await second.getByRole("button", { name: "Entrar", exact: true }).click();
-  await second.waitForTimeout(2000);
-  await closeSettings(second);
+  await getIn(second, EMAIL);
   check((await xpOnScreen(second)) === XP, `the fresh browser got the account progress (${await xpOnScreen(second)} XP)`);
 
   // And the puzzle history came with it.
@@ -125,16 +128,29 @@ async function xpOnScreen(page) {
   check(backup.progress?.xp === XP, `the exported file carries the XP (${backup.progress?.xp})`);
   check(backup.puzzleLog?.["0"]?.filter(Boolean).length === 3, "the exported file carries the puzzle history");
 
-  /* ---------- signing out keeps this browser's copy ---------- */
+  /* ---------- signing out goes back to the sign in screen, and empties it --- */
   await first.getByRole("button", { name: "Sair" }).click();
   await first.waitForTimeout(1500);
-  check(await first.getByText("Sem entrar, o progresso fica").isVisible(), "offers to sign in again");
-  await closeSettings(first);
-  check((await xpOnScreen(first)) === XP, "signing out keeps this browser copy");
+  check(await first.getByText("Entre para o seu progresso").isVisible(), "signing out lands back on the sign in screen");
+  const leftBehind = await first.evaluate(() => localStorage.getItem("lance-a-lance:progress:v1"));
+  check(leftBehind === null, "signing out takes this browser's copy with it");
 
-  /* ---------- import into a third, empty browser ---------- */
+  /* ---------- another account on the same browser starts from its own ------- */
+  // The session is gone but the copy is not, which is what a closed tab or a
+  // cleared cookie looks like. It belongs to the account that made it.
+  await second.context().clearCookies();
+  await second.reload({ waitUntil: "networkidle" });
+  await second.waitForTimeout(900);
+  check((await second.evaluate(() => localStorage.getItem("lance-a-lance:progress:v1"))) !== null, "the copy survives a lost session");
+  await getIn(second, OTHER, { create: true });
+  check((await xpOnScreen(second)) === 0, "another account on the same browser does not inherit the progress");
+  const untouched = await (await second.request.get(BASE + "/api/progress")).json();
+  check((untouched.state?.xp ?? 0) === 0, `and nothing was pushed into it (${untouched.state?.xp ?? 0} XP)`);
+
+  /* ---------- import into that second, empty account ---------- */
   const third = await open(browser);
-  check((await xpOnScreen(third)) === 0, "the third browser starts empty");
+  await getIn(third, OTHER);
+  check((await xpOnScreen(third)) === 0, "a fresh account starts empty");
   await openSettings(third);
   await third.locator('input[type="file"]').setInputFiles(file);
   await third.waitForTimeout(1500);
@@ -144,7 +160,6 @@ async function xpOnScreen(page) {
 
   /* ---------- a wrong password is refused ---------- */
   const fourth = await open(browser);
-  await openSettings(fourth);
   await fourth.getByPlaceholder("E-mail").fill(EMAIL);
   await fourth.getByPlaceholder("Senha").fill("wrong-password");
   await fourth.getByRole("button", { name: "Entrar", exact: true }).click();

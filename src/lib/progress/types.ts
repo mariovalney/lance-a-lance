@@ -86,8 +86,6 @@ export interface LessonRunResult {
   records?: RecordEntry[];
 }
 
-export type SyncStatus = "loading" | "local" | "syncing" | "cloud" | "error";
-
 export function emptyProgress(): ProgressState {
   return {
     version: 1,

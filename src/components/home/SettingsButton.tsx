@@ -8,6 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Board } from "@/components/board/Board";
 import { AccountSection } from "@/components/home/AccountSection";
 import { BackupSection } from "@/components/home/BackupSection";
+import { SourcesSection } from "@/components/home/SourcesSection";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { playSound } from "@/lib/sound";
 
@@ -59,8 +60,9 @@ export const SettingsButton: FC = () => {
                 <Board spec={{ marks: { e4: "focus" } }} />
               </div>
             </div>
-            <AccountSection />
             <BackupSection />
+            <SourcesSection />
+            <AccountSection />
           </div>
         </DialogContent>
       </Dialog>
