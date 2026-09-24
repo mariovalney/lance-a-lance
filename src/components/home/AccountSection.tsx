@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { requestPasswordReset } from "@/lib/auth/api";
 import { useAuth } from "@/lib/auth/useAuth";
 
 /**
@@ -22,6 +23,7 @@ export const AccountSection: FC = () => {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
 
   if (state.kind === "unavailable") return null;
 
@@ -81,6 +83,25 @@ export const AccountSection: FC = () => {
     }
   };
 
+  const forgot = async () => {
+    setError(null);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Escreva seu e-mail acima primeiro.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await requestPasswordReset(email);
+      // Deliberately the same message either way: the server does not say
+      // whether the address has an account, and neither does this.
+      setSent(true);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Não deu certo. Tente de novo.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       <Separator />
@@ -112,24 +133,37 @@ export const AccountSection: FC = () => {
             {error}
           </p>
         )}
+        {sent && (
+          <p role="status" className="text-xs text-muted-foreground">
+            Se existir uma conta com esse e-mail, o link para escolher uma senha nova já está a caminho. Ele vale por 30 minutos.
+          </p>
+        )}
         <Button type="submit" disabled={busy} className="mt-1 gap-2">
           {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
           {creating ? "Criar conta" : "Entrar"}
         </Button>
-        {state.signupOpen && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 self-center text-xs"
-            onClick={() => {
-              setMode(mode === "signin" ? "signup" : "signin");
-              setError(null);
-            }}
-          >
-            {mode === "signin" ? "Ainda não tenho conta" : "Já tenho conta"}
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center justify-center gap-x-1">
+          {state.signupOpen && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError(null);
+                setSent(false);
+              }}
+            >
+              {mode === "signin" ? "Ainda não tenho conta" : "Já tenho conta"}
+            </Button>
+          )}
+          {!creating && state.resetOpen && (
+            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" disabled={busy} onClick={forgot}>
+              Esqueci a senha
+            </Button>
+          )}
+        </div>
       </form>
     </>
   );

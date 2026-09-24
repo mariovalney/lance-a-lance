@@ -1,6 +1,6 @@
 import { randomBytes, createHash, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import { query } from "./db.js";
+import { pool, query } from "./db.js";
 
 const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: object) => Promise<Buffer>;
 
@@ -70,6 +70,60 @@ export async function deleteSession(token: string): Promise<void> {
 
 export async function deleteExpiredSessions(): Promise<number> {
   const { rowCount } = await query("DELETE FROM sessions WHERE expires_at <= now()");
+  return rowCount ?? 0;
+}
+
+/* ---------- password reset ---------- */
+
+/** Short, because the link is a way into the account while it lives. */
+export const RESET_MINUTES = 30;
+
+export async function createPasswordReset(userId: string): Promise<string> {
+  // Only one live link per account: asking again invalidates the previous one.
+  await query("UPDATE password_resets SET used_at = now() WHERE user_id = $1 AND used_at IS NULL", [userId]);
+  const token = randomBytes(32).toString("base64url");
+  await query("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ($1, $2, now() + ($3 || ' minutes')::interval)", [
+    tokenHash(token),
+    userId,
+    String(RESET_MINUTES),
+  ]);
+  return token;
+}
+
+/**
+ * Spends the token and sets the new password, in one transaction, and signs
+ * every device out. Returns false when the token is unknown, expired or spent.
+ */
+export async function consumePasswordReset(token: string, password: string): Promise<boolean> {
+  const hash = await hashPassword(password);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ user_id: string }>(
+      `UPDATE password_resets SET used_at = now()
+        WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+        RETURNING user_id`,
+      [tokenHash(token)],
+    );
+    const userId = rows[0]?.user_id;
+    if (!userId) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+    await client.query("UPDATE users SET password = $1 WHERE id = $2", [hash, userId]);
+    await client.query("DELETE FROM sessions WHERE user_id = $1", [userId]);
+    await client.query("COMMIT");
+    return true;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteExpiredResets(): Promise<number> {
+  const { rowCount } = await query("DELETE FROM password_resets WHERE expires_at <= now() - interval '1 day'");
   return rowCount ?? 0;
 }
 

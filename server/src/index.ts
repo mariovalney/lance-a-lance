@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
-import { deleteExpiredSessions } from "./auth.js";
+import { deleteExpiredResets, deleteExpiredSessions } from "./auth.js";
 import { migrate, pool, query, waitForDatabase } from "./db.js";
 import { env } from "./env.js";
 import { authRoutes, type Vars } from "./routes/auth.js";
@@ -75,16 +75,21 @@ app.get("*", async (c) => {
 
 await waitForDatabase();
 await migrate();
-deleteExpiredSessions()
-  .then((n) => n > 0 && console.log(`removed ${n} expired sessions`))
-  .catch(() => undefined);
-// Once a day is plenty for a table this size.
-setInterval(() => void deleteExpiredSessions().catch(() => undefined), 24 * 60 * 60 * 1000).unref();
+const sweep = async () => {
+  const sessions = await deleteExpiredSessions().catch(() => 0);
+  const resets = await deleteExpiredResets().catch(() => 0);
+  if (sessions || resets) console.log(`removed ${sessions} expired sessions and ${resets} spent reset links`);
+};
+void sweep();
+// Once a day is plenty for tables this size.
+setInterval(() => void sweep(), 24 * 60 * 60 * 1000).unref();
 
 const server = serve({ fetch: app.fetch, port: env.port, hostname: "0.0.0.0" }, (info) => {
   console.log(`lance-a-lance listening on ${info.address}:${info.port}`);
   console.log(`  static: ${hasBuild ? env.staticDir : "(none)"}`);
   console.log(`  signup: ${env.signupEnabled ? "open" : "closed (still open while there are no users)"}`);
+  console.log(`  mail:   ${env.smtp ? `${env.smtp.host}:${env.smtp.port}` : "not configured, so no password reset"}`);
+  if (env.smtp && !env.appUrl) console.warn("  APP_URL is not set: reset links fall back to the request's Host header");
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

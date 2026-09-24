@@ -13,7 +13,7 @@ import type { Account } from "@/lib/auth/api";
 export type AuthState =
   | { kind: "loading" }
   | { kind: "unavailable" }
-  | { kind: "anonymous"; signupOpen: boolean }
+  | { kind: "anonymous"; signupOpen: boolean; resetOpen: boolean }
   | { kind: "signed-in"; account: Account };
 
 export interface AuthContextValue {

@@ -9,6 +9,7 @@ import { HomeScreen } from "@/components/home/HomeScreen";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { ResultScreen } from "@/components/result/ResultScreen";
 import { PuzzleTrainer } from "@/components/trainer/PuzzleTrainer";
+import { ResetScreen } from "@/components/home/ResetScreen";
 
 type Route =
   | { name: "home" }
@@ -23,8 +24,18 @@ type Route =
       prevRecords: Record<string, number>;
     };
 
+/**
+ * The only address the app answers besides the root: where the link in a
+ * password reset email lands. Everything else is in-memory routing.
+ */
+function resetTokenFromUrl(): string | null {
+  if (typeof window === "undefined" || window.location.pathname !== "/redefinir") return null;
+  return new URLSearchParams(window.location.search).get("token");
+}
+
 const Shell: FC = () => {
   const { state, recordRun } = useProgress();
+  const [resetToken, setResetToken] = useState(resetTokenFromUrl);
   const [route, setRoute] = useState<Route>({ name: "home" });
   const [runCounter, setRunCounter] = useState(0);
 
@@ -39,6 +50,23 @@ const Shell: FC = () => {
     setRoute({ name: "home" });
     window.scrollTo(0, 0);
   };
+
+  if (resetToken) {
+    return (
+      <div className="h-full">
+        <ResetScreen
+          token={resetToken}
+          onDone={() => {
+            // Drop the token from the address bar, so a reload or a shared
+            // screenshot does not carry it around.
+            window.history.replaceState(null, "", "/");
+            setResetToken(null);
+            goHome();
+          }}
+        />
+      </div>
+    );
+  }
 
   if (route.name === "lesson") {
     const ref = findLesson(route.lessonId);

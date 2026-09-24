@@ -53,4 +53,20 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    name: "002_password_resets",
+    sql: `
+      -- One row per reset link sent. Like sessions, only the hash of the token
+      -- is stored, so a dump of the table cannot be used to take an account.
+      CREATE TABLE password_resets (
+        token_hash  bytea PRIMARY KEY,
+        user_id     uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        created_at  timestamptz NOT NULL DEFAULT now(),
+        expires_at  timestamptz NOT NULL,
+        used_at     timestamptz
+      );
+      CREATE INDEX password_resets_user_id_idx ON password_resets (user_id);
+      CREATE INDEX password_resets_expires_at_idx ON password_resets (expires_at);
+    `,
+  },
 ];

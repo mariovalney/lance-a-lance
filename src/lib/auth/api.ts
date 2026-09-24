@@ -28,6 +28,8 @@ const MESSAGES: Record<string, string> = {
   email_taken: "Já existe uma conta com esse e-mail.",
   signup_closed: "As inscrições estão fechadas.",
   too_many_attempts: "Tentativas demais. Espere alguns minutos.",
+  invalid_token: "Este link não vale mais. Peça outro.",
+  reset_unavailable: "Este site não está configurado para enviar e-mail.",
   server_error: "O servidor não respondeu direito. Tente de novo.",
 };
 
@@ -67,9 +69,24 @@ export async function fetchAccount(): Promise<Account | null> {
   return body?.user ?? null;
 }
 
-export async function fetchSignupOpen(): Promise<boolean> {
-  const body = await call<{ signupEnabled: boolean }>("/auth/config");
-  return Boolean(body?.signupEnabled);
+export interface AuthConfig {
+  signupOpen: boolean;
+  /** False when the server has no SMTP, so there is no way to send a link. */
+  resetOpen: boolean;
+}
+
+export async function fetchConfig(): Promise<AuthConfig> {
+  const body = await call<{ signupEnabled: boolean; resetEnabled: boolean }>("/auth/config");
+  return { signupOpen: Boolean(body?.signupEnabled), resetOpen: Boolean(body?.resetEnabled) };
+}
+
+/** Always resolves, whether or not the address has an account. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await call<{ ok: boolean }>("/auth/forgot", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+export async function resetPassword(token: string, password: string): Promise<void> {
+  await call<{ ok: boolean }>("/auth/reset", { method: "POST", body: JSON.stringify({ token, password }) });
 }
 
 export async function login(email: string, password: string): Promise<Account> {

@@ -28,6 +28,28 @@ export const env = {
   cookieSecure: flag("COOKIE_SECURE", production),
   /** The built PWA. */
   staticDir: path.resolve(process.env.STATIC_DIR ?? path.join(import.meta.dirname, "../../dist")),
+
+  /**
+   * Where the app is reachable from outside, used to build the link in a
+   * password reset email. Optional: without it the link is built from the
+   * request's own headers, which a forged Host header could point elsewhere.
+   * Set it in production. No trailing slash.
+   */
+  appUrl: process.env.APP_URL?.replace(/\/+$/, "") || null,
+
+  /**
+   * Sending mail is optional. Without SMTP_HOST there is no way to send a
+   * reset link, so the whole flow is turned off rather than half offered.
+   */
+  smtp: process.env.SMTP_HOST
+    ? {
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT ?? 587),
+        from: process.env.SMTP_FROM || process.env.SMTP_USER || "",
+        user: process.env.SMTP_USER || "",
+        pass: process.env.SMTP_PASS || "",
+      }
+    : null,
 };
 
 export type Env = typeof env;

@@ -1,11 +1,14 @@
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import {
+  RESET_MINUTES,
   SESSION_COOKIE,
   SESSION_DAYS,
   checkPassword,
   clearFailures,
+  consumePasswordReset,
   countUsers,
+  createPasswordReset,
   createSession,
   deleteSession,
   hashPassword,
@@ -18,6 +21,7 @@ import {
 } from "../auth.js";
 import { query } from "../db.js";
 import { env } from "../env.js";
+import { canSendMail, sendPasswordReset } from "../mail.js";
 
 export type Vars = { Variables: { user: User } };
 
@@ -111,5 +115,67 @@ authRoutes.post("/logout", async (c) => {
   return c.json({ ok: true });
 });
 
-/** Whether the login screen should offer to create an account. */
-authRoutes.get("/config", async (c) => c.json({ signupEnabled: env.signupEnabled || (await countUsers()) === 0 }));
+/** What the login screen should offer. */
+authRoutes.get("/config", async (c) =>
+  c.json({ signupEnabled: env.signupEnabled || (await countUsers()) === 0, resetEnabled: canSendMail() }),
+);
+
+/**
+ * Where the reset link points. APP_URL when set, because a forged Host
+ * header would otherwise send the link to somebody else's domain.
+ */
+function appUrl(c: Context): string {
+  if (env.appUrl) return env.appUrl;
+  const host = c.req.header("x-forwarded-host") ?? c.req.header("host") ?? "";
+  const proto = c.req.header("x-forwarded-proto") ?? "https";
+  return host ? `${proto}://${host}` : "";
+}
+
+authRoutes.post("/forgot", async (c) => {
+  if (!canSendMail()) return c.json({ error: "reset_unavailable" }, 503);
+
+  const body = await c.req.json().catch(() => ({}));
+  const email = normalizeEmail(body.email);
+  // Always the same answer, whether or not the account exists: otherwise this
+  // endpoint tells anyone who asks which addresses are registered.
+  const done = c.json({ ok: true });
+  if (!email) return done;
+
+  // Also rate limited, so it cannot be used to flood an inbox.
+  const key = `forgot|${c.req.header("x-forwarded-for") ?? "local"}|${email}`;
+  if (tooManyAttempts(key)) return done;
+  recordFailure(key);
+
+  const { rows } = await query<{ id: string; email: string }>("SELECT id, email FROM users WHERE email = $1", [email]);
+  const user = rows[0];
+  if (!user) return done;
+
+  const origin = appUrl(c);
+  if (!origin) {
+    console.error("cannot build a reset link: set APP_URL");
+    return done;
+  }
+
+  try {
+    const token = await createPasswordReset(user.id);
+    await sendPasswordReset(user.email, `${origin}/redefinir?token=${encodeURIComponent(token)}`, RESET_MINUTES);
+  } catch (error) {
+    // Never surfaced to the caller, for the same reason as above.
+    console.error("failed to send the reset email:", error);
+  }
+  return done;
+});
+
+authRoutes.post("/reset", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const token = typeof body.token === "string" ? body.token : "";
+  const password = checkPassword(body.password);
+  if (!token) return c.json({ error: "invalid_token" }, 400);
+  if (!password) return c.json({ error: "weak_password" }, 400);
+
+  // Signs every device out, this one included.
+  const ok = await consumePasswordReset(token, password);
+  if (!ok) return c.json({ error: "invalid_token" }, 400);
+  deleteCookie(c, SESSION_COOKIE, { path: "/", secure: env.cookieSecure, sameSite: "Lax" });
+  return c.json({ ok: true });
+});
