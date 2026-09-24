@@ -6,6 +6,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Board } from "@/components/board/Board";
+import { AccountSection } from "@/components/home/AccountSection";
+import { BackupSection } from "@/components/home/BackupSection";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { playSound } from "@/lib/sound";
 
@@ -18,10 +20,10 @@ export const SettingsButton: FC = () => {
         <Settings2 className="!h-5 !w-5" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-[24rem] rounded-2xl">
+        <DialogContent className="max-h-[85dvh] max-w-[24rem] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-display">Ajustes</DialogTitle>
-            <DialogDescription>Valem só para este aparelho.</DialogDescription>
+            <DialogDescription>Som e tabuleiro valem só para este aparelho.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-5">
             <div className="flex items-center justify-between gap-4">
@@ -57,6 +59,8 @@ export const SettingsButton: FC = () => {
                 <Board spec={{ marks: { e4: "focus" } }} />
               </div>
             </div>
+            <AccountSection />
+            <BackupSection />
           </div>
         </DialogContent>
       </Dialog>

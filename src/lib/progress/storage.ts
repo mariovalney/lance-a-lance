@@ -71,10 +71,63 @@ export function saveLocalLog(chunk: number, entries: PuzzleLogEntry[]): void {
 }
 
 /**
- * Connects to the artifact database (progress/<viewer id>).
+ * Picks where the cloud copy lives:
+ *
+ * - inside claude.ai, the artifact database;
+ * - on the PWA with somebody signed in, the API in `server/`;
+ * - otherwise null, and the app runs on this browser's copy alone.
+ */
+export async function connectRemote(signedIn: boolean): Promise<RemoteStore | null> {
+  const artifact = await connectArtifact();
+  if (artifact) return artifact;
+  return signedIn ? httpStore() : null;
+}
+
+/** Reads and writes through the API. Same origin, so the cookie rides along. */
+function httpStore(): RemoteStore {
+  const send = async (path: string, init?: RequestInit) => {
+    const response = await fetch(`/api${path}`, {
+      ...init,
+      headers: { "content-type": "application/json", ...init?.headers },
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error(`${init?.method ?? "GET"} ${path} -> ${response.status}`);
+    return (await response.json()) as Record<string, unknown>;
+  };
+
+  // One write at a time per document, same as the artifact store.
+  let chain: Promise<void> = Promise.resolve();
+  let logChain: Promise<void> = Promise.resolve();
+
+  return {
+    async load() {
+      const { state } = await send("/progress");
+      return isProgress(state) ? normalize(state) : null;
+    },
+    save(state) {
+      chain = chain.catch(() => undefined).then(async () => {
+        await send("/progress", { method: "PUT", body: JSON.stringify(state) });
+      });
+      return chain;
+    },
+    async loadLog(chunk) {
+      const { entries } = await send(`/puzzlelog/${chunk}`);
+      return Array.isArray(entries) ? (entries as PuzzleLogEntry[]) : null;
+    },
+    saveLog(chunk, entries) {
+      logChain = logChain.catch(() => undefined).then(async () => {
+        await send(`/puzzlelog/${chunk}`, { method: "PUT", body: JSON.stringify({ entries }) });
+      });
+      return logChain;
+    },
+  };
+}
+
+/**
+ * The artifact database (progress/<viewer id>).
  * Resolves null when the page runs outside claude.ai or without a viewer id.
  */
-export async function connectRemote(): Promise<RemoteStore | null> {
+async function connectArtifact(): Promise<RemoteStore | null> {
   const runtime = typeof window !== "undefined" ? window.claude : undefined;
   if (!runtime?.use) return null;
   const [db, user] = await Promise.all([runtime.use("db"), runtime.use("user")]);

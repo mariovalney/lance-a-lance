@@ -3,6 +3,7 @@ import { ChessKnight, Trophy } from "lucide-react";
 import { useProgress } from "@/lib/progress/useProgress";
 import { levelProgress } from "@/lib/progress/scoring";
 import { SyncBadge } from "@/components/common/SyncBadge";
+import { InstallButton } from "@/components/home/InstallButton";
 import { SettingsButton } from "@/components/home/SettingsButton";
 
 export const StatsHeader: FC = () => {
@@ -20,6 +21,7 @@ export const StatsHeader: FC = () => {
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <SyncBadge status={sync} />
+          <InstallButton />
           <SettingsButton />
         </div>
       </div>

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from "react";
+import { storageIdentity } from "@/lib/auth/context";
+import { useAuth } from "@/lib/auth/useAuth";
+import { BACKUP_VERSION, type Backup } from "@/lib/progress/backup";
 import { ProgressContext } from "@/lib/progress/context";
 import { START_RATING, applyPuzzle, applyRun } from "@/lib/progress/scoring";
 import { LOG_CHUNK, connectRemote, loadLocal, loadLocalLog, newest, saveLocal, saveLocalLog, type RemoteStore } from "@/lib/progress/storage";
@@ -18,28 +21,43 @@ function mergeChunk(a: (PuzzleLogEntry | null)[] | null, b: (PuzzleLogEntry | nu
 }
 
 export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
+  const auth = useAuth();
+  // Changes when he signs in or out, which is the signal to reconnect and
+  // reconcile against whatever that account already has.
+  const identity = storageIdentity(auth.state);
   const [state, setState] = useState<ProgressState>(() => loadLocal() ?? emptyProgress());
-  const [sync, setSync] = useState<SyncStatus>("loading");
+  // Tagged with the identity it describes, so that signing in or out shows
+  // "Conectando" again without having to write state from an effect.
+  const [syncState, setSyncState] = useState<{ for: string | null; status: SyncStatus }>({ for: null, status: "loading" });
+  const sync = syncState.for === identity ? syncState.status : "loading";
   const remoteRef = useRef<RemoteStore | null>(null);
   // Mirrors `state` synchronously: the recorders need the value they just wrote
   // before React re-renders. Every `setState` below updates this ref too.
   const stateRef = useRef(state);
 
-  const push = useCallback((next: ProgressState) => {
-    const remote = remoteRef.current;
-    if (!remote) return;
-    setSync("syncing");
-    remote
-      .save(next)
-      .then(() => setSync("cloud"))
-      .catch(() => setSync("error"));
-  }, []);
+  const setSync = useCallback((status: SyncStatus) => setSyncState({ for: identity, status }), [identity]);
+
+  const push = useCallback(
+    (next: ProgressState) => {
+      const remote = remoteRef.current;
+      if (!remote) return;
+      setSync("syncing");
+      remote
+        .save(next)
+        .then(() => setSync("cloud"))
+        .catch(() => setSync("error"));
+    },
+    [setSync],
+  );
 
   useEffect(() => {
+    // Still asking the server who is signed in: keep showing "Conectando".
+    if (identity === null) return;
     let cancelled = false;
+    remoteRef.current = null;
     (async () => {
       try {
-        const remote = await connectRemote();
+        const remote = await connectRemote(identity.startsWith("account:"));
         if (cancelled) return;
         if (!remote) {
           setSync("local");
@@ -60,6 +78,26 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
         } else {
           setSync("cloud");
         }
+
+        // The puzzle history lives in its own documents, which the progress
+        // document above does not carry. Reconcile them too, or signing in on a
+        // device that already played would leave its history behind. In the
+        // background: there can be one document per 100 puzzles.
+        void (async () => {
+          const played = stateRef.current.puzzles?.played ?? 0;
+          for (let chunk = 0; chunk * LOG_CHUNK < played; chunk++) {
+            if (cancelled) return;
+            const here = loadLocalLog(chunk);
+            const there = await remote.loadLog(chunk).catch(() => null);
+            const merged = mergeChunk(here, there);
+            if (!merged.some(Boolean)) continue;
+            saveLocalLog(chunk, merged as PuzzleLogEntry[]);
+            // Only write back when the merge actually adds something.
+            if (JSON.stringify(merged) !== JSON.stringify(there)) {
+              await remote.saveLog(chunk, merged as PuzzleLogEntry[]).catch(() => undefined);
+            }
+          }
+        })();
       } catch {
         if (!cancelled) setSync("error");
       }
@@ -67,7 +105,7 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, [push]);
+  }, [push, setSync, identity]);
 
   const recordRun = useCallback(
     (run: LessonRunResult) => {
@@ -155,9 +193,41 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
     push(next);
   }, [push]);
 
+  const exportBackup = useCallback(async (): Promise<Backup> => {
+    const progress = stateRef.current;
+    const played = progress.puzzles?.played ?? 0;
+    const puzzleLog: Backup["puzzleLog"] = {};
+    for (let chunk = 0; chunk * LOG_CHUNK < played; chunk++) {
+      const entries = await chunkOf(chunk, true);
+      if (entries.some(Boolean)) puzzleLog[String(chunk)] = entries;
+    }
+    return { app: "lance-a-lance", kind: "backup", version: BACKUP_VERSION, exportedAt: new Date().toISOString(), progress, puzzleLog };
+  }, [chunkOf]);
+
+  const importBackup = useCallback(
+    async (backup: Backup) => {
+      // Stamped as of now, so that this copy wins against whatever the cloud
+      // and the other devices hold.
+      const next = { ...backup.progress, updatedAt: Date.now() };
+      stateRef.current = next;
+      setState(next);
+      saveLocal(next);
+
+      for (const [key, entries] of Object.entries(backup.puzzleLog)) {
+        const chunk = Number(key);
+        const merged = mergeChunk(entries, loadLocalLog(chunk));
+        saveLocalLog(chunk, merged as PuzzleLogEntry[]);
+        await remoteRef.current?.saveLog(chunk, merged as PuzzleLogEntry[]).catch(() => undefined);
+      }
+
+      push(next);
+    },
+    [push],
+  );
+
   const value = useMemo(
-    () => ({ state, sync, recordRun, recordPuzzle, loadPuzzlePage, reset }),
-    [state, sync, recordRun, recordPuzzle, loadPuzzlePage, reset],
+    () => ({ state, sync, recordRun, recordPuzzle, loadPuzzlePage, reset, exportBackup, importBackup }),
+    [state, sync, recordRun, recordPuzzle, loadPuzzlePage, reset, exportBackup, importBackup],
   );
   return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>;
 };

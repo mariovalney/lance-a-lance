@@ -1,6 +1,7 @@
 import { useState, type FC } from "react";
 import { findLesson, lessonCode, type LessonRef } from "@/content/curriculum";
 import type { LessonRunResult } from "@/lib/progress/types";
+import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { ProgressProvider } from "@/lib/progress/ProgressContext";
 import { useProgress } from "@/lib/progress/useProgress";
 import { followingLesson } from "@/lib/progress/availability";
@@ -91,9 +92,11 @@ const Shell: FC = () => {
 };
 
 const App: FC = () => (
-  <ProgressProvider>
-    <Shell />
-  </ProgressProvider>
+  <AuthProvider>
+    <ProgressProvider>
+      <Shell />
+    </ProgressProvider>
+  </AuthProvider>
 );
 
 export default App;
