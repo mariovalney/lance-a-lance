@@ -1,0 +1,4 @@
+/* Stands in for src/styles/fonts.css in the artifact build, which keeps loading
+ * the fonts from Google Fonts through the <link> in index.html. Empty on
+ * purpose: see the `virtual:fonts` alias in vite.config.ts.
+ */
