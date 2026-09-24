@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 59 short lessons, a Lichess puzzle trainer). It started as a claude.ai Artifact and is moving to an installable PWA. Read `docs/HISTORICO.md` for the full history, the product decisions and the PWA plan before changing behavior.
+Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 59 short lessons, a Lichess puzzle trainer). It ships two ways from one source tree: a single-file claude.ai Artifact, and an installable PWA served by the Node app in `server/`, with accounts and Postgres. Read `docs/HISTORICO.md` for the full history and the product decisions before changing behavior.
 
 ## Working with Mário (the owner)
 
@@ -16,7 +16,10 @@ Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 
 - `pnpm typecheck` (tsc -b). Must pass before any commit.
 - `pnpm validate`: builds every lesson many times and checks all positions and solutions. Scope with `ONLY=<lesson id prefix>` (e.g. `ONLY=m4-l4`) and `RUNS=<n>`. Use `RUNS=200` for new or changed lessons. `ONLY=treino` checks the trainer puzzles only.
 - `pnpm build:artifact`: single-file build for claude.ai (`artifact/lance-a-lance.html`).
+- `pnpm build:pwa`: the installable build, into `dist/`. `pnpm build:server` compiles `server/` into `server/dist`. `pnpm start` runs the compiled server, which serves both.
+- `pnpm gen:icons`: regenerates `public/*.png` from `assets/*.svg`. Only needed after editing those SVGs.
 - E2E (Playwright, run `npx playwright install chromium` once): `pnpm e2e:prepare` first, then `pnpm e2e:walkthrough` (env: `DONE` = comma list of lesson ids to mark done, `MAX_LESSONS`, `SHOTS=1`, `SCHEME=dark`), `pnpm e2e:trainer`, `pnpm e2e:history`, `pnpm e2e:auto`, `pnpm e2e:home`. Outputs go to `tests/e2e/.out/`.
+- `pnpm e2e:pwa` needs `pnpm build:pwa` first and serves `dist/` itself. `pnpm e2e:account` needs a running server whose database has no users yet: `URL=http://127.0.0.1:3111 pnpm e2e:account`.
 
 ## Architecture in one screen
 
@@ -26,7 +29,10 @@ Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 
 - Position helpers in `src/content/lib/positions.ts`: `isLegalPosition` (also rejects the side not to move being in check), `randomVariant` (mirror files / flip colors), `withRandomKings`, `boardFor`, `afterMove`, `mateMoves`.
 - Notation: always SAN followed by a Portuguese reading in parentheses, built by `describeMove` / `readMove` in `src/lib/chess/notation.ts` (e.g. `Nf3 (cavalo para f3)`, `Nbd2 (cavalo da coluna b para d2)`). Never hand-write readings that the helper can produce.
 - Scoring (`src/lib/progress/scoring.ts`): 10/5/2 points by attempt, tapAll 10 minus 3 per wrong tap (min 2), stars at 90% and 70%, level n starts at 50·n·(n−1) XP. Puzzle rating: Elo from 800, K=40 for the first 10 puzzles then 20; only a clean solve counts as a win.
-- Persistence (`src/lib/progress/`): `ProgressState` (version 1) mirrored in localStorage (`lance-a-lance:progress:v1`) and, inside claude.ai, in the Artifact DB doc `progress/<userId>`. Newest `updatedAt` wins. The puzzle history is a chunked log (`puzzlelog/<userId>_<chunk>`, 100 entries each, localStorage `lance-a-lance:puzzlelog:v1:<chunk>`). `RemoteStore` in `storage.ts` is the seam for any new backend.
+- Persistence (`src/lib/progress/`): `ProgressState` (version 1) mirrored in localStorage (`lance-a-lance:progress:v1`) and, when there is a cloud copy, in a document per user. Newest `updatedAt` wins. The puzzle history is a chunked log (100 entries each, localStorage `lance-a-lance:puzzlelog:v1:<chunk>`).
+- `connectRemote(signedIn)` in `storage.ts` picks the `RemoteStore`: the Artifact DB (`progress/<userId>`, `puzzlelog/<userId>_<chunk>`) inside claude.ai, the API in `server/` when signed in, and null otherwise, which leaves the app on localStorage alone. Both stores read and write the same shapes.
+- Accounts (`src/lib/auth/`): `AuthProvider` tells apart "no API behind this page" (the artifact, a static host) from "nobody signed in". Signing in or out changes `storageIdentity`, which makes `ProgressProvider` reconnect and reconcile, including every chunk of the puzzle log.
+- Backup (`src/lib/progress/backup.ts`): export and import the whole account as one JSON file, in both builds. That is how progress moves from the published artifact to the installed app.
 - Keep these storage keys and document shapes backward compatible: his real progress lives in them.
 - Test hooks: `main[data-solution]` (JSON with the answer for the current screen), `data-option-id`, `data-square`, `data-drill-target`, `data-promotion`, `window.__FAST_DRILL`. Keep them working when adding screen kinds; the walkthrough depends on them.
 
@@ -38,6 +44,16 @@ Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 
 4. Register new lessons in `curriculum.ts`; lesson ids are `m<module>-l<n>`.
 5. Run `pnpm typecheck`, `ONLY=<id> RUNS=200 pnpm validate`, then `pnpm e2e:prepare` and a walkthrough of the touched lessons (`DONE` = every other lesson id, `MAX_LESSONS=<count>`).
 
+## The server
+
+- `server/src/` is Hono on Node, compiled by its own tsconfig. One process serves `dist/` and `/api` on one origin, so there is no CORS.
+- Migrations are an ordered list in `server/src/migrations.ts`, applied at boot. Never edit one that has shipped: add the next one.
+- Passwords use the scrypt in `node:crypto`; sessions are opaque tokens kept only as a SHA-256 hash, in an httpOnly cookie. Signup is closed by `SIGNUP_ENABLED` but always allowed while there are no users.
+- Env: `DATABASE_URL` (required), `PORT`, `SIGNUP_ENABLED`, `COOKIE_SECURE`, `STATIC_DIR`. The `Dockerfile` builds both halves into one image for Easypanel.
+- Local: start a Postgres, then `DATABASE_URL=... COOKIE_SECURE=false pnpm dev:server`.
+
 ## Publishing the claude.ai Artifact
 
 Claude Code cannot publish Artifacts. After changes, run `pnpm build:artifact` and ask Claude in Cowork or claude.ai to republish `artifact/lance-a-lance.html` to https://claude.ai/artifact/MKZsV5N99grYPgmKnrb61A (capabilities `db` and `user`).
+
+The artifact build must not change when only PWA work happens. Check it: keep a copy of `artifact/lance-a-lance.html`, run `pnpm build:artifact`, and diff.

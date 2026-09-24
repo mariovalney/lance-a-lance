@@ -46,9 +46,17 @@ function serveDist() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
   const problems = [];
+  // Two kinds of noise are expected and not failures: the API answering 401
+  // because nobody is signed in, and every request failing once the network is
+  // cut on purpose below.
+  let offline = false;
+  // Chromium leaves the URL out of the console message for a failed fetch, so
+  // the 401 is matched by its status: the only one the app can produce is
+  // /api/auth/me answering that nobody is signed in.
+  const noise = (text) => offline || /\/api\//.test(text) || /401 \(Unauthorized\)/.test(text);
   page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
-  page.on("console", (m) => m.type() === "error" && problems.push("console: " + m.text()));
-  page.on("requestfailed", (r) => problems.push("requestfailed: " + r.url()));
+  page.on("console", (m) => m.type() === "error" && !noise(m.text()) && problems.push("console: " + m.text()));
+  page.on("requestfailed", (r) => !noise(r.url()) && problems.push("requestfailed: " + r.url()));
   // Nothing may be fetched from outside the app's own origin.
   const foreign = [];
   page.on("request", (r) => !r.url().startsWith(base) && !r.url().startsWith("data:") && foreign.push(r.url()));
@@ -97,6 +105,7 @@ function serveDist() {
 
   await page.screenshot({ path: OUT + "/pwa-home.png" });
 
+  offline = true;
   await ctx.setOffline(true);
   await page.reload({ waitUntil: "load" });
   await page.waitForTimeout(1200);

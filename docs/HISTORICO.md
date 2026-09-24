@@ -13,7 +13,7 @@ Documento de passagem de bastão. Registra o que foi pedido, o que foi construí
 7. [Dados, fontes e licenças](#7-dados-fontes-e-licenças)
 8. [Problemas encontrados e como foram resolvidos](#8-problemas-encontrados-e-como-foram-resolvidos)
 9. [Pontos em aberto](#9-pontos-em-aberto)
-10. [Próximos passos: PWA](#10-próximos-passos-pwa)
+10. [O PWA, o servidor e as contas](#10-o-pwa-o-servidor-e-as-contas)
 11. [Publicação do Artifact](#11-publicação-do-artifact)
 
 ## 1. Resumo
@@ -22,8 +22,8 @@ Documento de passagem de bastão. Registra o que foi pedido, o que foi construí
 - **Conteúdo:** 11 módulos e 59 lições curtas, todas com exercícios interativos no tabuleiro.
 - **Progresso:** XP, níveis com nomes de peças, estrelas por lição, recordes e um histórico de erros para revisar.
 - **Treino de puzzles:** separado das lições, com 5.353 puzzles reais do Lichess (CC0), rating pessoal, filtros por tema e abertura e histórico completo paginado.
-- **Formato atual:** Artifact do claude.ai (um HTML único), versão publicada 14, com o progresso salvo no banco do Artifact.
-- **Próximo passo:** virar PWA instalável (seção 10).
+- **Dois formatos, um código:** o Artifact do claude.ai (um HTML único, versão publicada 14) e um PWA instalável servido por um app Node com Postgres, com conta e sincronização entre aparelhos (seção 10).
+- **Próximo passo:** subir o PWA no Easypanel, criar a conta e trazer o progresso do Artifact pela exportação.
 
 ## 2. O pedido original e as decisões do Mário
 
@@ -306,51 +306,64 @@ Aprendizados que valem para frente:
 
 ## 9. Pontos em aberto
 
-- **Print da lição 4.2 ("Trocas boas e ruins") enviado sem comentário.** Ele pediu para não mexer. Hipóteses levantadas, a confirmar com ele:
-  1. As posições dessa lição são diagramas didáticos sem reis.
-  2. Em telas baixas, a barra verde de feedback cobre a fileira 1 e as letras.
-  3. O texto de acerto é genérico: diz "Saldo de +5", mas não diz o que foi capturado nem compara com a outra captura.
-  4. A contagem de 1,5 s não apareceu: qualquer toque, inclusive rolar a tela para ver o tabuleiro, pausa a contagem.
+- **Print da lição 4.2 ("Trocas boas e ruins").** Ele disse depois que era um print sem importância. Encerrado.
 - **Streak de dias:** continua sendo calculado no estado, sem aparecer. Pode ser removido do código ou mantido para uso futuro.
 - **Campos legados:** `history` dentro de `puzzles` não é mais escrito (o log em blocos substituiu).
 - **O status `soon` ("Em breve")** existe no código, mas nenhuma lição usa mais.
-- **Lint:** `pnpm lint` passa sem erros, mas com cerca de 20 avisos (setState em efeito, ref lida durante o render, import sem uso). Nenhum afeta o funcionamento hoje, mas vale limpar.
+- **Recuperação de senha:** não existe. Sem SMTP, a saída é trocar o hash direto no banco.
+- **Migração do progresso da versão 14:** depende de republicar o Artifact com a exportação e depois importar no PWA. O Claude Code não publica Artifacts (seção 11).
+- **Login com Google, para depois.** Decidido pelo Mário, sem data. Entra como um segundo caminho de entrada, ao lado do e-mail e senha, reaproveitando a mesma tabela `sessions`. O que já está definido:
+  - Variáveis: `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`.
+  - URL de callback: `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
+  - Uma conta existente com o mesmo e-mail deve ser reaproveitada, não duplicada, para não partir o progresso em duas.
 
-## 10. Próximos passos: PWA
+Resolvido nesta etapa:
 
-O objetivo é um site instalável no celular, que abre em tela cheia e funciona offline. O Artifact não pode virar PWA porque roda dentro do claude.ai: o manifest e o service worker precisam estar no domínio do próprio site. O Chrome não exige mais service worker para instalar (desde a versão 108 no Android), mas ele é necessário para o modo offline.
+- **Lint:** `pnpm lint` passava com cerca de 20 avisos. Hoje passa com zero. O `src/components/ui` deixou de ser lintado, por ser shadcn/ui gerado.
 
-### Fase A: PWA com progresso no aparelho (estimativa: meio dia)
+## 10. O PWA, o servidor e as contas
 
-1. **Dois alvos de build:**
-   - `build:artifact`, como hoje, com single-file.
-   - `build:pwa`, com um build normal e o `vite-plugin-pwa`.
-   - O mesmo código atende os dois.
-2. **Fontes locais:** trocar o Google Fonts (`index.html`) por `@fontsource` (Bricolage Grotesque, Figtree, JetBrains Mono) para funcionar offline.
-3. **Manifest:**
-   - Nome "Lance a Lance", `display: standalone` e cores do tema.
-   - Ícones 192 e 512, a versão "maskable" e o `apple-touch-icon` 180. O ícone da home é o cavalo sobre fundo escuro.
-4. **Service worker:** precache de tudo, que já cabe (lições e 5.353 puzzles estão no bundle; os sons são sintetizados). Aviso de "nova versão disponível".
-5. **Instalação:**
-   - Android: botão "Instalar" via `beforeinstallprompt`.
-   - iPhone: tela curta explicando Compartilhar > Adicionar à Tela de Início.
-6. **Armazenamento:**
-   - Pedir `navigator.storage.persist()`.
-   - Criar **Exportar e Importar progresso** (JSON com o progresso e os blocos do log) nas configurações, nos dois builds.
-   - Assim o Mário exporta do Artifact e importa no PWA, sem precisar ler o banco do Artifact.
-7. **Deploy:**
-   - Site estático com HTTPS. O Mário já usa Easypanel, com nginx servindo o `dist`. Cloudflare Pages ou GitHub Pages também servem.
-   - Precisa de um domínio.
-8. **Testes:** os scripts E2E contra `vite preview`, mais uma checagem do manifest e da instalação no Chrome.
+Feito em setembro de 2026, no Claude Code, depois que o projeto veio da sessão do Cowork para o repositório.
 
-Risco conhecido: o Safari pode apagar dados de sites sem uso por 7 dias. Um app instalado na tela de início tem a própria contagem, que zera a cada uso. Mesmo assim, o exportar e importar é a rede de segurança.
+O plano original tinha duas fases: primeiro um PWA com o progresso só no aparelho, depois login. O Mário redividiu, e com razão: a Fase A passou a subir tudo, já com Postgres, e a Fase B ficaria só o login. Na sequência ele decidiu que, se dava para já fazer com login, era melhor fazer de uma vez. Ficou uma entrega só.
 
-### Fase B: login e sincronização entre aparelhos (estimativa: mais 1 a 2 dias)
+### Por que assim
 
-- Backend com autenticação: Supabase, Firebase ou um serviço próprio no Easypanel.
-- Uma implementação nova de `RemoteStore`. A regra de mesclagem (vence o `updatedAt` mais novo) e os blocos do log já existem.
-- Tela de login simples (link por e-mail ou Google).
-- Migração: importar o JSON exportado na fase A para a conta.
+| Decisão | Motivo |
+|---|---|
+| Um container só, o Node servindo o `dist` e a API | Sem CORS, sem nginx, sem variável de domínio. O Easypanel põe o TLS na frente |
+| Login com e-mail e senha, sessão em cookie `httpOnly` | Não precisa de SMTP nem de app OAuth. A única dependência externa é o Postgres |
+| Hash com o `scrypt` do `node:crypto` | Nada nativo para compilar na imagem |
+| Migrações em SQL, numa lista ordenada em `server/src/migrations.ts` | Sem ORM. O schema inteiro cabe num arquivo, e não tem `.sql` para copiar junto do build |
+| Cadastro fechado por `SIGNUP_ENABLED`, mas aberto enquanto não houver usuário | A URL é pública. Ele sobe, cria a conta dele, e o cadastro se fecha sozinho |
+| Elo, cookie e chunks mantidos como estavam | O progresso real dele vive nessas chaves e nesses formatos |
+
+### O que foi construído
+
+1. **Dois alvos de build.** `vite.config.ts` recebe um modo. O padrão continua sendo o single-file do Artifact; `--mode pwa` gera um build normal com `vite-plugin-pwa`. O alias `virtual:fonts` decide se o build carrega as fontes ou deixa para o Google Fonts, e um plugin tira o markup do CDN do `index.html` do PWA.
+2. **Fontes locais.** `src/styles/fonts.css` declara as três famílias com os nomes originais, subset latino, do `@fontsource-variable`. A Bricolage usa o corte `opsz`, que tem os mesmos dois eixos que o link do CDN pede, então o desenho das letras não muda e pesa 77 KB em vez de 132 KB.
+3. **Ícone, manifest e service worker.** O cavalo é a mesma peça que os tabuleiros desenham, do react-chessboard (MIT), sobre o fundo escuro do app. Os SVGs ficam em `assets/` e o `scripts/gen-icons.mjs` rasteriza com o Chromium que os testes já usam. Tudo é precacheado: as lições e os 5.353 puzzles estão no bundle e os sons são sintetizados, então o app funciona sem rede. Uma versão nova é ativada com o app em segundo plano, nunca no meio de uma lição.
+4. **Instalação.** Botão onde o navegador oferece o prompt, e uma tela explicando Compartilhar e Adicionar à Tela de Início no iPhone, onde o Safari não tem prompt.
+5. **Servidor.** Hono no Node, em `server/`. Quatro tabelas: `users`, `sessions`, `progress`, `puzzle_log`. As migrações rodam no boot, numa transação e atrás de um advisory lock. As senhas usam scrypt; as sessões são tokens opacos guardados só como hash SHA-256, num cookie de 400 dias. Login errado é limitado a 10 tentativas por endereço e e-mail a cada 10 minutos.
+6. **Cliente.** `connectRemote(signedIn)` escolhe o store: o banco do Artifact dentro do claude.ai, a API quando entrou, e nada fora disso, caso em que o app roda só no `localStorage`, como sempre rodou fora do claude.ai. O `AuthProvider` distingue "não tem API atrás desta página" de "ninguém entrou", e a seção de conta some inteira no primeiro caso.
+7. **Exportar e importar.** O progresso inteiro num JSON, nos dois builds, nos Ajustes. É por aí que o progresso da versão 14 do Artifact vai para o app instalado. O app também pede `navigator.storage.persist()`.
+8. **Deploy.** O `Dockerfile` monta as duas metades numa imagem só, para subir no Easypanel como um app service.
+
+### Como o progresso se junta
+
+A regra continua a mesma de antes: vence a cópia com o `updatedAt` mais novo. Na prática:
+
+- Entrar num aparelho que já tinha progresso e numa conta vazia empurra o progresso para a conta.
+- Entrar num aparelho zerado puxa o progresso da conta.
+- Sair mantém a cópia local. Nada é apagado.
+
+Um detalhe que só apareceu no teste: o documento de progresso não carrega o histórico de puzzles, que vive em documentos próprios. Sem tratar isso, entrar num aparelho que já tinha jogado deixava o histórico para trás. Agora os blocos são reconciliados na conexão, um a um, em segundo plano.
+
+### O que fica de fora
+
+- Não tem recuperação de senha. Sem SMTP, a saída é trocar o hash direto no banco.
+- O login é de uma pessoa só, por desenho. Não tem convite, papel nem administração.
+- A escrita do progresso é a última que chega, igual ao banco do Artifact. Como a leitura reconcilia pelo `updatedAt`, o caso de dois aparelhos ao mesmo tempo se resolve na próxima abertura.
 
 ### Referências
 
@@ -358,6 +371,7 @@ Risco conhecido: o Safari pode apagar dados de sites sem uso por 7 dias. Um app 
 - [Making PWAs installable (MDN)](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable)
 - [Web app manifest (web.dev)](https://web.dev/learn/pwa/web-app-manifest)
 - [WebKit: regra dos 7 dias e apps na tela de início](https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/)
+- [Maskable icons (web.dev)](https://web.dev/articles/maskable-icon)
 
 ## 11. Publicação do Artifact
 
