@@ -2,11 +2,16 @@ import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } fr
 import { ApiUnavailable, fetchAccount, fetchSignupOpen, login, logout, signup } from "@/lib/auth/api";
 import { AuthContext, type AuthState } from "@/lib/auth/context";
 
-/** Inside the artifact the runtime provides its own database and viewer id. */
-const insideArtifact = () => typeof window !== "undefined" && Boolean(window.claude?.use);
+/**
+ * True when there cannot be an API to ask: inside the artifact, where the
+ * runtime provides its own database and viewer id, and on a page opened from
+ * the file system, where fetch has nowhere to go.
+ */
+const noApiPossible = () =>
+  typeof window === "undefined" || Boolean(window.claude?.use) || !/^https?:$/.test(window.location.protocol);
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<AuthState>(() => (insideArtifact() ? { kind: "unavailable" } : { kind: "loading" }));
+  const [state, setState] = useState<AuthState>(() => (noApiPossible() ? { kind: "unavailable" } : { kind: "loading" }));
 
   useEffect(() => {
     if (state.kind !== "loading") return;
