@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from "react";
-import { ApiUnavailable, fetchAccount, fetchConfig, login, logout, signup } from "@/lib/auth/api";
+import { ApiOffline, ApiUnavailable, fetchAccount, fetchConfig, login, logout, signup } from "@/lib/auth/api";
 import { AuthContext, type AuthState } from "@/lib/auth/context";
 import { clearLocal } from "@/lib/progress/storage";
 
@@ -27,12 +27,14 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         if (!cancelled) setState({ kind: "anonymous", ...config });
       } catch (error) {
         if (cancelled) return;
-        // Nothing listening on /api, so there are no accounts to offer and the
-        // app runs on this browser's copy. Any other failure means the server
-        // is there but unhappy, so still offer to sign in.
-        setState(
-          error instanceof ApiUnavailable ? { kind: "unavailable" } : { kind: "anonymous", signupOpen: false, resetOpen: false },
-        );
+        // Nothing listening on /api and nothing ever was, so there are no
+        // accounts to offer and the app runs on this browser's copy. An API
+        // that answered before and does not now is the phone being offline,
+        // and progress is not here to show. Anything else means the server is
+        // there but unhappy, so still offer to sign in.
+        if (error instanceof ApiUnavailable) setState({ kind: "unavailable" });
+        else if (error instanceof ApiOffline) setState({ kind: "offline" });
+        else setState({ kind: "anonymous", signupOpen: false, resetOpen: false });
       }
     })();
     return () => {
@@ -50,14 +52,16 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const signOut = useCallback(async () => {
     await logout().catch(() => undefined);
-    // The account keeps the progress; this browser does not. Otherwise the next
-    // person to use it would find somebody else's XP waiting, and could carry
-    // it into their own account.
+    // Nothing of the account is written here while it is open, but a browser
+    // that played before there were accounts may still hold an old copy. This
+    // is where it goes, so that leaving the app leaves nothing behind.
     clearLocal();
     const config = await fetchConfig().catch(() => ({ signupOpen: false, resetOpen: false }));
     setState({ kind: "anonymous", ...config });
   }, []);
 
-  const value = useMemo(() => ({ state, signIn, signUp, signOut }), [state, signIn, signUp, signOut]);
+  const retry = useCallback(() => setState({ kind: "loading" }), []);
+
+  const value = useMemo(() => ({ state, signIn, signUp, signOut, retry }), [state, signIn, signUp, signOut, retry]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

@@ -76,7 +76,7 @@ export const InstallButton: FC = () => {
         <DialogContent className="max-w-[22rem] rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-display">Instalar no iPhone</DialogTitle>
-            <DialogDescription>O app fica na tela de início, abre em tela cheia e funciona sem internet.</DialogDescription>
+            <DialogDescription>O app fica na tela de início, abre em tela cheia e carrega na hora.</DialogDescription>
           </DialogHeader>
           <ol className="flex flex-col gap-3 text-[15px]">
             <li className="flex items-center gap-2">

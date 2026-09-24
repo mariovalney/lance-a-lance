@@ -4,9 +4,11 @@
 //
 // Needs a server that still accepts signups: a database with no users yet, or
 // SIGNUP_ENABLED=true. The app is behind the sign in screen, so every browser
-// here starts by getting in. Seeds progress in one browser, signs up, checks
-// the progress reached the API, signs in from a second browser and checks it
-// came back, then exports the backup and imports it into a second account.
+// here starts by getting in, and behind an account the browser keeps no copy
+// of the progress at all. Signs up with a copy already sitting in the browser
+// and checks the account ignores it, seeds the account through the API, checks
+// it shows and that nothing was written here, signs in from a second browser,
+// then exports the backup and imports it into a second account.
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
@@ -18,6 +20,9 @@ const EMAIL = process.env.EMAIL ?? `teste-${STAMP}@exemplo.com`;
 const OTHER = `teste-${STAMP}-b@exemplo.com`;
 const PASSWORD = "a-good-password";
 const XP = 240;
+// What a browser that played before there were accounts still holds. It is not
+// the account's, so it must never show up and never go up.
+const STALE = 77;
 
 const problems = [];
 const check = (ok, label) => {
@@ -28,8 +33,8 @@ const check = (ok, label) => {
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, acceptDownloads: true };
 
 /** Stands in for having played lessons and solved puzzles. */
-function seed(xp) {
-  const state = {
+function progressFor(xp) {
+  return {
     version: 1,
     xp,
     lessons: { "m1-l1": { bestStars: 3, bestPct: 96, completions: 1 }, "m1-l2": { bestStars: 2, bestPct: 80, completions: 1 } },
@@ -39,23 +44,33 @@ function seed(xp) {
     puzzles: { rating: 861, played: 3, solved: 2, streak: 1, bestStreak: 2, recent: ["aaa"] },
     updatedAt: Date.now(),
   };
-  localStorage.setItem("lance-a-lance:progress:v1", JSON.stringify(state));
-  localStorage.setItem(
-    "lance-a-lance:puzzlelog:v1:0",
-    JSON.stringify([
-      { i: "aaa", s: "ok", d: 20, r: 820, p: 800, t: Date.now() - 3000 },
-      { i: "bbb", s: "erro", d: -9, r: 811, p: 900, t: Date.now() - 2000 },
-      { i: "ccc", s: "ok", d: 50, r: 861, p: 1000, t: Date.now() - 1000 },
-    ]),
-  );
 }
+
+const PUZZLE_LOG = [
+  { i: "aaa", s: "ok", d: 20, r: 820, p: 800, t: Date.now() - 3000 },
+  { i: "bbb", s: "erro", d: -9, r: 811, p: 900, t: Date.now() - 2000 },
+  { i: "ccc", s: "ok", d: 50, r: 861, p: 1000, t: Date.now() - 1000 },
+];
+
+/** Writes an old copy straight into the browser, the way this used to work. */
+function seedBrowser(state) {
+  localStorage.setItem("lance-a-lance:progress:v1", JSON.stringify(state));
+}
+
+/** Fills the account the way the app would, through the API. */
+async function seedAccount(page, state) {
+  await page.request.put(BASE + "/api/progress", { data: state });
+  await page.request.put(BASE + "/api/puzzlelog/0", { data: { entries: PUZZLE_LOG } });
+}
+
+const browserCopy = (page) => page.evaluate(() => localStorage.getItem("lance-a-lance:progress:v1"));
 
 async function open(browser, { withProgress = false } = {}) {
   const ctx = await browser.newContext(phone);
   const page = await ctx.newPage();
   await page.goto(BASE + "/", { waitUntil: "networkidle" });
   if (withProgress) {
-    await page.evaluate(seed, XP);
+    await page.evaluate(seedBrowser, progressFor(STALE));
     await page.reload({ waitUntil: "networkidle" });
   }
   await page.waitForTimeout(900);
@@ -96,13 +111,17 @@ async function xpOnScreen(page) {
   await first.screenshot({ path: OUT + "/signin.png" });
 
   await getIn(first, EMAIL, { create: true });
-  check((await xpOnScreen(first)) === XP, `the account adopted this browser's progress (${await xpOnScreen(first)} XP)`);
-  await first.screenshot({ path: OUT + "/account-signed-in.png" });
+  check((await xpOnScreen(first)) === 0, `the account ignores the copy sitting in the browser (${await xpOnScreen(first)} XP)`);
+  const empty = await (await first.request.get(BASE + "/api/progress")).json();
+  check((empty.state?.xp ?? 0) === 0, `and nothing from it went up (${empty.state?.xp ?? 0} XP)`);
 
-  // The local copy is newer than the empty account, so it gets pushed up.
-  const stored = await (await first.request.get(BASE + "/api/progress")).json();
-  check(stored.state?.xp === XP, `the server took the local progress (${stored.state?.xp} XP)`);
-  check(stored.state?.records?.["coords-30s"] === 21, "the records went up with it");
+  /* ---------- the account is the only copy ---------- */
+  await seedAccount(first, progressFor(XP));
+  await first.reload({ waitUntil: "networkidle" });
+  await first.waitForTimeout(1200);
+  check((await xpOnScreen(first)) === XP, `the account progress is what shows (${await xpOnScreen(first)} XP)`);
+  check(JSON.parse(await browserCopy(first))?.xp === STALE, "and the browser was not written to");
+  await first.screenshot({ path: OUT + "/account-signed-in.png" });
 
   await openSettings(first);
   check(await first.getByText(EMAIL).isVisible(), "the settings show the account that is in");
@@ -113,10 +132,7 @@ async function xpOnScreen(page) {
   const second = await open(browser);
   await getIn(second, EMAIL);
   check((await xpOnScreen(second)) === XP, `the fresh browser got the account progress (${await xpOnScreen(second)} XP)`);
-
-  // And the puzzle history came with it.
-  const log = await (await second.request.get(BASE + "/api/puzzlelog/0")).json();
-  check(Array.isArray(log.entries) && log.entries.filter(Boolean).length === 3, `the puzzle history went up too (${log.entries?.filter(Boolean).length})`);
+  check((await browserCopy(second)) === null, "and kept no copy of it");
 
   /* ---------- export ---------- */
   await openSettings(first);
@@ -132,18 +148,16 @@ async function xpOnScreen(page) {
   await first.getByRole("button", { name: "Sair" }).click();
   await first.waitForTimeout(1500);
   check(await first.getByText("Entre para o seu progresso").isVisible(), "signing out lands back on the sign in screen");
-  const leftBehind = await first.evaluate(() => localStorage.getItem("lance-a-lance:progress:v1"));
-  check(leftBehind === null, "signing out takes this browser's copy with it");
+  check((await browserCopy(first)) === null, "signing out clears even the old copy the browser held");
 
   /* ---------- another account on the same browser starts from its own ------- */
-  // The session is gone but the copy is not, which is what a closed tab or a
-  // cleared cookie looks like. It belongs to the account that made it.
+  // The session is gone but the browser is the same, which is what a closed tab
+  // or a cleared cookie looks like.
   await second.context().clearCookies();
   await second.reload({ waitUntil: "networkidle" });
   await second.waitForTimeout(900);
-  check((await second.evaluate(() => localStorage.getItem("lance-a-lance:progress:v1"))) !== null, "the copy survives a lost session");
   await getIn(second, OTHER, { create: true });
-  check((await xpOnScreen(second)) === 0, "another account on the same browser does not inherit the progress");
+  check((await xpOnScreen(second)) === 0, "another account on the same browser starts empty");
   const untouched = await (await second.request.get(BASE + "/api/progress")).json();
   check((untouched.state?.xp ?? 0) === 0, `and nothing was pushed into it (${untouched.state?.xp ?? 0} XP)`);
 
@@ -157,6 +171,19 @@ async function xpOnScreen(page) {
   check(await third.getByText(/^Importado:/).isVisible(), "confirms the import");
   await closeSettings(third);
   check((await xpOnScreen(third)) === XP, `the imported progress showed up (${await xpOnScreen(third)} XP)`);
+
+  /* ---------- with the server out of reach there is nothing to show -------- */
+  // Progress is the account's, so the app says so instead of opening empty.
+  await third.route("**/api/**", (route) => route.abort());
+  await third.reload({ waitUntil: "domcontentloaded" });
+  await third.waitForTimeout(1500);
+  check(await third.getByText("Sem conexão").isVisible(), "an unreachable server shows the offline screen");
+  check((await third.locator("header").count()) === 0, "and never the course without the progress");
+  await third.screenshot({ path: OUT + "/account-offline.png" });
+  await third.unroute("**/api/**");
+  await third.reload({ waitUntil: "networkidle" });
+  await third.waitForTimeout(1200);
+  check((await xpOnScreen(third)) === XP, "and comes back when the server does");
 
   /* ---------- a wrong password is refused ---------- */
   const fourth = await open(browser);

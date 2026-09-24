@@ -2,9 +2,9 @@
 
 A chess course from scratch, in Brazilian Portuguese, built for the phone. Eleven modules and 59 short lessons, every one of them with exercises, plus saved progress, XP, stars and a puzzle trainer with a personal rating drawn from the open Lichess database.
 
-It is an **installable PWA**, served by the Node app in `server/`. It opens full screen, works with no network, and syncs your progress across devices through Postgres.
+It is an **installable PWA**, served by the Node app in `server/`. It opens full screen and keeps your progress in Postgres, the same on every device you sign in on.
 
-The whole app sits behind an account: with no session, the first screen is the sign in screen. `localStorage` is still the local copy of whoever is signed in, which is what makes the app work offline and reconcile with the cloud on the next boot. That copy is tagged with the account that owns it: signing out wipes it, and another account signing in on the same browser starts from its own cloud copy rather than inheriting what is there. The exception is a page with no API behind it, a static host with no Node server, where there is no account to sign in to and progress stays in that browser.
+The whole app sits behind an account: with no session, the first screen is the sign in screen. Behind an account the account is the only copy of the progress, and the browser keeps none: what would be the local copy is held in memory for the visit and thrown away with the tab. A server that cannot be reached therefore has nothing to show, and the app says "Sem conexão" instead of opening an empty course. The exception is a page with no API behind it, a static host with no Node server, where there is no account to sign in to and progress does stay in that browser. That is how the browser checks serve the build.
 
 ## Running it locally
 
