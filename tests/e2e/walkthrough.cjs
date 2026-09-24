@@ -30,6 +30,8 @@ const SCHEME = process.env.SCHEME || "light";
 const DONE = (process.env.DONE || "").split(",").filter(Boolean);
 const MAX_LESSONS = Number(process.env.MAX_LESSONS || 99);
 const SHOTS = process.env.SHOTS === "1";
+// TIMING=1 prints how long each screen took, to find what is slow.
+const TIMING = process.env.TIMING === "1";
 fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
@@ -62,6 +64,7 @@ fs.mkdirSync(OUT, { recursive: true });
   };
 
   let lessonsDone = 0;
+  let lessonStartedAt = Date.now();
   let current = "";
   let shotKinds = new Set();
   let wrongDone = false;
@@ -70,7 +73,8 @@ fs.mkdirSync(OUT, { recursive: true });
     await page.waitForTimeout(200);
     if (await page.getByText("Para revisar").count()) {
       const pct = await page.locator("dl dd").nth(1).textContent();
-      summary.push(`${current} -> ${pct}`);
+      summary.push(`${current} -> ${pct} (${((Date.now() - lessonStartedAt) / 1000).toFixed(1)}s)`);
+      lessonStartedAt = Date.now();
       if (SHOTS) await page.screenshot({ path: `${OUT}/${SCHEME}-${current.replace(/[^\w.]/g, "_")}-result.png` });
       lessonsDone++;
       if (lessonsDone >= MAX_LESSONS) break;
@@ -91,6 +95,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const s = JSON.parse(sol);
     const idx = await page.locator("header [role=progressbar]").getAttribute("aria-valuenow", { timeout: 1000 }).catch(() => "x");
     const kind = Object.keys(s)[0];
+    const screenStartedAt = Date.now();
     if (SHOTS && !shotKinds.has(kind)) {
       shotKinds.add(kind);
       await page.screenshot({ path: `${OUT}/${SCHEME}-${current.split(" ")[0]}-${kind}-${idx}.png` });
@@ -119,11 +124,18 @@ fs.mkdirSync(OUT, { recursive: true });
     } else if (s.drill) {
       await page.getByRole("button", { name: "Começar", exact: true }).click();
       for (let k = 0; k < 80; k++) {
-        const t = await page.locator("[data-drill-target]").first().getAttribute("data-drill-target").catch(() => null);
+        // A short timeout on purpose: the clock runs out mid-drill and the
+        // target stops being rendered, which is how this loop ends. With the
+        // default timeout it would instead sit here for 30 seconds.
+        const t = await page
+          .locator("[data-drill-target]")
+          .first()
+          .getAttribute("data-drill-target", { timeout: 1000 })
+          .catch(() => null);
         if (!t) break;
         await tap(t);
       }
-      await page.waitForTimeout(3200);
+      await page.waitForTimeout(600);
       await clickContinue();
     } else if (s.moves) {
       // [{from,to}] user moves in order; opponent replies are automatic
@@ -160,6 +172,7 @@ fs.mkdirSync(OUT, { recursive: true });
       console.log("unknown solution", sol);
       break;
     }
+    if (TIMING) console.log(`    ${kind} ${Date.now() - screenStartedAt}ms`);
   }
   console.log(summary.join("\n"));
   console.log("errors:", errors.length ? errors.slice(0, 10).join("\n") : "none");
