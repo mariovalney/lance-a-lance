@@ -59,10 +59,13 @@ authRoutes.get("/me", async (c) => {
   return c.json({ user });
 });
 
+/**
+ * Creating an account is the admin's job, by address, except for the very
+ * first one: a fresh deploy is claimed by whoever signs up first, and that
+ * account is the admin.
+ */
 authRoutes.post("/signup", async (c) => {
-  // Always allowed while there is nobody yet, so a fresh deploy can be claimed.
-  const first = (await countUsers()) === 0;
-  if (!env.signupEnabled && !first) return c.json({ error: "signup_closed" }, 403);
+  if ((await countUsers()) !== 0) return c.json({ error: "signup_closed" }, 403);
 
   const body = await c.req.json().catch(() => ({}));
   const email = normalizeEmail(body.email);
@@ -71,10 +74,10 @@ authRoutes.post("/signup", async (c) => {
   if (!password) return c.json({ error: "weak_password" }, 400);
 
   const hash = await hashPassword(password);
-  const inserted = await query<{ id: string; email: string }>(
-    `INSERT INTO users (email, password) VALUES ($1, $2)
+  const inserted = await query<User>(
+    `INSERT INTO users (email, password, is_admin) VALUES ($1, $2, true)
      ON CONFLICT (email) DO NOTHING
-     RETURNING id, email`,
+     RETURNING id, email, is_admin AS "isAdmin"`,
     [email, hash],
   );
   const user = inserted.rows[0];
@@ -94,8 +97,8 @@ authRoutes.post("/login", async (c) => {
   const key = `${c.req.header("x-forwarded-for") ?? "local"}|${email}`;
   if (tooManyAttempts(key)) return c.json({ error: "too_many_attempts" }, 429);
 
-  const { rows } = await query<{ id: string; email: string; password: string | null }>(
-    "SELECT id, email, password FROM users WHERE email = $1",
+  const { rows } = await query<User & { password: string | null }>(
+    'SELECT id, email, password, is_admin AS "isAdmin" FROM users WHERE email = $1',
     [email],
   );
   const found = rows[0];
@@ -108,7 +111,7 @@ authRoutes.post("/login", async (c) => {
   clearFailures(key);
   const { token, expiresAt } = await createSession(found.id);
   setSessionCookie(c, token, expiresAt);
-  return c.json({ user: { id: found.id, email: found.email } });
+  return c.json({ user: { id: found.id, email: found.email, isAdmin: found.isAdmin } });
 });
 
 authRoutes.post("/logout", async (c) => {
@@ -121,7 +124,9 @@ authRoutes.post("/logout", async (c) => {
 /** What the login screen should offer. */
 authRoutes.get("/config", async (c) =>
   c.json({
-    signupEnabled: env.signupEnabled || (await countUsers()) === 0,
+    // Only while the deploy has not been claimed: after that the admin creates
+    // the accounts, one address at a time.
+    signupEnabled: (await countUsers()) === 0,
     resetEnabled: canSendMail(),
     googleEnabled: googleEnabled(),
   }),

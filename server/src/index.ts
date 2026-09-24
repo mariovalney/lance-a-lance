@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { deleteExpiredResets, deleteExpiredSessions } from "./auth.js";
 import { migrate, pool, query, waitForDatabase } from "./db.js";
 import { env } from "./env.js";
+import { adminRoutes } from "./routes/admin.js";
 import { authRoutes, type Vars } from "./routes/auth.js";
 import { progressRoutes, puzzleLogRoutes } from "./routes/progress.js";
 
@@ -24,6 +25,7 @@ api.get("/health", async (c) => {
 });
 
 api.route("/auth", authRoutes);
+api.route("/admin", adminRoutes);
 api.route("/progress", progressRoutes);
 api.route("/puzzlelog", puzzleLogRoutes);
 api.all("*", (c) => c.json({ error: "not_found" }, 404));
@@ -63,12 +65,28 @@ app.use(
   }),
 );
 
-// Anything left is a client route: hand back the app shell.
+/**
+ * The addresses the app answers. Everything else is a typo or a probe and gets
+ * a 404, rather than the app shell pretending the address exists. Keep this in
+ * step with the routing in `src/App.tsx` and with `navigateFallbackAllowlist`
+ * in `vite.config.ts`, which is the same list for the service worker.
+ */
+const CLIENT_ROUTES = ["/", "/redefinir", "/admin"];
+
+const page = async (file: string) => {
+  const { readFile } = await import("node:fs/promises");
+  return readFile(`${env.staticDir}/${file}`, "utf8");
+};
+
 app.get("*", async (c) => {
   if (!hasBuild) return c.json({ error: "not_found" }, 404);
-  const { readFile } = await import("node:fs/promises");
-  const html = await readFile(`${env.staticDir}/index.html`, "utf8");
-  return c.html(html, 200, { "cache-control": "no-cache" });
+  const path = new URL(c.req.url).pathname.replace(/\/+$/, "") || "/";
+  if (CLIENT_ROUTES.includes(path)) {
+    return c.html(await page("index.html"), 200, { "cache-control": "no-cache" });
+  }
+  return c.html(await page("404.html").catch(() => "<!doctype html><title>404</title><a href=\"/\">Ir para o início</a>"), 404, {
+    "cache-control": "no-cache",
+  });
 });
 
 /* ---------- boot ---------- */
@@ -87,7 +105,7 @@ setInterval(() => void sweep(), 24 * 60 * 60 * 1000).unref();
 const server = serve({ fetch: app.fetch, port: env.port, hostname: "0.0.0.0" }, (info) => {
   console.log(`lance-a-lance listening on ${info.address}:${info.port}`);
   console.log(`  static: ${hasBuild ? env.staticDir : "(none)"}`);
-  console.log(`  signup: ${env.signupEnabled ? "open" : "closed (still open while there are no users)"}`);
+  console.log(`  signup: only the first account; after that the admin adds people at /admin`);
   console.log(`  mail:   ${env.smtp ? `${env.smtp.host}:${env.smtp.port}` : "not configured, so no password reset"}`);
   if (env.smtp && !env.appUrl) console.warn("  APP_URL is not set: reset links fall back to the request's Host header");
 });

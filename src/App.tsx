@@ -14,6 +14,7 @@ import { PuzzleTrainer } from "@/components/trainer/PuzzleTrainer";
 import { ResetScreen } from "@/components/home/ResetScreen";
 import { SignInScreen } from "@/components/home/SignInScreen";
 import { OfflineScreen } from "@/components/home/OfflineScreen";
+import { AdminScreen } from "@/components/admin/AdminScreen";
 
 type Route =
   | { name: "home" }
@@ -29,12 +30,22 @@ type Route =
     };
 
 /**
- * The only address the app answers besides the root: where the link in a
- * password reset email lands. Everything else is in-memory routing.
+ * The two addresses the app answers besides the root: where the link in a
+ * password reset email lands, and the admin page. Everything else is in-memory
+ * routing, and the server answers 404 for any other address, so this list is
+ * the same one in `CLIENT_ROUTES` in `server/src/index.ts` and in the service
+ * worker's `navigateFallbackAllowlist`.
  */
+const pathname = () => (typeof window === "undefined" ? "/" : window.location.pathname.replace(/\/+$/, "") || "/");
+
 function resetTokenFromUrl(): string | null {
-  if (typeof window === "undefined" || window.location.pathname !== "/redefinir") return null;
+  if (pathname() !== "/redefinir") return null;
   return new URLSearchParams(window.location.search).get("token");
+}
+
+/** Drops an address from the bar without reloading, when it is done with. */
+function goToRoot(): void {
+  if (typeof window !== "undefined" && pathname() !== "/") window.history.replaceState(null, "", "/");
 }
 
 const Shell: FC = () => {
@@ -117,6 +128,7 @@ const Shell: FC = () => {
 const Gate: FC = () => {
   const { state } = useAuth();
   const [resetToken, setResetToken] = useState(resetTokenFromUrl);
+  const [admin, setAdmin] = useState(() => pathname() === "/admin");
 
   if (resetToken) {
     return (
@@ -156,6 +168,24 @@ const Gate: FC = () => {
         <SignInScreen signupOpen={state.signupOpen} resetOpen={state.resetOpen} googleOpen={state.googleOpen} />
       </div>
     );
+  }
+
+  // Only the admin has anything to do here. For anyone else the address is not
+  // theirs, so it goes away and the app opens as usual.
+  if (admin) {
+    if (state.kind === "signed-in" && state.account.isAdmin) {
+      return (
+        <div className="h-full">
+          <AdminScreen
+            onHome={() => {
+              goToRoot();
+              setAdmin(false);
+            }}
+          />
+        </div>
+      );
+    }
+    goToRoot();
   }
 
   return (

@@ -1,7 +1,6 @@
 import { randomBytes, createHash, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { pool, query } from "./db.js";
-import { env } from "./env.js";
 
 const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: object) => Promise<Buffer>;
 
@@ -16,6 +15,8 @@ export const SESSION_DAYS = 400;
 export interface User {
   id: string;
   email: string;
+  /** The one account that can open /admin. The first account created is it. */
+  isAdmin: boolean;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -53,8 +54,8 @@ export async function createSession(userId: string): Promise<{ token: string; ex
 }
 
 export async function userForToken(token: string): Promise<User | null> {
-  const { rows } = await query<{ id: string; email: string }>(
-    `SELECT u.id, u.email
+  const { rows } = await query<User>(
+    `SELECT u.id, u.email, u.is_admin AS "isAdmin"
        FROM sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now()`,
@@ -154,8 +155,8 @@ export async function signInWithIdentity(provider: string, subject: string, emai
     // Serialize the read-then-write below against a second sign-in racing it.
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`identity:${provider}:${subject}`]);
 
-    const known = await client.query<{ id: string; email: string }>(
-      `SELECT u.id, u.email FROM user_identities i JOIN users u ON u.id = i.user_id
+    const known = await client.query<User>(
+      `SELECT u.id, u.email, u.is_admin AS "isAdmin" FROM user_identities i JOIN users u ON u.id = i.user_id
         WHERE i.provider = $1 AND i.subject = $2`,
       [provider, subject],
     );
@@ -164,19 +165,20 @@ export async function signInWithIdentity(provider: string, subject: string, emai
       return { ok: true, user: known.rows[0] };
     }
 
-    const byEmail = await client.query<{ id: string; email: string }>("SELECT id, email FROM users WHERE email = $1", [email]);
+    const byEmail = await client.query<User>('SELECT id, email, is_admin AS "isAdmin" FROM users WHERE email = $1', [email]);
     let user = byEmail.rows[0];
 
     if (!user) {
+      // Accounts are created by the admin, by address. The exception is the
+      // very first one, which claims the deploy and is the admin.
       const { rows } = await client.query<{ count: string }>("SELECT count(*)::text AS count FROM users");
-      const first = Number(rows[0]?.count ?? 0) === 0;
-      if (!env.signupEnabled && !first) {
+      if (Number(rows[0]?.count ?? 0) !== 0) {
         await client.query("ROLLBACK");
         return { ok: false, reason: "signup_closed" };
       }
       // No password: this account is reached through the provider.
-      const created = await client.query<{ id: string; email: string }>(
-        "INSERT INTO users (email, password) VALUES ($1, NULL) RETURNING id, email",
+      const created = await client.query<User>(
+        `INSERT INTO users (email, password, is_admin) VALUES ($1, NULL, true) RETURNING id, email, is_admin AS "isAdmin"`,
         [email],
       );
       user = created.rows[0];

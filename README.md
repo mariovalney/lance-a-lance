@@ -20,7 +20,7 @@ With the server and the database, which is how it runs in production:
 pnpm build && pnpm build:server && DATABASE_URL=postgres://... pnpm start
 ```
 
-The first account needs no configuration: while there are no users, signup stays open. It then closes itself, and only reopens with `SIGNUP_ENABLED=true`.
+The first account needs no configuration: while there are no users, signup stays open. That account claims the deploy and is the admin. After it, signing up is closed for good, and people are let in one address at a time at `/admin`.
 
 ## Commands
 
@@ -42,6 +42,7 @@ The first account needs no configuration: while there are no users, signup stays
 | `pnpm e2e:account` | Sign in, sync, sign out, export and import, against a real server |
 | `pnpm e2e:reset` | Ask for the link, open the mail, change the password and sign in with it |
 | `pnpm e2e:google` | Sign in with Google against a fake Google: new account, linking, refusals |
+| `pnpm e2e:admin` | The accounts page, who may open it, and the addresses the app answers |
 
 Scoped validation: `ONLY=m4-l RUNS=200 pnpm validate` checks only the lessons whose id starts with `m4-l`, building each one 200 times (every build draws fresh examples). `ONLY=treino` checks only the trainer puzzles.
 
@@ -49,7 +50,9 @@ The E2E scripts use Playwright. The first time, run `npx playwright install chro
 
 `e2e:pwa` serves `dist/` itself, like the rest. `e2e:account` needs a running server that still accepts signups: `URL=http://127.0.0.1:3111 pnpm e2e:account`.
 
-`e2e:reset` needs a server whose SMTP points at the throwaway mail sink. Start the sink with `node tests/e2e/smtp-sink.cjs 2526 /tmp/sink.json`, then the server with `SMTP_HOST=127.0.0.1 SMTP_PORT=2526 APP_URL=http://127.0.0.1:3444 SIGNUP_ENABLED=true`, and run `URL=http://127.0.0.1:3444 SINK=/tmp/sink.json pnpm e2e:reset`.
+`e2e:reset` needs a server whose SMTP points at the throwaway mail sink. Start the sink with `node tests/e2e/smtp-sink.cjs 2526 /tmp/sink.json`, then the server with `SMTP_HOST=127.0.0.1 SMTP_PORT=2526 APP_URL=http://127.0.0.1:3444`, and run `URL=http://127.0.0.1:3444 SINK=/tmp/sink.json pnpm e2e:reset`.
+
+`e2e:account` and `e2e:admin` want the same sink, because an address the admin liberates only gets a password through the link. Without `SINK` they skip the parts that need a second person to sign in. All of them bootstrap the admin themselves: they sign up when the database is empty, and sign in as that account when it is not.
 
 `e2e:google` needs the same kind of arrangement, with a fake Google in place of the mail sink. Start it with `GOOGLE_CLIENT_ID=test-client-id GOOGLE_CLIENT_SECRET=test-client-secret node tests/e2e/google-sink.cjs 2626`, start the server with those same two variables plus `GOOGLE_AUTH_URL=http://127.0.0.1:2626/authorize GOOGLE_TOKEN_URL=http://127.0.0.1:2626/token GOOGLE_USERINFO_URL=http://127.0.0.1:2626/userinfo`, and run `URL=http://127.0.0.1:3111 GOOGLE=http://127.0.0.1:2626 DATABASE_URL=postgres://... pnpm e2e:google`. The `DATABASE_URL` is what lets it start a second server with no `GOOGLE_CLIENT_ID`, to check the feature turns itself off; without it that one check is skipped.
 
@@ -67,7 +70,6 @@ The `Dockerfile` puts the PWA and the server into a single image, which runs on 
 |---|---|
 | `DATABASE_URL` | Required. The Postgres connection string |
 | `PORT` | Defaults to 3000 |
-| `SIGNUP_ENABLED` | Defaults to `false`. Signup stays open anyway while there are no users |
 | `COOKIE_SECURE` | Defaults to `true`, which is right behind Easypanel's TLS |
 | `STATIC_DIR` | Where the build is. Defaults to `dist/` next to the server |
 
@@ -99,6 +101,16 @@ The database migrations run themselves at boot. The container is stateless, so i
 The home screen footer shows the first seven characters of the commit the build came from. Easypanel hands that commit to the `Dockerfile` as the `GIT_SHA` build arg; outside it, the build reads the checkout instead. It is a build arg, not a runtime variable: the value goes into the bundle while the image is being built.
 
 Domain: `https://lance-a-lance.amestris.cloud`. The Google callback registered there is `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
+
+## Who gets in
+
+The first account created claims the deploy and is the admin. After that, signing up is closed: the admin opens `/admin` and liberates one address at a time. That creates an account with the address and nothing else.
+
+The person then gets in one of two ways, both already there: with Google, if that address is their Google account, or by asking for a password on the sign in screen, which sends them the same link the password reset uses. There is no invitation to accept and no temporary password to pass along.
+
+The page lists everyone with how they get in, their XP, how many lessons they have finished and when they were last seen. It can promote somebody to admin, take it back, and delete an account, which takes its progress and its puzzle history with it. The admin cannot demote or delete itself, so the app is never left without one.
+
+The app answers three addresses: `/`, `/redefinir` and `/admin`. Anything else is a 404, rather than the app pretending the address exists.
 
 ## Copying your progress
 

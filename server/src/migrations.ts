@@ -89,4 +89,16 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX user_identities_user_id_idx ON user_identities (user_id);
     `,
   },
+  {
+    name: "004_admin",
+    sql: `
+      ALTER TABLE users ADD COLUMN is_admin boolean NOT NULL DEFAULT false;
+
+      -- The first account claimed this deploy, the same rule that lets it be
+      -- created with signup closed. On an empty database this changes nothing
+      -- and the first account to be created becomes the admin instead.
+      UPDATE users SET is_admin = true
+       WHERE id = (SELECT id FROM users ORDER BY created_at, id LIMIT 1);
+    `,
+  },
 ];

@@ -332,7 +332,7 @@ The original plan had two phases: first a PWA with progress on the device only, 
 | Email and password, session in an `httpOnly` cookie | No SMTP and no OAuth app needed. The only external dependency is Postgres |
 | Hashing with the `scrypt` in `node:crypto` | Nothing native to compile in the image |
 | Migrations as SQL, in an ordered list in `server/src/migrations.ts` | No ORM. The whole schema fits in one file, and there are no `.sql` files to copy alongside the build |
-| Signup closed by `SIGNUP_ENABLED`, but open while there are no users | The URL is public. He deploys, claims his account, and signup closes itself |
+| Signup closed by `SIGNUP_ENABLED`, but open while there are no users | The URL is public. He deploys, claims his account, and signup closes itself. Section 14 replaced the variable with the admin page |
 | No `SESSION_SECRET` | The cookie carries an opaque token, not the session state. There is nothing to sign. In exchange for one lookup per request it gives immediate revocation, which is used on sign-out and on a password change |
 | Elo, cookie and chunks kept as they were | His real progress lives in those keys and those shapes |
 
@@ -427,7 +427,7 @@ An account that already holds the address is reused, never duplicated. The owner
 
 But linking only happens when Google reports the address as verified. Without that rule, anyone who can make a Google account claiming an address would be handed the account that holds it here. That is the whole attack, and it is cheap: the refusal is worth more than the convenience. An unverified email is refused outright, and nothing is created for it.
 
-So the callback has four cases, in order: a known identity signs its user in; a new identity with a verified email that matches an account links to it; a new identity with a verified email and no account creates one, if `SIGNUP_ENABLED` allows or there is nobody yet; an unverified email is refused. Every refusal lands back on the sign in screen with a sentence in Portuguese, through `/?erro=<code>`, rather than on a JSON error page.
+So the callback has four cases, in order: a known identity signs its user in; a new identity with a verified email that matches an account links to it; a new identity with a verified email and no account creates one, if signing up is open at all; an unverified email is refused. Section 14 closed that third case down to the very first account. Every refusal lands back on the sign in screen with a sentence in Portuguese, through `/?erro=<code>`, rather than on a JSON error page.
 
 ### The schema
 
@@ -440,3 +440,25 @@ The subject went into `user_identities (user_id, provider, subject)`, keyed on `
 `tests/e2e/google-sink.cjs` is a fake Google, the same idea as the SMTP sink: authorize, token and userinfo, plus a control endpoint where the test says who the next person to authorize is. No signatures, no TLS. The server points at it through the three URL variables, so no test-only branch exists in the production path.
 
 The test covers a new account, the same identity coming back to it, a verified email linking to a password account with its progress intact, an unverified email refused, a `state` that does not match and one that is missing, and, by starting a second server with no `GOOGLE_CLIENT_ID`, the feature turning itself off with the email form still there.
+
+## 14. The admin, and only the addresses the app answers
+
+Two things on the same evening, once the accounts had a second way in.
+
+### One admin, and accounts by address
+
+The app had no notion of who owns it. The lever was `SIGNUP_ENABLED`, which is a blunt one: on, anybody with the address makes an account; off, nobody does, including the people Mário wants in. He asked for a column on the user, an `/admin` page with the list, and "cadastro de email apenas", creating a person by address alone.
+
+`users.is_admin` is that column, and the first account created is it. The migration promotes the oldest account, which on this deploy is his; on an empty database nothing is promoted and the first account to be created becomes the admin instead. It is the same rule that already let the first signup through with signup closed, so there is no new idea to remember and no `ADMIN_EMAIL` to keep in step with the database.
+
+With that, `SIGNUP_ENABLED` went away. Signing up is now possible only while there are no users at all. Everyone else is liberated at `/admin`, one address at a time, which creates a row in `users` with the address and nothing else: no password, no identity.
+
+That account is already reachable, and this is the part worth keeping in mind, because it is why there is no invitation table and no temporary password. `users.password` became nullable for Google, and the reset link already sets a password on an account that has none. So a liberated address gets in either with Google, if that address is their Google account, or by asking for a password on the sign in screen. Both paths existed; the admin page only decides who may use them. Google refuses an address nobody liberated, for the same reason a password would.
+
+The page shows, per person, how they get in, their XP, the lessons they have finished and when they were last seen, and it can promote, demote and delete. Never itself, in any of the three: the app must never be left without an admin. `isAdmin` opens that page and grants nothing else, so there is still no notion of roles anywhere in the app.
+
+### Only three addresses
+
+Mário noticed that `/dsdsdsds` served the app, as did every other address. That is the ordinary single page application arrangement, and it was wrong here: the app answers three addresses and nothing else, so anything else is a typo or a probe.
+
+`CLIENT_ROUTES` in the server is now the list, and everything else gets `public/404.html` with a 404. The part that is easy to miss is the service worker: with `navigateFallback` alone it answers any navigation with the cached shell, so an installed app would keep showing the app for addresses the server refuses. `navigateFallbackAllowlist` holds the same three. The list therefore lives in three places, and the comment in each names the other two.

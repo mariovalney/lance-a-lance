@@ -1,5 +1,5 @@
 import { useState, type FC } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -19,6 +19,18 @@ export const AccountSection: FC = () => {
 
   return (
     <>
+      {state.account.isAdmin && (
+        <>
+          <Separator />
+          <Button asChild variant="outline" className="gap-2">
+            {/* A whole page reload, since /admin is a real address and not a tab. */}
+            <a href="/admin">
+              <Users className="h-4 w-4" aria-hidden />
+              Contas
+            </a>
+          </Button>
+        </>
+      )}
       <Separator />
       <div className="flex items-center justify-between gap-3">
         <span className="min-w-0 truncate text-xs text-muted-foreground">{state.account.email}</span>
