@@ -2,12 +2,11 @@ import type { FC } from "react";
 import { ChessKnight, Trophy } from "lucide-react";
 import { useProgress } from "@/lib/progress/useProgress";
 import { levelProgress } from "@/lib/progress/scoring";
-import { SyncBadge } from "@/components/common/SyncBadge";
 import { InstallButton } from "@/components/home/InstallButton";
 import { SettingsButton } from "@/components/home/SettingsButton";
 
 export const StatsHeader: FC = () => {
-  const { state, sync } = useProgress();
+  const { state } = useProgress();
   const lp = levelProgress(state.xp);
 
   return (
@@ -20,7 +19,6 @@ export const StatsHeader: FC = () => {
           <h1 className="whitespace-nowrap font-display text-[1.5rem] font-extrabold leading-none tracking-tight">Lance a Lance</h1>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <SyncBadge status={sync} />
           <InstallButton />
           <SettingsButton />
         </div>

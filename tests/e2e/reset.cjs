@@ -1,5 +1,5 @@
-// Drives the password reset the way a person does it: ask from the settings,
-// open the link that arrived, choose a new password, sign in with it.
+// Drives the password reset the way a person does it: ask from the sign in
+// screen, open the link that arrived, choose a new password, sign in with it.
 //
 // Needs two things already running, because the server reads its SMTP settings
 // at boot and the mail has to land somewhere readable:
@@ -47,11 +47,6 @@ function linkFromMailbox(since) {
   return null;
 }
 
-async function openSettings(page) {
-  await page.getByRole("button", { name: "Ajustes" }).click();
-  await page.waitForTimeout(400);
-}
-
 (async () => {
   if (!fs.existsSync(SINK)) throw new Error(`no mailbox at ${SINK}: start tests/e2e/smtp-sink.cjs first`);
 
@@ -71,7 +66,6 @@ async function openSettings(page) {
 
   /* ---------- ask for the link ---------- */
   const before = new Date().toISOString();
-  await openSettings(page);
   check(await page.getByRole("button", { name: "Esqueci a senha" }).isVisible(), "offers the forgot link when the server can send mail");
 
   await page.getByRole("button", { name: "Esqueci a senha" }).click();

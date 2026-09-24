@@ -2,9 +2,9 @@
 
 A chess course from scratch, in Brazilian Portuguese, built for the phone. Eleven modules and 59 short lessons, every one of them with exercises, plus saved progress, XP, stars and a puzzle trainer with a personal rating drawn from the open Lichess database.
 
-It is an **installable PWA**, served by the Node app in `server/`. It opens full screen, works with no network, and, once you sign in, syncs your progress across devices through Postgres.
+It is an **installable PWA**, served by the Node app in `server/`. It opens full screen, works with no network, and syncs your progress across devices through Postgres.
 
-Without an account it works just the same and keeps everything in the browser's `localStorage`.
+The whole app sits behind an account: with no session, the first screen is the sign in screen. `localStorage` is still the local copy of whoever is signed in, which is what makes the app work offline and reconcile with the cloud on the next boot. That copy is tagged with the account that owns it: signing out wipes it, and another account signing in on the same browser starts from its own cloud copy rather than inheriting what is there. The exception is a page with no API behind it, a static host with no Node server, where there is no account to sign in to and progress stays in that browser.
 
 ## Running it locally
 
@@ -88,7 +88,7 @@ Domain: `https://lance-a-lance.amestris.cloud`. There is no Google sign-in yet; 
 
 ## Copying your progress
 
-The settings hold **Exportar** and **Importar**. The JSON file carries the XP, the lessons, the records and the whole puzzle history. It is the safety net for a browser that clears site data, and the way to bring progress in from anywhere else: the importer accepts a file assembled by hand, as long as the envelope matches.
+The settings hold **Exportar** and **Importar**. The JSON file carries the XP, the lessons, the records and the whole puzzle history. It is the safety net for a browser that clears site data, and the way to bring progress in from anywhere else: the importer accepts a file assembled by hand, as long as the envelope matches. **Zerar progresso** sits right under them, since the export is what makes throwing everything away safe.
 
 ## Layout
 
@@ -120,6 +120,6 @@ docs/HISTORY.md     the full history, the method and the decisions
 - Chess Fundamentals, Capablanca (public domain)
 - The Lichess puzzle database (CC0) and the Lichess opening names (CC0)
 
-The links are on the app's home screen (`src/components/home/HomeScreen.tsx`).
+The links are in the app's settings (`src/components/home/SourcesSection.tsx`).
 
 The knight in the icon is the same piece the boards draw, from react-chessboard (MIT).
