@@ -1,0 +1,135 @@
+name: CI
+
+# Only what is about to land or has landed: pull requests, and main itself.
+# Pushing a work in progress branch runs nothing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to a pull request cancels the run still going for the old one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Types, lint, content and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      # The cheapest check that catches content bugs: builds every lesson many
+      # times and proves the positions, solutions, paths and mates.
+      - name: Validate the lessons and the puzzles
+        run: pnpm validate
+
+      - name: Build
+        run: pnpm build
+
+      - name: Build the server
+        run: pnpm build:server
+
+      # Keep the build for the browser job, so it is not made twice.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 1
+
+  e2e:
+    name: Browser checks
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lanceal
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # These serve dist themselves and need nothing else running.
+      - name: Home, trainer, history, auto-advance and PWA
+        run: |
+          pnpm e2e:home
+          pnpm e2e:trainer
+          pnpm e2e:history
+          pnpm e2e:auto
+          pnpm e2e:pwa
+
+      # The walkthrough plays all 59 lessons and takes about twelve minutes,
+      # so it is not here: run the Walkthrough workflow by hand for a change
+      # big enough to deserve it.
+
+      - name: Build the server
+        run: pnpm build:server
+
+      - name: Start the mail sink and the server
+        run: |
+          node tests/e2e/smtp-sink.cjs 2526 /tmp/sink.json &
+          DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/lanceal \
+          PORT=3111 COOKIE_SECURE=false SIGNUP_ENABLED=true \
+          APP_URL=http://127.0.0.1:3111 \
+          SMTP_HOST=127.0.0.1 SMTP_PORT=2526 SMTP_FROM=nao-responda@exemplo.com \
+          node server/dist/index.js &
+          # Wait for the migrations to run and the port to answer.
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3111/api/health && break
+            sleep 1
+          done
+
+      - name: Accounts, sync and backup
+        run: URL=http://127.0.0.1:3111 pnpm e2e:account
+
+      - name: Password reset
+        run: URL=http://127.0.0.1:3111 SINK=/tmp/sink.json pnpm e2e:reset
+
+      # Screenshots and logs, to look at when something above goes red.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-output
+          path: tests/e2e/.out
+          retention-days: 7

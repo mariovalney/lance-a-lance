@@ -1,0 +1,70 @@
+name: Walkthrough
+
+# Plays all 59 lessons from start to finish in a phone-sized Chromium, erring
+# on purpose once per lesson. It takes about twelve minutes, which is too slow
+# to sit in front of every pull request, so it runs when asked: Actions ->
+# Walkthrough -> Run workflow.
+#
+# Worth running for a change to the lesson engine, the board, the step
+# components or the scoring. `pnpm validate` in CI already covers the content
+# itself on every pull request.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to play. Empty plays the one selected above."
+        required: false
+        default: ""
+      done:
+        description: "Lesson ids to mark as already done, comma separated, so the run starts after them."
+        required: false
+        default: ""
+      max_lessons:
+        description: "Stop after this many lessons. Empty plays to the end."
+        required: false
+        default: ""
+      scheme:
+        description: "Colour scheme"
+        required: false
+        default: light
+        type: choice
+        options: [light, dark]
+
+jobs:
+  walkthrough:
+    name: Play every lesson
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Typecheck, validate and build
+        run: pnpm e2e:prepare
+
+      - name: Play
+        env:
+          DONE: ${{ inputs.done }}
+          MAX_LESSONS: ${{ inputs.max_lessons }}
+          SCHEME: ${{ inputs.scheme }}
+          SHOTS: "1"
+        run: pnpm e2e:walkthrough
+
+      # The per-kind screenshots, to review the look without a phone in hand.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: walkthrough-${{ inputs.scheme }}
+          path: tests/e2e/.out
+          retention-days: 14
