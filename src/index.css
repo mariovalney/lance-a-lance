@@ -1,0 +1,187 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 216 29% 95%;
+    --foreground: 219 25% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 219 25% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 219 25% 11%;
+    --primary: 228 68% 51%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 28% 91%;
+    --secondary-foreground: 219 25% 15%;
+    --muted: 217 28% 91%;
+    --muted-foreground: 217 11% 38%;
+    --accent: 220 45% 93%;
+    --accent-foreground: 219 25% 11%;
+    --destructive: 4 67% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 156 68% 33%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 153 51% 91%;
+    --danger: 4 67% 50%;
+    --danger-soft: 5 76% 94%;
+    --gold: 38 90% 44%;
+    --gold-soft: 43 86% 90%;
+    --border: 215 24% 86%;
+    --input: 215 24% 86%;
+    --ring: 228 68% 51%;
+    --radius: 0.75rem;
+
+    /* board */
+    --board-light: #e3e8ef;
+    --board-dark: #8a9bb5;
+    --board-coord-on-light: #6c7d98;
+    --board-coord-on-dark: #eef2f7;
+    --mark-focus: rgba(45, 79, 215, 0.55);
+    --mark-soft: rgba(45, 79, 215, 0.2);
+    --mark-good: rgba(30, 158, 106, 0.6);
+    --mark-bad: rgba(216, 69, 59, 0.6);
+    --mark-hint: rgba(217, 154, 14, 0.55);
+    --mark-label-bg: rgba(21, 26, 35, 0.82);
+    --mark-label-fg: #ffffff;
+    --mark-last: rgba(246, 206, 60, 0.42);
+    --mark-selected: rgba(246, 206, 60, 0.6);
+    --dot: rgba(21, 26, 35, 0.28);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --background: 218 29% 8%;
+      --foreground: 218 29% 93%;
+      --card: 219 24% 11%;
+      --card-foreground: 218 29% 93%;
+      --popover: 219 24% 11%;
+      --popover-foreground: 218 29% 93%;
+      --primary: 228 100% 76%;
+      --primary-foreground: 218 29% 8%;
+      --secondary: 221 24% 18%;
+      --secondary-foreground: 218 29% 93%;
+      --muted: 221 24% 16%;
+      --muted-foreground: 218 15% 68%;
+      --accent: 221 24% 18%;
+      --accent-foreground: 218 29% 93%;
+      --destructive: 4 100% 69%;
+      --destructive-foreground: 218 29% 8%;
+      --success: 155 56% 51%;
+      --success-foreground: 218 29% 8%;
+      --success-soft: 152 40% 14%;
+      --danger: 4 100% 69%;
+      --danger-soft: 4 47% 16%;
+      --gold: 41 88% 59%;
+      --gold-soft: 41 63% 14%;
+      --border: 220 22% 21%;
+      --input: 220 22% 21%;
+      --ring: 228 100% 76%;
+
+      --board-light: #b9c4d3;
+      --board-dark: #5f7291;
+      --board-coord-on-light: #4e5f7c;
+      --board-coord-on-dark: #dfe6f0;
+      --mark-focus: rgba(126, 151, 255, 0.62);
+      --mark-soft: rgba(126, 151, 255, 0.26);
+      --mark-good: rgba(60, 201, 142, 0.62);
+      --mark-bad: rgba(255, 107, 95, 0.62);
+      --mark-hint: rgba(242, 184, 58, 0.6);
+      --mark-label-bg: rgba(14, 18, 25, 0.86);
+      --mark-label-fg: #ffffff;
+      --mark-last: rgba(246, 206, 60, 0.38);
+      --mark-selected: rgba(246, 206, 60, 0.55);
+      --dot: rgba(10, 14, 20, 0.4);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --background: 218 29% 8%;
+    --foreground: 218 29% 93%;
+    --card: 219 24% 11%;
+    --card-foreground: 218 29% 93%;
+    --popover: 219 24% 11%;
+    --popover-foreground: 218 29% 93%;
+    --primary: 228 100% 76%;
+    --primary-foreground: 218 29% 8%;
+    --secondary: 221 24% 18%;
+    --secondary-foreground: 218 29% 93%;
+    --muted: 221 24% 16%;
+    --muted-foreground: 218 15% 68%;
+    --accent: 221 24% 18%;
+    --accent-foreground: 218 29% 93%;
+    --destructive: 4 100% 69%;
+    --destructive-foreground: 218 29% 8%;
+    --success: 155 56% 51%;
+    --success-foreground: 218 29% 8%;
+    --success-soft: 152 40% 14%;
+    --danger: 4 100% 69%;
+    --danger-soft: 4 47% 16%;
+    --gold: 41 88% 59%;
+    --gold-soft: 41 63% 14%;
+    --border: 220 22% 21%;
+    --input: 220 22% 21%;
+    --ring: 228 100% 76%;
+
+    --board-light: #b9c4d3;
+    --board-dark: #5f7291;
+    --board-coord-on-light: #4e5f7c;
+    --board-coord-on-dark: #dfe6f0;
+    --mark-focus: rgba(126, 151, 255, 0.62);
+    --mark-soft: rgba(126, 151, 255, 0.26);
+    --mark-good: rgba(60, 201, 142, 0.62);
+    --mark-bad: rgba(255, 107, 95, 0.62);
+    --mark-hint: rgba(242, 184, 58, 0.6);
+    --mark-label-bg: rgba(14, 18, 25, 0.86);
+    --mark-label-fg: #ffffff;
+    --mark-last: rgba(246, 206, 60, 0.38);
+    --mark-selected: rgba(246, 206, 60, 0.55);
+    --dot: rgba(10, 14, 20, 0.4);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 16px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  button {
+    touch-action: manipulation;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* The artifact shell already pads :root by the safe-area insets. */
+  .pb-safe {
+    padding-bottom: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
