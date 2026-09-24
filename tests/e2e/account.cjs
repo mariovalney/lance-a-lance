@@ -13,7 +13,7 @@ const { OUT } = require("./env.cjs");
 
 const BASE = process.env.URL ?? "http://127.0.0.1:3111";
 const EMAIL = process.env.EMAIL ?? `teste-${Date.now()}@exemplo.com`;
-const PASSWORD = "umasenhaboa";
+const PASSWORD = "a-good-password";
 const XP = 240;
 
 const problems = [];
@@ -79,41 +79,41 @@ async function xpOnScreen(page) {
 
   /* ---------- first browser: has progress, creates the account ---------- */
   const first = await open(browser, { withProgress: true });
-  check((await xpOnScreen(first)) === XP, `o progresso semeado apareceu (${await xpOnScreen(first)} XP)`);
+  check((await xpOnScreen(first)) === XP, `the seeded progress showed up (${await xpOnScreen(first)} XP)`);
 
   await openSettings(first);
-  check(await first.getByText("Sem entrar, o progresso fica").isVisible(), "oferece entrar quando ninguém entrou");
+  check(await first.getByText("Sem entrar, o progresso fica").isVisible(), "offers to sign in while nobody is");
   await first.screenshot({ path: OUT + "/settings-anon.png" });
   await first.getByRole("button", { name: "Ainda não tenho conta" }).click();
   await first.getByPlaceholder("E-mail").fill(EMAIL);
   await first.getByPlaceholder("Senha").fill(PASSWORD);
   await first.getByRole("button", { name: "Criar conta", exact: true }).click();
   await first.waitForTimeout(2000);
-  check(await first.getByText(EMAIL).isVisible(), "mostra o e-mail depois de criar a conta");
+  check(await first.getByText(EMAIL).isVisible(), "shows the address after signing up");
   await first.screenshot({ path: OUT + "/settings-signed-in.png" });
 
   // The local copy is newer than the empty account, so it gets pushed up.
   const stored = await (await first.request.get(BASE + "/api/progress")).json();
-  check(stored.state?.xp === XP, `o servidor recebeu o progresso local (${stored.state?.xp} XP)`);
-  check(stored.state?.records?.["coords-30s"] === 21, "os recordes foram junto");
+  check(stored.state?.xp === XP, `the server took the local progress (${stored.state?.xp} XP)`);
+  check(stored.state?.records?.["coords-30s"] === 21, "the records went up with it");
 
   await closeSettings(first);
   await first.screenshot({ path: OUT + "/account-signed-in.png" });
 
   /* ---------- second browser: clean, signs in ---------- */
   const second = await open(browser);
-  check((await xpOnScreen(second)) === 0, "aparelho novo começa zerado");
+  check((await xpOnScreen(second)) === 0, "a fresh browser starts empty");
   await openSettings(second);
   await second.getByPlaceholder("E-mail").fill(EMAIL);
   await second.getByPlaceholder("Senha").fill(PASSWORD);
   await second.getByRole("button", { name: "Entrar", exact: true }).click();
   await second.waitForTimeout(2000);
   await closeSettings(second);
-  check((await xpOnScreen(second)) === XP, `o aparelho novo recebeu o progresso da conta (${await xpOnScreen(second)} XP)`);
+  check((await xpOnScreen(second)) === XP, `the fresh browser got the account progress (${await xpOnScreen(second)} XP)`);
 
   // And the puzzle history came with it.
   const log = await (await second.request.get(BASE + "/api/puzzlelog/0")).json();
-  check(Array.isArray(log.entries) && log.entries.filter(Boolean).length === 3, `o histórico de puzzles subiu (${log.entries?.filter(Boolean).length})`);
+  check(Array.isArray(log.entries) && log.entries.filter(Boolean).length === 3, `the puzzle history went up too (${log.entries?.filter(Boolean).length})`);
 
   /* ---------- export ---------- */
   await openSettings(first);
@@ -121,35 +121,35 @@ async function xpOnScreen(page) {
   const file = path.join(OUT, "backup.json");
   await download.saveAs(file);
   const backup = JSON.parse(fs.readFileSync(file, "utf8"));
-  check(backup.app === "lance-a-lance" && backup.kind === "backup", "o arquivo exportado tem a marca do app");
-  check(backup.progress?.xp === XP, `o arquivo exportado traz o XP (${backup.progress?.xp})`);
-  check(backup.puzzleLog?.["0"]?.filter(Boolean).length === 3, "o arquivo exportado traz o histórico de puzzles");
+  check(backup.app === "lance-a-lance" && backup.kind === "backup", "the exported file carries the app marker");
+  check(backup.progress?.xp === XP, `the exported file carries the XP (${backup.progress?.xp})`);
+  check(backup.puzzleLog?.["0"]?.filter(Boolean).length === 3, "the exported file carries the puzzle history");
 
   /* ---------- signing out keeps this browser's copy ---------- */
   await first.getByRole("button", { name: "Sair" }).click();
   await first.waitForTimeout(1500);
-  check(await first.getByText("Sem entrar, o progresso fica").isVisible(), "voltou a oferecer entrar");
+  check(await first.getByText("Sem entrar, o progresso fica").isVisible(), "offers to sign in again");
   await closeSettings(first);
-  check((await xpOnScreen(first)) === XP, "sair mantém o progresso neste navegador");
+  check((await xpOnScreen(first)) === XP, "signing out keeps this browser copy");
 
   /* ---------- import into a third, empty browser ---------- */
   const third = await open(browser);
-  check((await xpOnScreen(third)) === 0, "terceiro navegador começa zerado");
+  check((await xpOnScreen(third)) === 0, "the third browser starts empty");
   await openSettings(third);
   await third.locator('input[type="file"]').setInputFiles(file);
   await third.waitForTimeout(1500);
-  check(await third.getByText(/^Importado:/).isVisible(), "confirma a importação");
+  check(await third.getByText(/^Importado:/).isVisible(), "confirms the import");
   await closeSettings(third);
-  check((await xpOnScreen(third)) === XP, `o progresso importado apareceu (${await xpOnScreen(third)} XP)`);
+  check((await xpOnScreen(third)) === XP, `the imported progress showed up (${await xpOnScreen(third)} XP)`);
 
   /* ---------- a wrong password is refused ---------- */
   const fourth = await open(browser);
   await openSettings(fourth);
   await fourth.getByPlaceholder("E-mail").fill(EMAIL);
-  await fourth.getByPlaceholder("Senha").fill("senhaerrada");
+  await fourth.getByPlaceholder("Senha").fill("wrong-password");
   await fourth.getByRole("button", { name: "Entrar", exact: true }).click();
   await fourth.waitForTimeout(1500);
-  check(await fourth.getByText("E-mail ou senha não conferem.").isVisible(), "recusa a senha errada com uma mensagem clara");
+  check(await fourth.getByText("E-mail ou senha não conferem.").isVisible(), "refuses a wrong password with a readable message");
   await fourth.screenshot({ path: OUT + "/account-wrong-password.png" });
 
   await browser.close();

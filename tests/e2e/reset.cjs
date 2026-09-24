@@ -17,8 +17,8 @@ const { OUT } = require("./env.cjs");
 const BASE = process.env.URL ?? "http://127.0.0.1:3444";
 const SINK = process.env.SINK ?? "/tmp/sink.json";
 const ACCOUNT = process.env.EMAIL ?? `reset-${Date.now()}@exemplo.com`;
-const OLD_PASSWORD = "senhaantiga1";
-const NEW_PASSWORD = "senhanovaboa1";
+const OLD_PASSWORD = "the-old-password";
+const NEW_PASSWORD = "the-new-password";
 
 const problems = [];
 const check = (ok, label) => {
@@ -72,61 +72,61 @@ async function openSettings(page) {
   /* ---------- ask for the link ---------- */
   const before = new Date().toISOString();
   await openSettings(page);
-  check(await page.getByRole("button", { name: "Esqueci a senha" }).isVisible(), "oferece esqueci a senha quando o servidor manda e-mail");
+  check(await page.getByRole("button", { name: "Esqueci a senha" }).isVisible(), "offers the forgot link when the server can send mail");
 
   await page.getByRole("button", { name: "Esqueci a senha" }).click();
   await page.waitForTimeout(600);
-  check(await page.getByText("Escreva seu e-mail acima primeiro.").isVisible(), "pede o e-mail antes de mandar");
+  check(await page.getByText("Escreva seu e-mail acima primeiro.").isVisible(), "asks for the address before sending");
 
   await page.getByPlaceholder("E-mail").fill(ACCOUNT);
   await page.getByRole("button", { name: "Esqueci a senha" }).click();
   await page.waitForTimeout(1500);
-  check(await page.getByText(/link para escolher uma senha nova/).isVisible(), "confirma que o link foi enviado");
+  check(await page.getByText(/link para escolher uma senha nova/).isVisible(), "confirms the link went out");
   await page.screenshot({ path: OUT + "/reset-requested.png" });
 
   const mail = linkFromMailbox(before);
-  check(Boolean(mail), "o e-mail chegou na caixa");
+  check(Boolean(mail), "the message landed in the mailbox");
   if (!mail) {
     await browser.close();
     console.log("problems:", problems.join(" ; "));
     process.exitCode = 1;
     return;
   }
-  check(mail.to.includes(ACCOUNT), `endereçado para a conta (${mail.to.join(", ")})`);
-  check(mail.link.startsWith(BASE + "/redefinir?token="), `o link aponta para o APP_URL (${mail.link.slice(0, 40)}...)`);
+  check(mail.to.includes(ACCOUNT), `addressed to the account (${mail.to.join(", ")})`);
+  check(mail.link.startsWith(BASE + "/redefinir?token="), `the link points at APP_URL (${mail.link.slice(0, 40)}...)`);
 
   /* ---------- open the link ---------- */
   const reader = await (await browser.newContext(phone)).newPage();
   await reader.goto(mail.link, { waitUntil: "networkidle" });
   await reader.waitForTimeout(800);
-  check(await reader.getByText("Nova senha").isVisible(), "o link abre a tela de nova senha");
+  check(await reader.getByText("Nova senha").isVisible(), "the link opens the new password screen");
   await reader.screenshot({ path: OUT + "/reset-screen.png" });
 
   await reader.getByLabel("Senha nova").fill(NEW_PASSWORD);
-  await reader.getByLabel("Repita a senha").fill("outracoisa1");
+  await reader.getByLabel("Repita a senha").fill("something-else");
   await reader.getByRole("button", { name: "Trocar a senha" }).click();
   await reader.waitForTimeout(600);
-  check(await reader.getByText("As duas senhas não são iguais.").isVisible(), "recusa quando as duas senhas diferem");
+  check(await reader.getByText("As duas senhas não são iguais.").isVisible(), "refuses when the two passwords differ");
 
   await reader.getByLabel("Repita a senha").fill(NEW_PASSWORD);
   await reader.getByRole("button", { name: "Trocar a senha" }).click();
   await reader.waitForTimeout(1500);
-  check(await reader.getByText(/Senha trocada/).isVisible(), "confirma a troca");
+  check(await reader.getByText(/Senha trocada/).isVisible(), "confirms the change");
   await reader.screenshot({ path: OUT + "/reset-done.png" });
 
   await reader.getByRole("button", { name: "Ir para o início" }).click();
   await reader.waitForTimeout(800);
-  check(new URL(reader.url()).pathname === "/", "tira o token da barra de endereço");
+  check(new URL(reader.url()).pathname === "/", "drops the token from the address bar");
 
   /* ---------- the new password is the one that works ---------- */
   const old = await reader.request.post(BASE + "/api/auth/login", { data: { email: ACCOUNT, password: OLD_PASSWORD } });
-  check(old.status() === 401, `a senha antiga não entra mais (${old.status()})`);
+  check(old.status() === 401, `the old password no longer signs in (${old.status()})`);
   const fresh = await reader.request.post(BASE + "/api/auth/login", { data: { email: ACCOUNT, password: NEW_PASSWORD } });
-  check(fresh.ok(), `a senha nova entra (${fresh.status()})`);
+  check(fresh.ok(), `the new password signs in (${fresh.status()})`);
 
   // And the link is spent.
-  const again = await reader.request.post(BASE + "/api/auth/reset", { data: { token: new URL(mail.link).searchParams.get("token"), password: "maisumasenha1" } });
-  check(again.status() === 400, `o link não serve duas vezes (${again.status()})`);
+  const again = await reader.request.post(BASE + "/api/auth/reset", { data: { token: new URL(mail.link).searchParams.get("token"), password: "yet-another-password" } });
+  check(again.status() === 400, `the link cannot be spent twice (${again.status()})`);
 
   await browser.close();
   console.log("problems:", problems.length ? problems.join(" ; ") : "none");

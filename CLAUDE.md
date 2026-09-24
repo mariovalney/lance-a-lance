@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 59 short lessons, a Lichess puzzle trainer). It is an installable PWA served by the Node app in `server/`, with accounts and Postgres. It started as a claude.ai Artifact; that build is gone, and `docs/HISTORICO.md` holds the full history and the product decisions, worth reading before changing behavior.
+Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 59 short lessons, a Lichess puzzle trainer). It is an installable PWA served by the Node app in `server/`, with accounts and Postgres. It started as a claude.ai Artifact; that build is gone, and `docs/HISTORY.md` holds the full history and the product decisions, worth reading before changing behavior.
 
 ## Working with Mário (the owner)
 

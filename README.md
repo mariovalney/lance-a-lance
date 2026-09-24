@@ -1,125 +1,125 @@
 # Lance a Lance
 
-Curso de xadrez do zero, em português, pensado para o celular. São 11 módulos e 59 lições curtas, com exercícios em todas, progresso salvo, XP, estrelas e um treino de puzzles com rating pessoal usando o banco aberto do Lichess.
+A chess course from scratch, in Brazilian Portuguese, built for the phone. Eleven modules and 59 short lessons, every one of them with exercises, plus saved progress, XP, stars and a puzzle trainer with a personal rating drawn from the open Lichess database.
 
-É um **PWA instalável**, servido pelo app Node em `server/`. Abre em tela cheia, funciona sem internet e, se você entrar com uma conta, sincroniza o progresso entre os aparelhos num Postgres.
+It is an **installable PWA**, served by the Node app in `server/`. It opens full screen, works with no network, and, once you sign in, syncs your progress across devices through Postgres.
 
-Sem conta, o app funciona normalmente e guarda tudo no `localStorage` do navegador.
+Without an account it works just the same and keeps everything in the browser's `localStorage`.
 
-## Rodando localmente
+## Running it locally
 
-Só o app, sem servidor nem contas:
+Just the app, no server and no accounts:
 
 ```bash
 pnpm install && pnpm dev
 ```
 
-Com o servidor e o banco, que é como ele roda em produção:
+With the server and the database, which is how it runs in production:
 
 ```bash
 pnpm build && pnpm build:server && DATABASE_URL=postgres://... pnpm start
 ```
 
-A primeira conta pode ser criada sem configurar nada: enquanto não existir nenhum usuário, o cadastro fica aberto. Depois ele se fecha sozinho, e só reabre com `SIGNUP_ENABLED=true`.
+The first account needs no configuration: while there are no users, signup stays open. It then closes itself, and only reopens with `SIGNUP_ENABLED=true`.
 
-## Comandos
+## Commands
 
-| Comando | O que faz |
+| Command | What it does |
 |---|---|
-| `pnpm dev` | Servidor de desenvolvimento (Vite) |
-| `pnpm typecheck` | Checagem de tipos do app e do servidor (`tsc -b`) |
-| `pnpm lint` | oxlint. Passa sem nenhum aviso |
-| `pnpm validate` | Valida todo o conteúdo das lições e os puzzles (ver abaixo) |
-| `pnpm build` | Gera `dist/`: o app com manifest, ícones e service worker |
-| `pnpm build:server` | Compila `server/` para `server/dist` |
-| `pnpm start` | Roda o servidor compilado, que serve o `dist/` e a API |
-| `pnpm dev:server` | O servidor em modo watch |
-| `pnpm gen:icons` | Regera os PNGs de `public/` a partir dos SVGs de `assets/` |
-| `pnpm e2e:prepare` | Typecheck, validação e build. Os testes servem o `dist/` sozinhos |
-| `pnpm e2e:walkthrough` | Joga as lições do começo ao fim no Chromium, em tela de celular |
-| `pnpm e2e:trainer` / `e2e:history` / `e2e:auto` / `e2e:home` | Testes pontuais do treino, histórico, avanço automático e home |
-| `pnpm e2e:pwa` | Manifest, ícones, service worker, fontes locais e modo offline |
-| `pnpm e2e:account` | Entrar, sincronizar, sair, exportar e importar, contra um servidor de verdade |
-| `pnpm e2e:reset` | Pedir o link, abrir o e-mail, trocar a senha e entrar com ela |
+| `pnpm dev` | Development server (Vite) |
+| `pnpm typecheck` | Types, for the app and the server (`tsc -b`) |
+| `pnpm lint` | oxlint. Passes with no warnings at all |
+| `pnpm validate` | Checks all the lesson content and the puzzles (see below) |
+| `pnpm build` | Produces `dist/`: the app with its manifest, icons and service worker |
+| `pnpm build:server` | Compiles `server/` into `server/dist` |
+| `pnpm start` | Runs the compiled server, which serves `dist/` and the API |
+| `pnpm dev:server` | The server in watch mode |
+| `pnpm gen:icons` | Regenerates the PNGs in `public/` from the SVGs in `assets/` |
+| `pnpm e2e:prepare` | Typecheck, validate and build. The tests serve `dist/` themselves |
+| `pnpm e2e:walkthrough` | Plays the lessons end to end in Chromium, at phone size |
+| `pnpm e2e:trainer` / `e2e:history` / `e2e:auto` / `e2e:home` | Focused checks of the trainer, the history, the auto-advance and the home |
+| `pnpm e2e:pwa` | Manifest, icons, service worker, local fonts and offline mode |
+| `pnpm e2e:account` | Sign in, sync, sign out, export and import, against a real server |
+| `pnpm e2e:reset` | Ask for the link, open the mail, change the password and sign in with it |
 
-Validação com escopo: `ONLY=m4-l RUNS=200 pnpm validate` valida só as lições cujo id começa com `m4-l`, montando cada uma 200 vezes (cada montagem sorteia exemplos novos). `ONLY=treino` valida só os puzzles do treino.
+Scoped validation: `ONLY=m4-l RUNS=200 pnpm validate` checks only the lessons whose id starts with `m4-l`, building each one 200 times (every build draws fresh examples). `ONLY=treino` checks only the trainer puzzles.
 
-Os testes E2E usam Playwright. Na primeira vez, rode `npx playwright install chromium`.
+The E2E scripts use Playwright. The first time, run `npx playwright install chromium`.
 
-O `e2e:pwa` serve o `dist/` sozinho, como os outros. O `e2e:account` precisa de um servidor de pé cujo banco ainda não tenha usuários: `URL=http://127.0.0.1:3111 pnpm e2e:account`.
+`e2e:pwa` serves `dist/` itself, like the rest. `e2e:account` needs a running server that still accepts signups: `URL=http://127.0.0.1:3111 pnpm e2e:account`.
 
-O `e2e:reset` precisa de um servidor com SMTP apontado para o coletor de e-mails de teste. Suba o coletor com `node tests/e2e/smtp-sink.cjs 2526 /tmp/sink.json`, depois o servidor com `SMTP_HOST=127.0.0.1 SMTP_PORT=2526 APP_URL=http://127.0.0.1:3444 SIGNUP_ENABLED=true`, e rode `URL=http://127.0.0.1:3444 SINK=/tmp/sink.json pnpm e2e:reset`.
+`e2e:reset` needs a server whose SMTP points at the throwaway mail sink. Start the sink with `node tests/e2e/smtp-sink.cjs 2526 /tmp/sink.json`, then the server with `SMTP_HOST=127.0.0.1 SMTP_PORT=2526 APP_URL=http://127.0.0.1:3444 SIGNUP_ENABLED=true`, and run `URL=http://127.0.0.1:3444 SINK=/tmp/sink.json pnpm e2e:reset`.
 
 ## CI
 
-O `.github/workflows/ci.yml` roda em todo pull request e em todo push na `main`, e não em branch solto. São dois jobs: o primeiro faz typecheck, lint, valida as 59 lições e monta o app e o servidor; o segundo roda os testes de navegador, incluindo conta e recuperação de senha contra um Postgres e um coletor de e-mail de verdade.
+`.github/workflows/ci.yml` runs on every pull request and on every push to `main`, and on no other branch. Two jobs: the first typechecks, lints, validates the 59 lessons and builds the app and the server; the second runs the browser checks, including accounts and password reset against a real Postgres and a real mail sink.
 
-O `e2e:walkthrough` fica de fora, porque leva uns 12 minutos. Ele tem workflow próprio, `walkthrough.yml`, disparado à mão em Actions, com campos para escolher o commit, pular lições e rodar em modo escuro. Vale a pena para mudança no motor de lições, no tabuleiro, nas telas de exercício ou na pontuação. O conteúdo em si já é coberto pelo `pnpm validate` em todo PR.
+`e2e:walkthrough` stays out of it, because it takes about twelve minutes. It has its own workflow, `walkthrough.yml`, triggered by hand from Actions, with fields for the commit, the lessons to skip and the colour scheme. It is worth running for a change to the lesson engine, the board, the exercise screens or the scoring. The content itself is already covered by `pnpm validate` on every pull request.
 
 ## Deploy
 
-O `Dockerfile` monta o PWA e o servidor numa imagem só, que sobe no Easypanel como um app service. O Node serve os arquivos estáticos e a API na mesma origem, então não tem nginx nem CORS no meio.
+The `Dockerfile` puts the PWA and the server into a single image, which runs on Easypanel as one app service. Node serves the static files and the API from the same origin, so there is no nginx and no CORS in between.
 
-| Variável | Para que serve |
+| Variable | What it is for |
 |---|---|
-| `DATABASE_URL` | Obrigatória. A string de conexão do Postgres |
-| `PORT` | Padrão 3000 |
-| `SIGNUP_ENABLED` | Padrão `false`. O cadastro fica aberto de qualquer jeito enquanto não houver nenhum usuário |
-| `COOKIE_SECURE` | Padrão `true`, que é o certo atrás do TLS do Easypanel |
-| `STATIC_DIR` | Onde está o build. Padrão `dist/` ao lado do servidor |
+| `DATABASE_URL` | Required. The Postgres connection string |
+| `PORT` | Defaults to 3000 |
+| `SIGNUP_ENABLED` | Defaults to `false`. Signup stays open anyway while there are no users |
+| `COOKIE_SECURE` | Defaults to `true`, which is right behind Easypanel's TLS |
+| `STATIC_DIR` | Where the build is. Defaults to `dist/` next to the server |
 
-Para o e-mail de redefinição de senha. Sem `SMTP_HOST`, o "Esqueci a senha" não aparece na interface, em vez de aparecer e falhar:
+For the password reset email. Without `SMTP_HOST`, "Esqueci a senha" does not appear in the interface at all, rather than appearing and failing:
 
-| Variável | Para que serve |
+| Variable | What it is for |
 |---|---|
-| `SMTP_HOST` | O servidor de e-mail. É ele que liga ou desliga o recurso |
-| `SMTP_PORT` | Padrão 587. A 465 usa TLS direto; as outras começam em claro e sobem para TLS |
-| `SMTP_FROM` | O remetente. Sem ele, usa o `SMTP_USER` |
-| `SMTP_USER` / `SMTP_PASS` | Autenticação. Se o `SMTP_USER` ficar vazio, conecta sem autenticar |
-| `APP_URL` | O endereço público, para montar o link do e-mail |
+| `SMTP_HOST` | The mail server. This is what turns the feature on or off |
+| `SMTP_PORT` | Defaults to 587. Port 465 is implicit TLS; the others start plain and upgrade |
+| `SMTP_FROM` | The sender. Without it, `SMTP_USER` is used |
+| `SMTP_USER` / `SMTP_PASS` | Authentication. With an empty `SMTP_USER` it connects unauthenticated |
+| `APP_URL` | The public address, used to build the link in the email |
 
-O `APP_URL` importa: sem ele o link é montado a partir do header `Host` da requisição, que alguém pode forjar para apontar o seu e-mail de recuperação para outro domínio. Com ele setado, o link é sempre o seu endereço.
+`APP_URL` matters: without it the link is built from the request's `Host` header, which someone can forge to point your own reset email at their domain. With it set, the link is always your address.
 
-Não existe `SESSION_SECRET`: o cookie carrega só um token aleatório e opaco, e o servidor guarda apenas o hash SHA-256 dele. Não tem nada assinado, então não tem segredo para guardar nem para rotacionar.
+There is no `SESSION_SECRET`: the cookie carries nothing but an opaque random token, and the server stores only its SHA-256 hash. Nothing is signed, so there is no secret to keep or to rotate.
 
-As migrações do banco rodam sozinhas no boot. O container é sem estado, então não precisa de volume; só o Postgres precisa.
+The database migrations run themselves at boot. The container is stateless, so it needs no volume; only Postgres does.
 
-Domínio: `https://lance-a-lance.amestris.cloud`. Ainda não tem login com Google; quando tiver, vai usar `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e o callback `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
+Domain: `https://lance-a-lance.amestris.cloud`. There is no Google sign-in yet; when there is, it will use `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and the callback `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
 
-## Cópia do progresso
+## Copying your progress
 
-Nos Ajustes tem **Exportar** e **Importar**. O arquivo JSON leva o XP, as lições, os recordes e o histórico de puzzles inteiro. É a rede de segurança para o caso de o navegador limpar os dados do site, e o caminho para trazer progresso de qualquer outro lugar: o importador aceita um arquivo montado à mão, desde que o envelope bata.
+The settings hold **Exportar** and **Importar**. The JSON file carries the XP, the lessons, the records and the whole puzzle history. It is the safety net for a browser that clears site data, and the way to bring progress in from anywhere else: the importer accepts a file assembled by hand, as long as the envelope matches.
 
-## Estrutura
+## Layout
 
 ```
 src/
-  content/          conteúdo como dados: currículo, lições, posições, puzzles
-    lessons/        uma lição (ou um grupo) por arquivo, mN-...
-    lib/            geradores de posições, análise, estruturas de peões
-    data/           mates.json, puzzles.json (lições), trainer.json (treino)
-  components/       UI: tabuleiro, telas de exercício, home, resultado, treino
-  lib/auth/         conta: estado de sessão e chamadas à API
-  lib/chess/        regras e utilidades sobre chess.js (busca de mate, notação)
-  lib/progress/     estado, pontuação, rating, persistência e exportação
-  styles/fonts.css  as fontes que o app serve, para funcionar offline
-server/src/         API Hono: contas, progresso, histórico e os arquivos estáticos
-assets/             SVGs de origem do ícone
-public/             ícones gerados e favicon
-scripts/            validação, geração de dados e ícones
-scripts/data/       filtros do CSV oficial de puzzles do Lichess
-tests/e2e/          scripts Playwright
-docs/HISTORICO.md   histórico completo, metodologia e decisões
+  content/          content as data: curriculum, lessons, positions, puzzles
+    lessons/        one lesson (or one group) per file, mN-...
+    lib/            position generators, analysis, pawn structures
+    data/           mates.json, puzzles.json (lessons), trainer.json (trainer)
+  components/       UI: board, exercise screens, home, result, trainer
+  lib/auth/         accounts: session state and the API calls
+  lib/chess/        rules and helpers over chess.js (mate search, notation)
+  lib/progress/     state, scoring, rating, persistence and export
+  styles/fonts.css  the fonts the app serves, so it works offline
+server/src/         Hono API: accounts, progress, history and the static files
+assets/             source SVGs for the icon
+public/             generated icons and favicon
+scripts/            validation, data and icon generation
+scripts/data/       filters over the official Lichess puzzle CSV
+tests/e2e/          Playwright scripts
+docs/HISTORY.md     the full history, the method and the decisions
 ```
 
-## Fontes e licenças do conteúdo
+## Content sources and licences
 
-- Leis do Xadrez da FIDE (tradução oficial em português)
-- Xadrez e Educação Física, e-book do CAp-UERJ (CC BY 4.0)
-- Lichess Learn e Practice (ordem dos temas)
-- Chess Fundamentals, Capablanca (domínio público)
-- Banco de puzzles do Lichess (CC0) e nomes de aberturas do Lichess (CC0)
+- FIDE Laws of Chess (official Portuguese translation)
+- Xadrez e Educação Física, a CAp-UERJ ebook (CC BY 4.0)
+- Lichess Learn and Practice (the order of the topics)
+- Chess Fundamentals, Capablanca (public domain)
+- The Lichess puzzle database (CC0) and the Lichess opening names (CC0)
 
-Os links estão na home do app (`src/components/home/HomeScreen.tsx`).
+The links are on the app's home screen (`src/components/home/HomeScreen.tsx`).
 
-O cavalo do ícone é a mesma peça que os tabuleiros desenham, vinda do react-chessboard (MIT).
+The knight in the icon is the same piece the boards draw, from react-chessboard (MIT).
