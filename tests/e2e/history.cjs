@@ -25,10 +25,8 @@ const fs = require("fs");
   await p.getByRole("button", { name: "Treinar" }).click();
   await p.waitForTimeout(400);
   console.log("header:", (await p.locator("header").first().textContent()).replace(/\s+/g, " "));
-  // Play one puzzle wrong then right.
-  const s = JSON.parse(await p.locator("main[data-solution]").first().getAttribute("data-solution"));
-  const tap = async (sq) => { await p.locator(`[data-square="${sq}"]`).first().tap(); await p.waitForTimeout(120); };
-  // wrong move: find a legal different move is hard; use Ver solução after a wrong attempt instead
+  // Picking a legal-but-wrong move here is awkward, so log one puzzle as seen
+  // instead: "Ver solução" also writes a history entry.
   await p.getByRole("button", { name: /Ver solução/ }).click();
   await p.waitForTimeout(6000);
   console.log("header after:", (await p.locator("header").first().textContent()).replace(/\s+/g, " "));

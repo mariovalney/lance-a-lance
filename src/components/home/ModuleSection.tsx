@@ -4,7 +4,7 @@ import { ALL_LESSONS, lessonCode, type LessonRef } from "@/content/curriculum";
 import type { ModuleDef } from "@/content/types";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { StarRating } from "@/components/common/StarRating";
-import { useProgress } from "@/lib/progress/ProgressContext";
+import { useProgress } from "@/lib/progress/useProgress";
 import { lessonStatus, type LessonStatus } from "@/lib/progress/availability";
 import { cn } from "@/lib/utils";
 

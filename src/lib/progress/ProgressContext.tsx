@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from "react";
+import { ProgressContext } from "@/lib/progress/context";
 import { START_RATING, applyPuzzle, applyRun } from "@/lib/progress/scoring";
 import { LOG_CHUNK, connectRemote, loadLocal, loadLocalLog, newest, saveLocal, saveLocalLog, type RemoteStore } from "@/lib/progress/storage";
 import {
@@ -16,24 +17,13 @@ function mergeChunk(a: (PuzzleLogEntry | null)[] | null, b: (PuzzleLogEntry | nu
   return Array.from({ length: len }, (_, i) => a?.[i] ?? b?.[i] ?? null);
 }
 
-interface ProgressContextValue {
-  state: ProgressState;
-  sync: SyncStatus;
-  recordRun: (run: LessonRunResult) => ProgressState;
-  recordPuzzle: (r: PuzzleResult) => ProgressState;
-  /** Newest first; page 0 is the most recent. */
-  loadPuzzlePage: (page: number, size: number) => Promise<PuzzleLogEntry[]>;
-  reset: () => void;
-}
-
-const ProgressContext = createContext<ProgressContextValue | null>(null);
-
 export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<ProgressState>(() => loadLocal() ?? emptyProgress());
   const [sync, setSync] = useState<SyncStatus>("loading");
   const remoteRef = useRef<RemoteStore | null>(null);
+  // Mirrors `state` synchronously: the recorders need the value they just wrote
+  // before React re-renders. Every `setState` below updates this ref too.
   const stateRef = useRef(state);
-  stateRef.current = state;
 
   const push = useCallback((next: ProgressState) => {
     const remote = remoteRef.current;
@@ -61,6 +51,7 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
         const local = stateRef.current;
         const winner = newest(local.updatedAt ? local : null, cloud);
         if (winner && winner !== local) {
+          stateRef.current = winner;
           setState(winner);
           saveLocal(winner);
         }
@@ -170,9 +161,3 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
   );
   return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>;
 };
-
-export function useProgress(): ProgressContextValue {
-  const ctx = useContext(ProgressContext);
-  if (!ctx) throw new Error("useProgress must be used inside ProgressProvider");
-  return ctx;
-}

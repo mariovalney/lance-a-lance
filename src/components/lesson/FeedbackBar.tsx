@@ -90,8 +90,11 @@ export const FeedbackBar: FC<FeedbackBarProps> = ({ tone, title, message, action
   const [paused, setPaused] = useState(false);
   const auto = autoAdvance && !paused && (tone === "correct" || tone === "partial") && Boolean(actionLabel && onAction);
   const pause = useCallback(() => setPaused(true), []);
+  // Kept in a ref so that a new `onDismiss` identity does not restart the timer.
   const dismissRef = useRef(onDismiss);
-  dismissRef.current = onDismiss;
+  useEffect(() => {
+    dismissRef.current = onDismiss;
+  });
   const selfClosing = tone === "wrong" && !actionLabel && Boolean(onDismiss);
   useEffect(() => {
     if (!selfClosing) return;

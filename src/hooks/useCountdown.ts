@@ -15,8 +15,11 @@ interface Countdown {
 export function useCountdown(durationMs: number, onDone: () => void, enabled = true): Countdown {
   const [progress, setProgress] = useState(0);
   const [running, setRunning] = useState(enabled);
+  // Kept in a ref so that a new `onDone` identity does not restart the interval.
   const doneRef = useRef(onDone);
-  doneRef.current = onDone;
+  useEffect(() => {
+    doneRef.current = onDone;
+  });
 
   useEffect(() => {
     if (!running) return;

@@ -3,7 +3,7 @@ import { ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink,
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { SequenceStep, type SequenceFinish } from "@/components/lesson/steps/SequenceStep";
-import { useProgress } from "@/lib/progress/ProgressContext";
+import { useProgress } from "@/lib/progress/useProgress";
 import { PROVISIONAL_GAMES, START_RATING, eloDelta } from "@/lib/progress/scoring";
 import type { PuzzleLogEntry, PuzzleStatus } from "@/lib/progress/types";
 import {
@@ -263,22 +263,26 @@ const HistorySheet: FC<{ open: boolean; onOpenChange: (v: boolean) => void; tota
 }) => {
   const { loadPuzzlePage } = useProgress();
   const [page, setPage] = useState(0);
-  const [entries, setEntries] = useState<PuzzleLogEntry[] | null>(null);
+  const [loaded, setLoaded] = useState<{ page: number; total: number; entries: PuzzleLogEntry[] } | null>(null);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Null while the page being shown has not arrived yet, which renders "Carregando...".
+  const entries = loaded && loaded.page === page && loaded.total === total ? loaded.entries : null;
+
+  // Always reopen on the newest page.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setPage(0);
+  }
 
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    setEntries(null);
-    loadPuzzlePage(page, PAGE_SIZE).then((e) => alive && setEntries(e));
+    loadPuzzlePage(page, PAGE_SIZE).then((e) => alive && setLoaded({ page, total, entries: e }));
     return () => {
       alive = false;
     };
   }, [open, page, total, loadPuzzlePage]);
-
-  useEffect(() => {
-    if (open) setPage(0);
-  }, [open]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

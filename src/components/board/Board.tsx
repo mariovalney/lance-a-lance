@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, type CSSProperties, type FC } from "react";
+import { memo, useMemo, useState, type CSSProperties, type FC } from "react";
 import { Check, Star } from "lucide-react";
 import { Chessboard, type ChessboardOptions } from "react-chessboard";
 import type { ArrowTone, BoardSpec, MarkKind } from "@/content/types";
@@ -48,7 +48,9 @@ export interface BoardProps {
 }
 
 const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, className, ariaLabel }) => {
-  const idRef = useRef(`board${++boardCounter}`);
+  // Kept in state rather than a ref so it can be read during render. Not
+  // `useId`, because React ids contain colons and this one reaches the DOM.
+  const [boardId] = useState(() => `board${++boardCounter}`);
   const settings = useSettings();
   const coordinates = spec.coordinates ?? true;
   const outside = coordinates && settings.coords === "outside";
@@ -64,7 +66,7 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
   const selected = interaction?.selected ?? null;
 
   const options: ChessboardOptions = {
-    id: idRef.current,
+    id: boardId,
     position: spec.fen ?? EMPTY_FEN,
     boardOrientation: orientation,
     showNotation: coordinates && !outside,

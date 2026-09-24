@@ -3,7 +3,6 @@
 import { CURRICULUM } from "@/content/curriculum";
 import type { BoardSpec, Screen } from "@/content/types";
 import { ALL_SQUARES, type Square } from "@/lib/chess/squares";
-import { Chess } from "chess.js";
 import { isLegalPosition } from "@/content/lib/positions";
 import { validateScreen as validateMoveScreen } from "./validate-moves";
 

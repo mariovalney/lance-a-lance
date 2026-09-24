@@ -13,7 +13,7 @@ import { StatsHeader } from "@/components/home/StatsHeader";
 import { ContinueCard } from "@/components/home/ContinueCard";
 import { PuzzleCard } from "@/components/home/PuzzleCard";
 import { ModuleSection } from "@/components/home/ModuleSection";
-import { useProgress } from "@/lib/progress/ProgressContext";
+import { useProgress } from "@/lib/progress/useProgress";
 import { isCompleted, nextLesson } from "@/lib/progress/availability";
 
 const SOURCES = [

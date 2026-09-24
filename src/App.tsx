@@ -1,7 +1,8 @@
 import { useState, type FC } from "react";
 import { findLesson, lessonCode, type LessonRef } from "@/content/curriculum";
 import type { LessonRunResult } from "@/lib/progress/types";
-import { ProgressProvider, useProgress } from "@/lib/progress/ProgressContext";
+import { ProgressProvider } from "@/lib/progress/ProgressContext";
+import { useProgress } from "@/lib/progress/useProgress";
 import { followingLesson } from "@/lib/progress/availability";
 import { HomeScreen } from "@/components/home/HomeScreen";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";

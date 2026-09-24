@@ -4,7 +4,7 @@ import { Timer } from "lucide-react";
 import type { DrillScreen, MarkKind } from "@/content/types";
 import { ALL_SQUARES, type Square } from "@/lib/chess/squares";
 import { pick } from "@/lib/random";
-import { useProgress } from "@/lib/progress/ProgressContext";
+import { useProgress } from "@/lib/progress/useProgress";
 import { Board } from "@/components/board/Board";
 import { CoordChip } from "@/components/common/CoordChip";
 import { RichText } from "@/components/common/RichText";

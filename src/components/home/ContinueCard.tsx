@@ -3,7 +3,7 @@ import { ArrowRight, Clock, RotateCcw } from "lucide-react";
 import { lessonCode, type LessonRef } from "@/content/curriculum";
 import { Button } from "@/components/ui/button";
 import { MiniBoard } from "@/components/common/MiniBoard";
-import { useProgress } from "@/lib/progress/ProgressContext";
+import { useProgress } from "@/lib/progress/useProgress";
 import { nextLesson, weakestLesson } from "@/lib/progress/availability";
 
 interface ContinueCardProps {

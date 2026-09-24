@@ -1,7 +1,7 @@
 import type { FC } from "react";
 import { Puzzle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useProgress } from "@/lib/progress/ProgressContext";
+import { useProgress } from "@/lib/progress/useProgress";
 import { PROVISIONAL_GAMES, START_RATING } from "@/lib/progress/scoring";
 
 export const PuzzleCard: FC<{ onOpen: () => void }> = ({ onOpen }) => {

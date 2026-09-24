@@ -1,6 +1,6 @@
 const { chromium } = require("playwright");
 (async () => {
-  const { OUT: S, SKELETON } = require("./env.cjs");
+  const { SKELETON } = require("./env.cjs");
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   await p.goto("file://" + SKELETON);

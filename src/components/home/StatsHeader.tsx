@@ -1,6 +1,6 @@
 import type { FC } from "react";
 import { ChessKnight, Trophy } from "lucide-react";
-import { useProgress } from "@/lib/progress/ProgressContext";
+import { useProgress } from "@/lib/progress/useProgress";
 import { levelProgress } from "@/lib/progress/scoring";
 import { SyncBadge } from "@/components/common/SyncBadge";
 import { SettingsButton } from "@/components/home/SettingsButton";

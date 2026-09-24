@@ -10,7 +10,7 @@ import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
 import { DEFAULT_ILLEGAL } from "@/components/lesson/steps/moveText";
 
-export function pathPoints(moves: number, par: number): number {
+function pathPoints(moves: number, par: number): number {
   const extra = moves - par;
   return extra <= 0 ? 10 : Math.max(10 - extra * 2, 4);
 }
