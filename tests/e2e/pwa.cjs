@@ -2,46 +2,19 @@
 // a valid manifest, the icons, the service worker, and the app still working
 // after the network is cut.
 //
-//   pnpm build:pwa && pnpm e2e:pwa
+//   pnpm e2e:prepare && pnpm e2e:pwa
 //
 // Serves dist/ itself, so it needs no running server. Set URL to point it at
 // one instead (for example the Docker image).
-const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
-const { ROOT, OUT } = require("./env.cjs");
-
-const DIST = path.join(ROOT, "dist");
-const TYPES = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".webmanifest": "application/manifest+json; charset=utf-8",
-  ".woff2": "font/woff2",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-};
-
-function serveDist() {
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url, "http://localhost");
-    let file = path.join(DIST, decodeURIComponent(url.pathname));
-    if (!file.startsWith(DIST)) return res.writeHead(403).end();
-    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, "index.html");
-    res.writeHead(200, { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream" });
-    fs.createReadStream(file).pipe(res);
-  });
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
-}
+const { DIST, OUT, serveDist } = require("./env.cjs");
 
 (async () => {
-  if (!fs.existsSync(path.join(DIST, "sw.js"))) throw new Error("dist/sw.js missing: run pnpm build:pwa first");
+  if (!fs.existsSync(path.join(DIST, "sw.js"))) throw new Error("dist/sw.js missing: run pnpm e2e:prepare first");
 
-  const server = process.env.URL ? null : await serveDist();
-  const base = process.env.URL ?? `http://127.0.0.1:${server.address().port}`;
+  const base = process.env.URL ?? (await serveDist());
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
@@ -116,7 +89,6 @@ function serveDist() {
   await ctx.setOffline(false);
 
   await browser.close();
-  server?.close();
   console.log("problems:", problems.length ? problems.join(" ; ") : "none");
   process.exitCode = problems.length ? 1 : 0;
 })();

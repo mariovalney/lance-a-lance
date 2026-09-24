@@ -14,7 +14,7 @@ Documento de passagem de bastão. Registra o que foi pedido, o que foi construí
 8. [Problemas encontrados e como foram resolvidos](#8-problemas-encontrados-e-como-foram-resolvidos)
 9. [Pontos em aberto](#9-pontos-em-aberto)
 10. [O PWA, o servidor e as contas](#10-o-pwa-o-servidor-e-as-contas)
-11. [Publicação do Artifact](#11-publicação-do-artifact)
+11. [A saída do Artifact](#11-a-saída-do-artifact)
 
 ## 1. Resumo
 
@@ -22,8 +22,8 @@ Documento de passagem de bastão. Registra o que foi pedido, o que foi construí
 - **Conteúdo:** 11 módulos e 59 lições curtas, todas com exercícios interativos no tabuleiro.
 - **Progresso:** XP, níveis com nomes de peças, estrelas por lição, recordes e um histórico de erros para revisar.
 - **Treino de puzzles:** separado das lições, com 5.353 puzzles reais do Lichess (CC0), rating pessoal, filtros por tema e abertura e histórico completo paginado.
-- **Dois formatos, um código:** o Artifact do claude.ai (um HTML único, versão publicada 14) e um PWA instalável servido por um app Node com Postgres, com conta e sincronização entre aparelhos (seção 10).
-- **Próximo passo:** subir o PWA no Easypanel, criar a conta e trazer o progresso do Artifact pela exportação.
+- **Formato:** PWA instalável servido por um app Node com Postgres, com conta, sincronização entre aparelhos e recuperação de senha por e-mail (seção 10). Nasceu como Artifact do claude.ai; esse build foi removido (seção 11).
+- **Próximo passo:** subir no Easypanel em `lance-a-lance.amestris.cloud`, criar a conta e importar o progresso.
 
 ## 2. O pedido original e as decisões do Mário
 
@@ -310,8 +310,6 @@ Aprendizados que valem para frente:
 - **Streak de dias:** continua sendo calculado no estado, sem aparecer. Pode ser removido do código ou mantido para uso futuro.
 - **Campos legados:** `history` dentro de `puzzles` não é mais escrito (o log em blocos substituiu).
 - **O status `soon` ("Em breve")** existe no código, mas nenhuma lição usa mais.
-- **Recuperação de senha:** não existe. Sem SMTP, a saída é trocar o hash direto no banco.
-- **Migração do progresso da versão 14:** depende de republicar o Artifact com a exportação e depois importar no PWA. O Claude Code não publica Artifacts (seção 11).
 - **Login com Google, para depois.** Decidido pelo Mário, sem data. Entra como um segundo caminho de entrada, ao lado do e-mail e senha, reaproveitando a mesma tabela `sessions`. O que já está definido:
   - Variáveis: `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`.
   - URL de callback: `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
@@ -320,6 +318,7 @@ Aprendizados que valem para frente:
 Resolvido nesta etapa:
 
 - **Lint:** `pnpm lint` passava com cerca de 20 avisos. Hoje passa com zero. O `src/components/ui` deixou de ser lintado, por ser shadcn/ui gerado.
+- **Recuperação de senha:** existe, por e-mail. Ver seção 10.
 
 ## 10. O PWA, o servidor e as contas
 
@@ -336,6 +335,7 @@ O plano original tinha duas fases: primeiro um PWA com o progresso só no aparel
 | Hash com o `scrypt` do `node:crypto` | Nada nativo para compilar na imagem |
 | Migrações em SQL, numa lista ordenada em `server/src/migrations.ts` | Sem ORM. O schema inteiro cabe num arquivo, e não tem `.sql` para copiar junto do build |
 | Cadastro fechado por `SIGNUP_ENABLED`, mas aberto enquanto não houver usuário | A URL é pública. Ele sobe, cria a conta dele, e o cadastro se fecha sozinho |
+| Sem `SESSION_SECRET` | O cookie carrega um token opaco, não o estado da sessão. Não tem nada para assinar. Em troca de um lookup por requisição, dá revogação imediata, que é usada ao sair e ao trocar a senha |
 | Elo, cookie e chunks mantidos como estavam | O progresso real dele vive nessas chaves e nesses formatos |
 
 ### O que foi construído
@@ -347,7 +347,8 @@ O plano original tinha duas fases: primeiro um PWA com o progresso só no aparel
 5. **Servidor.** Hono no Node, em `server/`. Quatro tabelas: `users`, `sessions`, `progress`, `puzzle_log`. As migrações rodam no boot, numa transação e atrás de um advisory lock. As senhas usam scrypt; as sessões são tokens opacos guardados só como hash SHA-256, num cookie de 400 dias. Login errado é limitado a 10 tentativas por endereço e e-mail a cada 10 minutos.
 6. **Cliente.** `connectRemote(signedIn)` escolhe o store: o banco do Artifact dentro do claude.ai, a API quando entrou, e nada fora disso, caso em que o app roda só no `localStorage`, como sempre rodou fora do claude.ai. O `AuthProvider` distingue "não tem API atrás desta página" de "ninguém entrou", e a seção de conta some inteira no primeiro caso.
 7. **Exportar e importar.** O progresso inteiro num JSON, nos dois builds, nos Ajustes. É por aí que o progresso da versão 14 do Artifact vai para o app instalado. O app também pede `navigator.storage.persist()`.
-8. **Deploy.** O `Dockerfile` monta as duas metades numa imagem só, para subir no Easypanel como um app service.
+8. **Recuperação de senha.** Por e-mail, com nodemailer. O token vive em `password_resets`, guardado só como hash, vale 30 minutos e serve uma vez. Gastá-lo troca a senha e apaga todas as sessões da conta, na mesma transação. O `/api/auth/forgot` responde igual exista ou não a conta, para não virar um jeito de descobrir quem está cadastrado. Sem `SMTP_HOST`, o recurso inteiro se desliga, interface incluída, em vez de aparecer e falhar.
+9. **Deploy.** O `Dockerfile` monta as duas metades numa imagem só, para subir no Easypanel como um app service. O container é sem estado: não precisa de volume.
 
 ### Como o progresso se junta
 
@@ -361,8 +362,8 @@ Um detalhe que só apareceu no teste: o documento de progresso não carrega o hi
 
 ### O que fica de fora
 
-- Não tem recuperação de senha. Sem SMTP, a saída é trocar o hash direto no banco.
 - O login é de uma pessoa só, por desenho. Não tem convite, papel nem administração.
+- Não existe `SESSION_SECRET`, e não deve existir: nada é assinado.
 - A escrita do progresso é a última que chega, igual ao banco do Artifact. Como a leitura reconcilia pelo `updatedAt`, o caso de dois aparelhos ao mesmo tempo se resolve na próxima abertura.
 
 ### Referências
@@ -373,9 +374,13 @@ Um detalhe que só apareceu no teste: o documento de progresso não carrega o hi
 - [WebKit: regra dos 7 dias e apps na tela de início](https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/)
 - [Maskable icons (web.dev)](https://web.dev/articles/maskable-icon)
 
-## 11. Publicação do Artifact
+## 11. A saída do Artifact
 
-- **Endereço:** https://claude.ai/artifact/MKZsV5N99grYPgmKnrb61A (privado, capacidades `db` e `user`).
-- **Versão atual:** 14.
-- **Para atualizar:** rodar `pnpm build:artifact` e pedir a um Claude no Cowork ou no claude.ai para publicar `artifact/lance-a-lance.html` nesse endereço. O Claude Code não publica Artifacts.
-- **Formato:** o `scripts/to-artifact.mjs` tira `doctype`, `html`, `head` e `body` do `dist/index.html`, porque o publicador monta o esqueleto da página.
+O Artifact foi o formato original e o motivo de várias decisões do projeto: o HTML único, o `vite-plugin-singlefile`, as fontes vindas do Google Fonts, o banco do próprio Artifact e os testes rodando sobre um `file://`. Em setembro de 2026 o Mário decidiu aposentá-lo, e o build saiu do repositório.
+
+O que foi removido: `build:artifact`, `scripts/to-artifact.mjs`, o `vite-plugin-singlefile`, o seletor de modo no `vite.config.ts`, o alias `virtual:fonts` com o seu `fonts-cdn.css`, os links de fonte do CDN no `index.html`, o `claude-runtime.d.ts`, o ramo do banco do Artifact no `connectRemote`, as checagens de `window.claude` e o teste `e2e:artifact`.
+
+A parte que deu mais trabalho não foi nenhuma dessas: os testes E2E abriam um HTML único por `file://`, e `file://` não tem origem, então não tem service worker, não tem `localStorage` por site e `fetch` não funciona. Todos passaram a rodar contra o `dist/` servido por HTTP, por um servidor pequeno em `tests/e2e/env.cjs` que cada script sobe sozinho.
+
+O progresso que vivia no banco do Artifact (993 XP, 10 lições, rating 1017 e 10 linhas de histórico) foi tirado de lá por um Claude no claude.ai, que leu o banco e montou o JSON no formato que o importador espera. As 7 primeiras linhas do histórico não existiam: são de puzzles jogados antes de o log em blocos existir, e nunca chegaram a ser gravadas. Por isso o contador diz 17 jogados e a lista mostra 10, no Artifact e no app.
+

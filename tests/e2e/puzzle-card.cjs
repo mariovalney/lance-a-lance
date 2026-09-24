@@ -1,9 +1,10 @@
 const { chromium } = require("playwright");
 (async () => {
-  const { SKELETON } = require("./env.cjs");
+  const { siteUrl } = require("./env.cjs");
+  const SITE = await siteUrl();
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
-  await p.goto("file://" + SKELETON);
+  await p.goto(SITE, { waitUntil: "networkidle" });
   await p.evaluate(() => {
     localStorage.setItem("lance-a-lance:progress:v1", JSON.stringify({ version: 1, xp: 50, lessons: {}, streak: { current: 0, best: 0, lastDay: null }, history: [], updatedAt: Date.now(), puzzles: { rating: 830, played: 7, solved: 6, streak: 0, bestStreak: 2, recent: [] } }));
   });

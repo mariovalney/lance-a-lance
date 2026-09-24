@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import 'virtual:fonts'
+import './styles/fonts.css'
 import './index.css'
 import App from './App.tsx'
 import { requestPersistentStorage, watchForUpdates } from '@/lib/pwa'

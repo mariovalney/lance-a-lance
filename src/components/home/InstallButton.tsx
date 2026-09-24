@@ -21,15 +21,14 @@ const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.
  *
  * Android and desktop Chrome hand over a prompt, so it is one tap. Safari has
  * no such thing and only installs through the share sheet, so on an iPhone this
- * explains where to tap. Shows nothing when the app is already installed, or
- * inside the claude.ai artifact, where there is no service worker at all.
+ * explains where to tap. Shows nothing when the app is already installed.
  */
 export const InstallButton: FC = () => {
   const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
   const [showIOS, setShowIOS] = useState(false);
   const [installed, setInstalled] = useState(() => typeof window === "undefined" || standalone());
 
-  const servedAsSite = typeof navigator !== "undefined" && "serviceWorker" in navigator && !window.claude?.use;
+  const servedAsSite = typeof navigator !== "undefined" && "serviceWorker" in navigator;
 
   useEffect(() => {
     const onPrompt = (event: Event) => {

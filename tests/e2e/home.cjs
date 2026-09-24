@@ -1,11 +1,12 @@
 const { chromium } = require("playwright");
 (async () => {
-  const { OUT: S, SKELETON } = require("./env.cjs");
+  const { OUT: S, siteUrl } = require("./env.cjs");
+  const SITE = await siteUrl();
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true })).newPage();
   const errors = [];
   p.on("pageerror", (e) => errors.push(e.message));
-  await p.goto("file://" + SKELETON);
+  await p.goto(SITE, { waitUntil: "networkidle" });
   await p.waitForTimeout(500);
   await p.screenshot({ path: S + "/home-unlocked.png" });
   // Open the last module and start its last lesson directly.

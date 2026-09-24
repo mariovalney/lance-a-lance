@@ -1,13 +1,14 @@
 const { chromium } = require("playwright");
 const fs = require("fs");
 (async () => {
-  const { OUT: S, SKELETON } = require("./env.cjs");
+  const { OUT: S, siteUrl } = require("./env.cjs");
+  const SITE = await siteUrl();
   const ids = JSON.parse(fs.readFileSync(require("path").join(__dirname, "../../src/content/data/trainer.json"), "utf8")).puzzles.slice(0, 30).map((p) => p.i);
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true })).newPage();
   const errors = [];
   p.on("pageerror", (e) => errors.push(e.message));
-  await p.goto("file://" + SKELETON);
+  await p.goto(SITE, { waitUntil: "networkidle" });
   await p.waitForTimeout(500);
   // Seed 25 past attempts.
   await p.evaluate((ids) => {

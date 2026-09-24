@@ -47,7 +47,7 @@ fs.mkdirSync(OUT, { recursive: true });
       localStorage.setItem("lance-a-lance:progress:v1", JSON.stringify({ version: 1, xp: 0, lessons, streak: { current: 0, best: 0, lastDay: null }, history: [], updatedAt: 1 }));
     }
   }, DONE);
-  await page.goto(process.env.URL || "file://" + env.SKELETON);
+  await page.goto(await env.siteUrl(), { waitUntil: "networkidle" });
   await page.waitForTimeout(500);
   if (SHOTS) await page.screenshot({ path: `${OUT}/${SCHEME}-home.png` });
   await page.getByRole("button", { name: /^(Começar|Praticar)/ }).first().click();

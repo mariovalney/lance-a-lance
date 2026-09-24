@@ -1,55 +1,21 @@
 import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { viteSingleFile } from "vite-plugin-singlefile";
 import { VitePWA } from "vite-plugin-pwa";
 
-const src = path.resolve(import.meta.dirname, "./src");
-
-/**
- * Two targets from one source tree:
- *
- * - `artifact` (the default): one HTML file for claude.ai, fonts from the CDN.
- * - `pwa`: a normal multi-file build with local fonts, a manifest and a
- *   service worker, served by the Node app in `server/`.
- *
- * Pick with `--mode pwa` (see the build:pwa script).
- */
-export default defineConfig(({ mode }) => {
-  const pwa = mode === "pwa";
-
-  return {
-    plugins: [react(), ...(pwa ? [dropCdnFonts(), pwaPlugin()] : [viteSingleFile()])],
-    resolve: {
-      alias: {
-        "@": src,
-        // The PWA ships the fonts itself; the artifact leaves them to the CDN.
-        "virtual:fonts": path.join(src, pwa ? "styles/fonts.css" : "styles/fonts-cdn.css"),
-      },
-    },
-    build: {
-      target: "es2020",
-      // The single-file build needs everything inlined. The PWA wants real
-      // files, so the service worker can cache them and skip unchanged ones.
-      cssCodeSplit: !pwa,
-      assetsInlineLimit: pwa ? 4096 : 100000000,
-      // The lesson data and the 5.353 puzzles are one big chunk on purpose.
-      chunkSizeWarningLimit: 2048,
-    },
-  };
+export default defineConfig({
+  plugins: [react(), ...pwaPlugin()],
+  resolve: {
+    alias: { "@": path.resolve(import.meta.dirname, "./src") },
+  },
+  build: {
+    target: "es2020",
+    // Real files, so the service worker can cache them and skip the unchanged.
+    assetsInlineLimit: 4096,
+    // The lesson data and the 5.353 puzzles are one big chunk on purpose.
+    chunkSizeWarningLimit: 2048,
+  },
 });
-
-/** Removes the Google Fonts markup: the PWA has to work with no network. */
-function dropCdnFonts(): Plugin {
-  return {
-    name: "lance-a-lance:drop-cdn-fonts",
-    transformIndexHtml(html) {
-      return html
-        .replace(/[ \t]*<link rel="preconnect"[^>]*fonts\.(googleapis|gstatic)[^>]*>\n?/g, "")
-        .replace(/[ \t]*<link\s[\s\S]*?fonts\.googleapis[\s\S]*?>\n?/g, "");
-    },
-  };
-}
 
 function pwaPlugin(): Plugin[] {
   return VitePWA({

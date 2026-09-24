@@ -24,7 +24,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm build:pwa && pnpm build:server
+RUN pnpm build && pnpm build:server
 
 # Drop the dev dependencies from the tree that ships.
 RUN pnpm prune --prod

@@ -71,19 +71,16 @@ export function saveLocalLog(chunk: number, entries: PuzzleLogEntry[]): void {
 }
 
 /**
- * Picks where the cloud copy lives:
+ * Where the cloud copy lives: the API in `server/` when somebody is signed in,
+ * and nowhere otherwise, which leaves the app on this browser's copy alone.
  *
- * - inside claude.ai, the artifact database;
- * - on the PWA with somebody signed in, the API in `server/`;
- * - otherwise null, and the app runs on this browser's copy alone.
+ * Reads and writes go to the same origin as the page, so the session cookie
+ * rides along on its own.
  */
 export async function connectRemote(signedIn: boolean): Promise<RemoteStore | null> {
-  const artifact = await connectArtifact();
-  if (artifact) return artifact;
   return signedIn ? httpStore() : null;
 }
 
-/** Reads and writes through the API. Same origin, so the cookie rides along. */
 function httpStore(): RemoteStore {
   const send = async (path: string, init?: RequestInit) => {
     const response = await fetch(`/api${path}`, {
@@ -118,48 +115,6 @@ function httpStore(): RemoteStore {
       logChain = logChain.catch(() => undefined).then(async () => {
         await send(`/puzzlelog/${chunk}`, { method: "PUT", body: JSON.stringify({ entries }) });
       });
-      return logChain;
-    },
-  };
-}
-
-/**
- * The artifact database (progress/<viewer id>).
- * Resolves null when the page runs outside claude.ai or without a viewer id.
- */
-async function connectArtifact(): Promise<RemoteStore | null> {
-  const runtime = typeof window !== "undefined" ? window.claude : undefined;
-  if (!runtime?.use) return null;
-  const [db, user] = await Promise.all([runtime.use("db"), runtime.use("user")]);
-  if (!db || !user) return null;
-  const id = await user.id();
-  if (!id) return null;
-  const ref = db.doc(`progress/${id}`);
-  const logRef = (chunk: number) => db.doc(`puzzlelog/${id}_${chunk}`);
-
-  let chain: Promise<void> = Promise.resolve();
-  let logChain: Promise<void> = Promise.resolve();
-  return {
-    async load() {
-      const snap = await ref.get();
-      if (!snap.exists) return null;
-      const data = snap.data();
-      return isProgress(data) ? normalize(data) : null;
-    },
-    save(state) {
-      // One write at a time per document.
-      chain = chain
-        .catch(() => undefined)
-        .then(() => ref.set(JSON.parse(JSON.stringify(state)) as Record<string, unknown>));
-      return chain;
-    },
-    async loadLog(chunk) {
-      const snap = await logRef(chunk).get();
-      const data = snap.exists ? snap.data() : undefined;
-      return data && Array.isArray(data.entries) ? (data.entries as PuzzleLogEntry[]) : null;
-    },
-    saveLog(chunk, entries) {
-      logChain = logChain.catch(() => undefined).then(() => logRef(chunk).set({ entries, updatedAt: Date.now() }));
       return logChain;
     },
   };

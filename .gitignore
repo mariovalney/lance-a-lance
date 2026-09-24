@@ -23,9 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Build output published as the claude.ai artifact (regenerate with pnpm build:artifact)
-/artifact/
-
 # E2E outputs and raw Lichess dumps (large, reproducible)
 tests/e2e/.out/
 /data/
