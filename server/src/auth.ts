@@ -1,6 +1,7 @@
 import { randomBytes, createHash, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { pool, query } from "./db.js";
+import { env } from "./env.js";
 
 const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: object) => Promise<Buffer>;
 
@@ -23,7 +24,9 @@ export async function hashPassword(password: string): Promise<string> {
   return ["scrypt", SCRYPT.N, SCRYPT.r, SCRYPT.p, salt.toString("base64"), key.toString("base64")].join("$");
 }
 
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+/** `stored` is null for an account that is only reached through a provider. */
+export async function verifyPassword(password: string, stored: string | null): Promise<boolean> {
+  if (!stored) return false;
   const [scheme, n, r, p, salt, key] = stored.split("$");
   if (scheme !== "scrypt") return false;
   try {
@@ -125,6 +128,73 @@ export async function consumePasswordReset(token: string, password: string): Pro
 export async function deleteExpiredResets(): Promise<number> {
   const { rowCount } = await query("DELETE FROM password_resets WHERE expires_at <= now() - interval '1 day'");
   return rowCount ?? 0;
+}
+
+/* ---------- identities: a way into an account that is not a password ------- */
+
+/** What the caller must decide before an identity can become an account. */
+export type IdentitySignIn = { ok: true; user: User } | { ok: false; reason: "signup_closed" };
+
+/**
+ * Finds the account this identity belongs to, or attaches it to one.
+ *
+ * The three cases, in order: the identity is known; the identity is new and an
+ * account already has that email, so it is linked rather than duplicated,
+ * because the owner's progress lives in that one account; the identity is new
+ * and so is the email, so an account is created if signup allows it.
+ *
+ * The caller must have checked that the provider says the email is verified.
+ * Without that, anyone who can make an account claiming an address could take
+ * over the account holding it.
+ */
+export async function signInWithIdentity(provider: string, subject: string, email: string): Promise<IdentitySignIn> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Serialize the read-then-write below against a second sign-in racing it.
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`identity:${provider}:${subject}`]);
+
+    const known = await client.query<{ id: string; email: string }>(
+      `SELECT u.id, u.email FROM user_identities i JOIN users u ON u.id = i.user_id
+        WHERE i.provider = $1 AND i.subject = $2`,
+      [provider, subject],
+    );
+    if (known.rows[0]) {
+      await client.query("COMMIT");
+      return { ok: true, user: known.rows[0] };
+    }
+
+    const byEmail = await client.query<{ id: string; email: string }>("SELECT id, email FROM users WHERE email = $1", [email]);
+    let user = byEmail.rows[0];
+
+    if (!user) {
+      const { rows } = await client.query<{ count: string }>("SELECT count(*)::text AS count FROM users");
+      const first = Number(rows[0]?.count ?? 0) === 0;
+      if (!env.signupEnabled && !first) {
+        await client.query("ROLLBACK");
+        return { ok: false, reason: "signup_closed" };
+      }
+      // No password: this account is reached through the provider.
+      const created = await client.query<{ id: string; email: string }>(
+        "INSERT INTO users (email, password) VALUES ($1, NULL) RETURNING id, email",
+        [email],
+      );
+      user = created.rows[0];
+    }
+
+    await client.query(
+      `INSERT INTO user_identities (user_id, provider, subject) VALUES ($1, $2, $3)
+       ON CONFLICT (provider, subject) DO NOTHING`,
+      [user.id, provider, subject],
+    );
+    await client.query("COMMIT");
+    return { ok: true, user };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function countUsers(): Promise<number> {

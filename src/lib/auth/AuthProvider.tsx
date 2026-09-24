@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from "react";
-import { ApiOffline, ApiUnavailable, fetchAccount, fetchConfig, login, logout, signup } from "@/lib/auth/api";
+import { ApiOffline, ApiUnavailable, CLOSED_CONFIG, fetchAccount, fetchConfig, login, logout, signup } from "@/lib/auth/api";
 import { AuthContext, type AuthState } from "@/lib/auth/context";
 import { clearLocal } from "@/lib/progress/storage";
 
@@ -23,7 +23,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
           setState({ kind: "signed-in", account });
           return;
         }
-        const config = await fetchConfig().catch(() => ({ signupOpen: false, resetOpen: false }));
+        const config = await fetchConfig().catch(() => CLOSED_CONFIG);
         if (!cancelled) setState({ kind: "anonymous", ...config });
       } catch (error) {
         if (cancelled) return;
@@ -34,7 +34,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         // there but unhappy, so still offer to sign in.
         if (error instanceof ApiUnavailable) setState({ kind: "unavailable" });
         else if (error instanceof ApiOffline) setState({ kind: "offline" });
-        else setState({ kind: "anonymous", signupOpen: false, resetOpen: false });
+        else setState({ kind: "anonymous", ...CLOSED_CONFIG });
       }
     })();
     return () => {
@@ -56,7 +56,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     // that played before there were accounts may still hold an old copy. This
     // is where it goes, so that leaving the app leaves nothing behind.
     clearLocal();
-    const config = await fetchConfig().catch(() => ({ signupOpen: false, resetOpen: false }));
+    const config = await fetchConfig().catch(() => CLOSED_CONFIG);
     setState({ kind: "anonymous", ...config });
   }, []);
 

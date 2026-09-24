@@ -16,7 +16,7 @@ export type AuthState =
   | { kind: "loading" }
   | { kind: "unavailable" }
   | { kind: "offline" }
-  | { kind: "anonymous"; signupOpen: boolean; resetOpen: boolean }
+  | { kind: "anonymous"; signupOpen: boolean; resetOpen: boolean; googleOpen: boolean }
   | { kind: "signed-in"; account: Account };
 
 export interface AuthContextValue {

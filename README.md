@@ -41,6 +41,7 @@ The first account needs no configuration: while there are no users, signup stays
 | `pnpm e2e:pwa` | Manifest, icons, service worker, local fonts and offline mode |
 | `pnpm e2e:account` | Sign in, sync, sign out, export and import, against a real server |
 | `pnpm e2e:reset` | Ask for the link, open the mail, change the password and sign in with it |
+| `pnpm e2e:google` | Sign in with Google against a fake Google: new account, linking, refusals |
 
 Scoped validation: `ONLY=m4-l RUNS=200 pnpm validate` checks only the lessons whose id starts with `m4-l`, building each one 200 times (every build draws fresh examples). `ONLY=treino` checks only the trainer puzzles.
 
@@ -49,6 +50,8 @@ The E2E scripts use Playwright. The first time, run `npx playwright install chro
 `e2e:pwa` serves `dist/` itself, like the rest. `e2e:account` needs a running server that still accepts signups: `URL=http://127.0.0.1:3111 pnpm e2e:account`.
 
 `e2e:reset` needs a server whose SMTP points at the throwaway mail sink. Start the sink with `node tests/e2e/smtp-sink.cjs 2526 /tmp/sink.json`, then the server with `SMTP_HOST=127.0.0.1 SMTP_PORT=2526 APP_URL=http://127.0.0.1:3444 SIGNUP_ENABLED=true`, and run `URL=http://127.0.0.1:3444 SINK=/tmp/sink.json pnpm e2e:reset`.
+
+`e2e:google` needs the same kind of arrangement, with a fake Google in place of the mail sink. Start it with `GOOGLE_CLIENT_ID=test-client-id GOOGLE_CLIENT_SECRET=test-client-secret node tests/e2e/google-sink.cjs 2626`, start the server with those same two variables plus `GOOGLE_AUTH_URL=http://127.0.0.1:2626/authorize GOOGLE_TOKEN_URL=http://127.0.0.1:2626/token GOOGLE_USERINFO_URL=http://127.0.0.1:2626/userinfo`, and run `URL=http://127.0.0.1:3111 GOOGLE=http://127.0.0.1:2626 DATABASE_URL=postgres://... pnpm e2e:google`. The `DATABASE_URL` is what lets it start a second server with no `GOOGLE_CLIENT_ID`, to check the feature turns itself off; without it that one check is skipped.
 
 ## CI
 
@@ -78,7 +81,16 @@ For the password reset email. Without `SMTP_HOST`, "Esqueci a senha" does not ap
 | `SMTP_USER` / `SMTP_PASS` | Authentication. With an empty `SMTP_USER` it connects unauthenticated |
 | `APP_URL` | The public address, used to build the link in the email |
 
-`APP_URL` matters: without it the link is built from the request's `Host` header, which someone can forge to point your own reset email at their domain. With it set, the link is always your address.
+`APP_URL` matters: without it the link is built from the request's `Host` header, which someone can forge to point your own reset email at their domain. With it set, the link is always your address. Signing in with Google uses it for the same reason, to build the callback.
+
+For signing in with Google. Without `GOOGLE_CLIENT_ID` the button does not appear in the interface at all, the same way:
+
+| Variable | What it is for |
+|---|---|
+| `GOOGLE_CLIENT_ID` | The OAuth client. This is what turns the feature on or off |
+| `GOOGLE_CLIENT_SECRET` | The secret of that client. The code is exchanged server side |
+
+The flow is the ordinary authorization code one: `/api/auth/google` sets a random `state` in a short lived cookie and redirects to Google; `/api/auth/google/callback` compares the `state` it gets back against that cookie, exchanges the code for a token, reads the identity from Google and opens the usual session. An account that already has the address is reused rather than duplicated, and only when Google says the address is verified. A refusal lands back on the sign in screen with a sentence, not on a JSON page.
 
 There is no `SESSION_SECRET`: the cookie carries nothing but an opaque random token, and the server stores only its SHA-256 hash. Nothing is signed, so there is no secret to keep or to rotate.
 
@@ -86,7 +98,7 @@ The database migrations run themselves at boot. The container is stateless, so i
 
 The home screen footer shows the first seven characters of the commit the build came from. Easypanel hands that commit to the `Dockerfile` as the `GIT_SHA` build arg; outside it, the build reads the checkout instead. It is a build arg, not a runtime variable: the value goes into the bundle while the image is being built.
 
-Domain: `https://lance-a-lance.amestris.cloud`. There is no Google sign-in yet; when there is, it will use `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and the callback `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
+Domain: `https://lance-a-lance.amestris.cloud`. The Google callback registered there is `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
 
 ## Copying your progress
 

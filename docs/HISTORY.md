@@ -312,15 +312,11 @@ Lessons worth carrying forward:
 - **The day streak:** still computed in the state, never shown. It can be dropped from the code or kept for later.
 - **Legacy fields:** `history` inside `puzzles` is no longer written (the chunked log replaced it).
 - **The `soon` status ("Em breve")** exists in the code, but no lesson uses it any more.
-- **Google sign-in, for later.** Mário's decision, with no date. It comes in as a second way in, beside email and password, reusing the same `sessions` table. What is already settled:
-  - Variables: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
-  - Callback URL: `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
-  - An existing account with the same address must be reused, not duplicated, so the progress does not split in two.
-
 Settled since:
 
 - **Lint:** `pnpm lint` used to pass with about 20 warnings. It now passes with none. `src/components/ui` stopped being linted, being generated shadcn/ui.
 - **Password reset:** it exists, by email. See section 10.
+- **Google sign-in:** built. See section 13.
 
 ## 10. The PWA, the server and the accounts
 
@@ -412,3 +408,35 @@ That leaves one thing to get right. A dead `fetch` means two opposite things: on
 The cost is the offline promise, and it was accepted knowingly: an installed app with no network now opens on the offline screen rather than on the cached course. The alternative kept a copy in the browser, which is exactly what was being removed.
 
 Signing out clears whatever progress keys the browser still holds. Nothing is written there while an account is open, so what it finds is a copy from before this change, and leaving the app leaves nothing behind. Sound and board coordinates stay: they are the device's, not the account's.
+
+## 13. Signing in with Google
+
+A second way in, beside email and password, on the same `sessions` table. The variables and the callback had been decided long before: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `https://lance-a-lance.amestris.cloud/api/auth/google/callback`.
+
+### The shape
+
+The ordinary authorization code flow, with the app as a confidential client: `/api/auth/google` redirects to Google, `/api/auth/google/callback` does the rest server side, where the client secret is. Nothing about the identity is decided in the browser.
+
+The `state` is a random value in a short lived `httpOnly` cookie, compared against the `state` Google echoes back. That is the double-submit cookie pattern, and it is here for the same reason there is no `SESSION_SECRET`: nothing needs to be signed, so no secret needs to be kept. A callback whose `state` is missing or different is refused before anything is looked up.
+
+The identity is read from the userinfo endpoint rather than from the id token. It costs one more request to Google and saves verifying a signature against a key set that rotates, which is the part that fails quietly months later. The three Google URLs are configurable, which is what lets the test drive a fake Google; production never sets them.
+
+### Linking, and why it is gated on `email_verified`
+
+An account that already holds the address is reused, never duplicated. The owner has one account with all his progress in it, and the app has no way to merge two.
+
+But linking only happens when Google reports the address as verified. Without that rule, anyone who can make a Google account claiming an address would be handed the account that holds it here. That is the whole attack, and it is cheap: the refusal is worth more than the convenience. An unverified email is refused outright, and nothing is created for it.
+
+So the callback has four cases, in order: a known identity signs its user in; a new identity with a verified email that matches an account links to it; a new identity with a verified email and no account creates one, if `SIGNUP_ENABLED` allows or there is nobody yet; an unverified email is refused. Every refusal lands back on the sign in screen with a sentence in Portuguese, through `/?erro=<code>`, rather than on a JSON error page.
+
+### The schema
+
+`users.password` became nullable, because an account made through Google has none. The code had to match: verifying a password against a null is false, not a crash.
+
+The subject went into `user_identities (user_id, provider, subject)`, keyed on `(provider, subject)`, rather than a `google_sub` column on `users`. It holds a second provider without another migration, it keeps `users` about the person rather than about how they got in, and it makes "which accounts have Google" a row count instead of a null check.
+
+### Testing it without Google
+
+`tests/e2e/google-sink.cjs` is a fake Google, the same idea as the SMTP sink: authorize, token and userinfo, plus a control endpoint where the test says who the next person to authorize is. No signatures, no TLS. The server points at it through the three URL variables, so no test-only branch exists in the production path.
+
+The test covers a new account, the same identity coming back to it, a verified email linking to a password account with its progress intact, an unverified email refused, a `state` that does not match and one that is missing, and, by starting a second server with no `GOOGLE_CLIENT_ID`, the feature turning itself off with the email form still there.

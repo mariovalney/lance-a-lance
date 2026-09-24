@@ -69,4 +69,24 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX password_resets_expires_at_idx ON password_resets (expires_at);
     `,
   },
+  {
+    name: "003_identities",
+    sql: `
+      -- An account made through a provider has no password to store.
+      ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+
+      -- One row per way into an account that is not a password. A table of its
+      -- own, rather than a column on users: it holds any number of providers
+      -- per person without widening users every time, and it keeps users about
+      -- the person rather than about how they got in.
+      CREATE TABLE user_identities (
+        user_id     uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        provider    text NOT NULL,
+        subject     text NOT NULL,
+        created_at  timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (provider, subject)
+      );
+      CREATE INDEX user_identities_user_id_idx ON user_identities (user_id);
+    `,
+  },
 ];

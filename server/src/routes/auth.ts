@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import {
@@ -14,6 +15,7 @@ import {
   hashPassword,
   normalizeEmail,
   recordFailure,
+  signInWithIdentity,
   tooManyAttempts,
   userForToken,
   verifyPassword,
@@ -21,6 +23,7 @@ import {
 } from "../auth.js";
 import { query } from "../db.js";
 import { env } from "../env.js";
+import { authorizeUrl, googleEnabled, identityFromCode } from "../google.js";
 import { canSendMail, sendPasswordReset } from "../mail.js";
 
 export type Vars = { Variables: { user: User } };
@@ -91,7 +94,7 @@ authRoutes.post("/login", async (c) => {
   const key = `${c.req.header("x-forwarded-for") ?? "local"}|${email}`;
   if (tooManyAttempts(key)) return c.json({ error: "too_many_attempts" }, 429);
 
-  const { rows } = await query<{ id: string; email: string; password: string }>(
+  const { rows } = await query<{ id: string; email: string; password: string | null }>(
     "SELECT id, email, password FROM users WHERE email = $1",
     [email],
   );
@@ -117,8 +120,82 @@ authRoutes.post("/logout", async (c) => {
 
 /** What the login screen should offer. */
 authRoutes.get("/config", async (c) =>
-  c.json({ signupEnabled: env.signupEnabled || (await countUsers()) === 0, resetEnabled: canSendMail() }),
+  c.json({
+    signupEnabled: env.signupEnabled || (await countUsers()) === 0,
+    resetEnabled: canSendMail(),
+    googleEnabled: googleEnabled(),
+  }),
 );
+
+/* ---------- signing in with Google ---------- */
+
+/**
+ * The state that ties the browser that started the flow to the one that comes
+ * back. It is compared against the `state` Google echoes, which is the
+ * double-submit cookie pattern: nothing is signed, so there is no secret.
+ */
+const OAUTH_COOKIE = "la_oauth";
+const OAUTH_MINUTES = 10;
+
+/** Back to the app with something the interface can turn into a sentence. */
+const backToApp = (c: Context, error?: string) => c.redirect(error ? `/?erro=${encodeURIComponent(error)}` : "/", 302);
+
+authRoutes.get("/google", (c) => {
+  if (!googleEnabled()) return backToApp(c, "google_unavailable");
+  const origin = appUrl(c);
+  if (!origin) {
+    console.error("cannot build the Google callback: set APP_URL");
+    return backToApp(c, "google_failed");
+  }
+
+  const state = randomBytes(32).toString("base64url");
+  setCookie(c, OAUTH_COOKIE, state, {
+    path: "/api/auth",
+    httpOnly: true,
+    secure: env.cookieSecure,
+    // Lax, so the cookie rides along when Google sends the browser back.
+    sameSite: "Lax",
+    maxAge: OAUTH_MINUTES * 60,
+  });
+  return c.redirect(authorizeUrl(origin, state), 302);
+});
+
+authRoutes.get("/google/callback", async (c) => {
+  if (!googleEnabled()) return backToApp(c, "google_unavailable");
+
+  const expected = getCookie(c, OAUTH_COOKIE);
+  deleteCookie(c, OAUTH_COOKIE, { path: "/api/auth", secure: env.cookieSecure, sameSite: "Lax" });
+  const state = c.req.query("state") ?? "";
+  // Nothing to compare against, or the wrong value: this browser did not start
+  // the flow, or it started it too long ago.
+  if (!expected || !state || expected.length !== state.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(state))) {
+    return backToApp(c, "google_state");
+  }
+
+  const code = c.req.query("code");
+  if (!code) return backToApp(c, "google_failed");
+
+  const origin = appUrl(c);
+  const identity = origin ? await identityFromCode(origin, code).catch(() => null) : null;
+  if (!identity) return backToApp(c, "google_failed");
+
+  // Linking to an account that already holds the address is only safe when
+  // Google says the address is theirs.
+  if (!identity.emailVerified) return backToApp(c, "email_unverified");
+
+  // Anything unexpected here lands on the sign in screen with a sentence, not
+  // on the JSON that the error handler would otherwise answer with.
+  const result = await signInWithIdentity("google", identity.subject, identity.email).catch((error: unknown) => {
+    console.error("google: could not attach the identity:", error);
+    return null;
+  });
+  if (!result) return backToApp(c, "google_failed");
+  if (!result.ok) return backToApp(c, result.reason);
+
+  const { token, expiresAt } = await createSession(result.user.id);
+  setSessionCookie(c, token, expiresAt);
+  return backToApp(c);
+});
 
 /**
  * Where the reset link points. APP_URL when set, because a forged Host

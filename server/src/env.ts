@@ -38,6 +38,24 @@ export const env = {
   appUrl: process.env.APP_URL?.replace(/\/+$/, "") || null,
 
   /**
+   * Signing in with Google is optional. Without GOOGLE_CLIENT_ID there is
+   * nothing to redirect to, so the whole flow is turned off, the button
+   * included, rather than offered and then failing.
+   *
+   * The three endpoints are configurable because the end to end test points
+   * them at a fake Google of its own. Production never sets them.
+   */
+  google: process.env.GOOGLE_CLIENT_ID
+    ? {
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+        authUrl: process.env.GOOGLE_AUTH_URL || "https://accounts.google.com/o/oauth2/v2/auth",
+        tokenUrl: process.env.GOOGLE_TOKEN_URL || "https://oauth2.googleapis.com/token",
+        userinfoUrl: process.env.GOOGLE_USERINFO_URL || "https://openidconnect.googleapis.com/v1/userinfo",
+      }
+    : null,
+
+  /**
    * Sending mail is optional. Without SMTP_HOST there is no way to send a
    * reset link, so the whole flow is turned off rather than half offered.
    */
