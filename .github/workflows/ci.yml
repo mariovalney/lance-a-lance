@@ -98,6 +98,7 @@ jobs:
           pnpm e2e:history
           pnpm e2e:auto
           pnpm e2e:pwa
+          pnpm e2e:game
 
       # The walkthrough plays all 59 lessons and takes about twelve minutes,
       # so it is not here: run the Walkthrough workflow by hand for a change

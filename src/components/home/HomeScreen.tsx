@@ -2,12 +2,13 @@ import type { FC } from "react";
 import { CURRICULUM, ALL_LESSONS, type LessonRef } from "@/content/curriculum";
 import { StatsHeader } from "@/components/home/StatsHeader";
 import { ContinueCard } from "@/components/home/ContinueCard";
+import { GameCard } from "@/components/home/GameCard";
 import { PuzzleCard } from "@/components/home/PuzzleCard";
 import { ModuleSection } from "@/components/home/ModuleSection";
 import { useProgress } from "@/lib/progress/useProgress";
 import { isCompleted, nextLesson } from "@/lib/progress/availability";
 
-export const HomeScreen: FC<{ onStart: (ref: LessonRef) => void; onPuzzles: () => void }> = ({ onStart, onPuzzles }) => {
+export const HomeScreen: FC<{ onStart: (ref: LessonRef) => void; onPuzzles: () => void; onGame: () => void }> = ({ onStart, onPuzzles, onGame }) => {
   const { state } = useProgress();
   const current = nextLesson(state);
   const openModule = current?.module.id ?? CURRICULUM[0].id;
@@ -18,6 +19,7 @@ export const HomeScreen: FC<{ onStart: (ref: LessonRef) => void; onPuzzles: () =
       <StatsHeader />
       <ContinueCard onStart={onStart} />
       <PuzzleCard onOpen={onPuzzles} />
+      <GameCard onOpen={onGame} />
 
       <section aria-labelledby="trilha" className="flex flex-col">
         <div className="flex items-baseline justify-between pb-1">

@@ -137,11 +137,16 @@ export function emptyPuzzleStats(): import("@/lib/progress/types").PuzzleStats {
   return { rating: START_RATING, played: 0, solved: 0, streak: 0, bestStreak: 0, recent: [] };
 }
 
+/** Rating change for a score of 1 (win), 0.5 (draw) or 0 (loss) against `opponent`. */
+export function eloScoreDelta(rating: number, opponent: number, played: number, score: number): number {
+  const expected = 1 / (1 + Math.pow(10, (opponent - rating) / 400));
+  const k = played < PROVISIONAL_GAMES ? 40 : 20;
+  return Math.round(k * (score - expected));
+}
+
 /** Rating change for solving (ok) or failing a puzzle of `puzzleRating`. */
 export function eloDelta(rating: number, puzzleRating: number, played: number, ok: boolean): number {
-  const expected = 1 / (1 + Math.pow(10, (puzzleRating - rating) / 400));
-  const k = played < PROVISIONAL_GAMES ? 40 : 20;
-  return Math.round(k * ((ok ? 1 : 0) - expected));
+  return eloScoreDelta(rating, puzzleRating, played, ok ? 1 : 0);
 }
 
 export function applyPuzzle(state: ProgressState, r: import("@/lib/progress/types").PuzzleResult, now = new Date()): ProgressState {
@@ -168,6 +173,40 @@ export function applyPuzzle(state: ProgressState, r: import("@/lib/progress/type
       streak: streakNow,
       bestStreak: Math.max(ps.bestStreak, streakNow),
       recent: [r.id, ...ps.recent.filter((x) => x !== r.id)].slice(0, 400),
+    },
+    updatedAt: now.getTime(),
+  };
+}
+
+/* ---------- games against the computer ---------- */
+
+export function emptyGameStats(): import("@/lib/progress/types").GameStats {
+  return { rating: START_RATING, played: 0, wins: 0, draws: 0, losses: 0 };
+}
+
+export const GAME_SCORE: Record<import("@/lib/progress/types").GameOutcome, number> = { win: 1, draw: 0.5, loss: 0 };
+export const GAME_XP: Record<import("@/lib/progress/types").GameOutcome, number> = { win: 10, draw: 5, loss: 2 };
+
+export function applyGame(state: ProgressState, r: import("@/lib/progress/types").GameResult, now = new Date()): ProgressState {
+  const gs = state.games ?? emptyGameStats();
+  const delta = eloScoreDelta(gs.rating, r.botRating, gs.played, GAME_SCORE[r.outcome]);
+  const today = localDay(now);
+  let { current, best, lastDay } = state.streak;
+  if (lastDay !== today) {
+    current = lastDay === previousDay(today) ? current + 1 : 1;
+    lastDay = today;
+  }
+  best = Math.max(best, current);
+  return {
+    ...state,
+    xp: state.xp + GAME_XP[r.outcome],
+    streak: { current, best, lastDay },
+    games: {
+      rating: Math.max(100, gs.rating + delta),
+      played: gs.played + 1,
+      wins: gs.wins + (r.outcome === "win" ? 1 : 0),
+      draws: gs.draws + (r.outcome === "draw" ? 1 : 0),
+      losses: gs.losses + (r.outcome === "loss" ? 1 : 0),
     },
     updatedAt: now.getTime(),
   };

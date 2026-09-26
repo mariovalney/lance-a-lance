@@ -63,6 +63,16 @@ function pwaPlugin(): Plugin[] {
       // and the sounds are synthesized, so the app works fully offline.
       globPatterns: ["**/*.{js,css,html,woff2,png,svg,ico,webmanifest}"],
       maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+      // Except the chess engine (about 1.8 MB), which only a game needs: it is
+      // cached the first time somebody plays, not on every install.
+      globIgnores: ["engine/**"],
+      runtimeCaching: [
+        {
+          urlPattern: ({ url }) => url.pathname.startsWith("/engine/"),
+          handler: "CacheFirst",
+          options: { cacheName: "engine", expiration: { maxEntries: 4 } },
+        },
+      ],
       // Only the addresses the app answers fall back to the shell. Anything
       // else has to reach the server, which answers 404. Same list as
       // CLIENT_ROUTES in server/src/index.ts and the routing in src/App.tsx.

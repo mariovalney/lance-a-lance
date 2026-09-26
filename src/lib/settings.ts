@@ -6,6 +6,9 @@ export interface Settings {
   sound: boolean;
   /** Last theme picked in the puzzle trainer (null = all). */
   puzzleTheme?: string | null;
+  /** Last computer level and side picked for a game. */
+  gameLevel?: number;
+  gameSide?: "w" | "b" | "random";
 }
 
 const KEY = "lance-a-lance:settings:v1";

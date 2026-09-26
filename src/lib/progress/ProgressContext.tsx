@@ -5,9 +5,9 @@ import { storageIdentity } from "@/lib/auth/context";
 import { useAuth } from "@/lib/auth/useAuth";
 import { BACKUP_VERSION, type Backup } from "@/lib/progress/backup";
 import { ProgressContext } from "@/lib/progress/context";
-import { START_RATING, applyPuzzle, applyRun } from "@/lib/progress/scoring";
+import { START_RATING, applyGame, applyPuzzle, applyRun } from "@/lib/progress/scoring";
 import { LOG_CHUNK, connectRemote, loadLocal, loadLocalLog, saveLocal, saveLocalLog, type RemoteStore } from "@/lib/progress/storage";
-import { emptyProgress, type LessonRunResult, type ProgressState, type PuzzleLogEntry, type PuzzleResult } from "@/lib/progress/types";
+import { emptyProgress, type GameResult, type LessonRunResult, type ProgressState, type PuzzleLogEntry, type PuzzleResult } from "@/lib/progress/types";
 
 /** Merge two copies of a log chunk, keeping every filled slot. */
 function mergeChunk(a: (PuzzleLogEntry | null)[] | null, b: (PuzzleLogEntry | null)[] | null): (PuzzleLogEntry | null)[] {
@@ -112,6 +112,16 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const recordRun = useCallback(
     (run: LessonRunResult) => {
       const next = applyRun(stateRef.current, run);
+      keep(next);
+      push(next);
+      return next;
+    },
+    [keep, push],
+  );
+
+  const recordGame = useCallback(
+    (r: GameResult) => {
+      const next = applyGame(stateRef.current, r);
       keep(next);
       push(next);
       return next;
@@ -224,8 +234,8 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
   );
 
   const value = useMemo(
-    () => ({ state, recordRun, recordPuzzle, loadPuzzlePage, reset, exportBackup, importBackup }),
-    [state, recordRun, recordPuzzle, loadPuzzlePage, reset, exportBackup, importBackup],
+    () => ({ state, recordRun, recordPuzzle, recordGame, loadPuzzlePage, reset, exportBackup, importBackup }),
+    [state, recordRun, recordPuzzle, recordGame, loadPuzzlePage, reset, exportBackup, importBackup],
   );
 
   if (phase === "unreachable") return <OfflineScreen />;

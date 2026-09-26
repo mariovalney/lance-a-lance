@@ -11,6 +11,7 @@ import { HomeScreen } from "@/components/home/HomeScreen";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { ResultScreen } from "@/components/result/ResultScreen";
 import { PuzzleTrainer } from "@/components/trainer/PuzzleTrainer";
+import { GameScreen } from "@/components/game/GameScreen";
 import { ResetScreen } from "@/components/home/ResetScreen";
 import { SignInScreen } from "@/components/home/SignInScreen";
 import { OfflineScreen } from "@/components/home/OfflineScreen";
@@ -19,6 +20,7 @@ import { AdminScreen } from "@/components/admin/AdminScreen";
 type Route =
   | { name: "home" }
   | { name: "trainer" }
+  | { name: "game" }
   | { name: "lesson"; lessonId: string; run: number }
   | {
       name: "result";
@@ -113,7 +115,15 @@ const Shell: FC = () => {
     );
   }
 
-  return <HomeScreen onStart={start} onPuzzles={() => setRoute({ name: "trainer" })} />;
+  if (route.name === "game") {
+    return (
+      <div className="h-full">
+        <GameScreen onExit={goHome} />
+      </div>
+    );
+  }
+
+  return <HomeScreen onStart={start} onPuzzles={() => setRoute({ name: "trainer" })} onGame={() => setRoute({ name: "game" })} />;
 };
 
 /**

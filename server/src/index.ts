@@ -40,7 +40,7 @@ app.onError((error, c) => {
 /* ---------- the built PWA ---------- */
 
 const hasBuild = existsSync(`${env.staticDir}/index.html`);
-if (!hasBuild) console.warn(`No build at ${env.staticDir}: serving the API only. Run pnpm build:pwa.`);
+if (!hasBuild) console.warn(`No build at ${env.staticDir}: serving the API only. Run pnpm build.`);
 
 app.use(
   "*",
@@ -52,6 +52,9 @@ app.use(
       // Vite names built files `<name>-<hash>.<ext>`: those never change, so
       // they can be kept forever.
       if (/\/assets\/.+-[0-9a-zA-Z_-]{8,}\.[a-z0-9]+$/.test(path)) {
+        c.header("cache-control", "public, max-age=31536000, immutable");
+      } else if (/\/engine\/stockfish-\d+/.test(path)) {
+        // The engine's file names carry its version, so they never change either.
         c.header("cache-control", "public, max-age=31536000, immutable");
       } else if (path.endsWith("/sw.js") || path.endsWith("/registerSW.js") || path.endsWith(".webmanifest")) {
         // These decide when a new version is picked up, so never cache them.

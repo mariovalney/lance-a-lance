@@ -17,6 +17,10 @@ Lesson titles, interface copy and the chess vocabulary stay in Portuguese throug
 9. [Still open](#9-still-open)
 10. [The PWA, the server and the accounts](#10-the-pwa-the-server-and-the-accounts)
 11. [Retiring the artifact](#11-retiring-the-artifact)
+12. [The app behind the account](#12-the-app-behind-the-account)
+13. [Signing in with Google](#13-signing-in-with-google)
+14. [The admin, and only the addresses the app answers](#14-the-admin-and-only-the-addresses-the-app-answers)
+15. [Games against the computer, and the links on Android](#15-games-against-the-computer-and-the-links-on-android)
 
 ## 1. Summary
 
@@ -24,6 +28,7 @@ Lesson titles, interface copy and the chess vocabulary stay in Portuguese throug
 - **Content:** 11 modules and 59 short lessons, every one with interactive exercises on the board.
 - **Progress:** XP, levels named after pieces, stars per lesson, personal records, and a list of mistakes to review.
 - **Puzzle trainer:** separate from the lessons, with 5,353 real Lichess puzzles (CC0), a personal rating, filters by theme and opening, and a full paginated history.
+- **Games:** against Stockfish in the browser, levels 400 to 2400, with a game rating of its own (section 15).
 - **Form:** an installable PWA served by a Node app with Postgres, with accounts, cross-device sync and password reset by email (section 10). It began as a claude.ai Artifact; that build has been removed (section 11).
 - **Next:** deploy to Easypanel at `lance-a-lance.amestris.cloud`, create the account and import the progress.
 
@@ -262,6 +267,7 @@ Each lesson's summary lives in `src/content/lessons/*` and shows on the home scr
 - [The Lichess puzzle database (CC0)](https://database.lichess.org/#puzzles)
 - [Lichess opening names (CC0)](https://github.com/lichess-org/chess-openings)
 - [chess.com move classification](https://support.chess.com/en/articles/8572705-how-are-moves-classified-what-is-a-blunder-or-brilliant-etc) and [annotation symbols](https://en.wikipedia.org/wiki/Chess_annotation_symbols) (lesson 4.4)
+- [Stockfish.js (GPL-3.0)](https://github.com/nmrugg/stockfish.js), the engine behind the games (section 15). Its licence text ships next to it in `public/engine/COPYING.txt`, and the repository is public, which is what the GPL asks of a site that serves it.
 
 The lesson texts are original, written from those sources. If the site goes public, the credits on the home screen have to stay there (a CC BY 4.0 requirement).
 
@@ -462,3 +468,23 @@ The page shows, per person, how they get in, their XP, the lessons they have fin
 Mário noticed that `/dsdsdsds` served the app, as did every other address. That is the ordinary single page application arrangement, and it was wrong here: the app answers three addresses and nothing else, so anything else is a typo or a probe.
 
 `CLIENT_ROUTES` in the server is now the list, and everything else gets `public/404.html` with a 404. The part that is easy to miss is the service worker: with `navigateFallback` alone it answers any navigation with the cached shell, so an installed app would keep showing the app for addresses the server refuses. `navigateFallbackAllowlist` holds the same three. The list therefore lives in three places, and the comment in each names the other two.
+
+## 15. Games against the computer, and the links on Android
+
+In September 2026 Mário asked for a "Jogar partida" card on the home, like the puzzle one, with a rating. In the same conversation he asked why links open inside the app.
+
+### The links stay as they are
+
+He uses Android. Chrome keeps every http(s) link an installed PWA opens in a Custom Tab, whatever the link says: the trovu project tried `target="_blank"`, `intent://` URLs aimed at Chrome (with flags, with an explicit component) and `googlechrome://` on Android 16, and every one stayed in the tab ([trovu#709](https://github.com/trovu/trovu/pull/709)). Only the share sheet left, with one extra tap, which is what the tab's own "Abrir no Chrome" already costs. Nothing was changed.
+
+### The shape
+
+Two ways were on the table: real rated games on Lichess through the Board API, which needs his Lichess account and only allows rapid and slower against people ([Lichess](https://lichess.org/@/lichess/blog/welcome-lichess-boards/XlRW5REA)), or a game against an engine inside the app. He chose the engine.
+
+- **Engine:** Stockfish 19 from Stockfish.js, the lite single-threaded build (about 1.8 MB with its `.wasm`). The multi-threaded builds need cross-origin isolation headers, which get in the way of things like the Google sign in, and the full network is about 99 MB. The two files sit in `public/engine/` as published, not as an npm dependency, because the package carries every build (about 200 MB) into every install. `src/lib/engine/stockfish.ts` speaks UCI to it in a Web Worker and sends the whole line from the start, so the engine sees repetitions.
+- **Caching:** the service worker does not precache the engine. It is cached the first time somebody plays (`runtimeCaching`, `CacheFirst`), and the server marks its versioned file names immutable.
+- **Levels:** 400 to 2400 in steps of 200 (`src/lib/engine/levels.ts`). From 1400 up the strength is Stockfish's own `UCI_Elo`, which accepts 1320 to 3190 ([Stockfish UCI options](https://github.com/official-stockfish/Stockfish/wiki/UCI-&-Commands)). Below that it cannot be asked to play weaker, so those levels search shallow at `Skill Level 0` and play a random legal move now and then, more often the lower the level. Those five ratings are estimates, and the setup screen says so.
+- **Rating:** its own, apart from the puzzles, because solving a tactic and playing a whole game are different skills, and both Lichess and chess.com keep them apart. He chose to start it at 800 rather than at the puzzle rating. Same Elo as the trainer (K 40 for the first 10 games, then 20, floor 100), with a draw worth half. `eloScoreDelta` is the shared formula.
+- **What counts:** a game is rated once both sides have moved, as on Lichess. Abandoning after that asks first and counts as a loss. There is no clock and no take-back. XP: 10 for a win, 5 for a draw, 2 for a loss.
+- **Data:** `ProgressState.games` (`rating`, `played`, `wins`, `draws`, `losses`), optional, so older rows and backups load unchanged. There is no game log yet.
+

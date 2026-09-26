@@ -9,6 +9,7 @@ const SOURCES = [
   { label: "Chess Fundamentals, Capablanca (domínio público)", href: "https://www.gutenberg.org/ebooks/33870" },
   { label: "Banco de puzzles do Lichess (CC0), para as táticas", href: "https://database.lichess.org/#puzzles" },
   { label: "Nomes de aberturas do Lichess (CC0)", href: "https://github.com/lichess-org/chess-openings" },
+  { label: "Stockfish.js, o computador das partidas (GPL-3.0)", href: "https://github.com/nmrugg/stockfish.js" },
 ];
 
 /** Where the lessons come from. Lives in the settings dialog, out of the way. */

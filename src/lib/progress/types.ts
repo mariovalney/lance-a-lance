@@ -29,6 +29,8 @@ export interface ProgressState {
   records?: Record<string, number>;
   /** Puzzle trainer stats and rating. */
   puzzles?: PuzzleStats;
+  /** Games against the computer: a rating of their own, apart from the puzzles. */
+  games?: GameStats;
   updatedAt: number;
 }
 
@@ -42,6 +44,22 @@ export interface PuzzleStats {
   recent: string[];
   /** Legacy: the full history now lives in the puzzle log (chunked documents). */
   history?: unknown[];
+}
+
+export interface GameStats {
+  rating: number;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+}
+
+export type GameOutcome = "win" | "draw" | "loss";
+
+export interface GameResult {
+  outcome: GameOutcome;
+  /** Nominal rating of the computer level played. */
+  botRating: number;
 }
 
 /** ok = solved clean, erro = solved after a mistake, solucao = asked for the solution. */
