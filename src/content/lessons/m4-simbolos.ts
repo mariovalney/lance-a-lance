@@ -302,7 +302,7 @@ function ambiguousPlayRound(): Screen | null {
     accept: (m) => m.san === san,
     solution: uciOf(move),
     wrong: (m) => `Você jogou \`${m.san}\` (${readMove(m)}). O pedido era \`${san}\`: repare de onde a peça sai.`,
-    success: "Isso. A letra ou número extra diz de onde a peça sai.",
+    success: "A letra ou número extra diz de onde a peça sai.",
     mistakeNote: `Jogar \`${san}\``,
   };
 }

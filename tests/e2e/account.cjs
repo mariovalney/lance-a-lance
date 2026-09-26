@@ -111,7 +111,7 @@ async function xpOnScreen(page) {
 
   /* ---------- first browser: has progress, creates the account ---------- */
   const first = await open(browser, { withProgress: true });
-  check(await first.getByText("Entre para o seu progresso").isVisible(), "with no account, the first screen asks to sign in");
+  check(await first.getByText("Seu progresso fica na sua conta").isVisible(), "with no account, the first screen asks to sign in");
   check((await first.locator("header").count()) === 0, "with no account, the app is not behind the sign in screen");
   await first.screenshot({ path: OUT + "/signin.png" });
 
@@ -158,7 +158,7 @@ async function xpOnScreen(page) {
   /* ---------- signing out goes back to the sign in screen, and empties it --- */
   await first.getByRole("button", { name: "Sair" }).click();
   await first.waitForTimeout(1500);
-  check(await first.getByText("Entre para o seu progresso").isVisible(), "signing out lands back on the sign in screen");
+  check(await first.getByText("Seu progresso fica na sua conta").isVisible(), "signing out lands back on the sign in screen");
   check((await browserCopy(first)) === null, "signing out clears even the old copy the browser held");
 
   /* ---------- a second account, created by the admin ---------- */

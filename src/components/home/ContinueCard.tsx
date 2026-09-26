@@ -18,7 +18,7 @@ export const ContinueCard: FC<ContinueCardProps> = ({ onStart }) => {
   if (!target) return null;
 
   const isFirst = Object.keys(state.lessons).length === 0;
-  const eyebrow = next ? (isFirst ? "Comece por aqui" : "Próxima lição") : "Tudo em dia. Que tal praticar?";
+  const eyebrow = next ? (isFirst ? "Comece por aqui" : "Próxima lição") : "Para revisar";
 
   return (
     <section

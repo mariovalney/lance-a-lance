@@ -10,7 +10,7 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
-import { DEFAULT_ILLEGAL, MOVE_HELP, moveLabel } from "@/components/lesson/steps/moveText";
+import { DEFAULT_ILLEGAL, moveLabel } from "@/components/lesson/steps/moveText";
 
 export interface SequenceFinish {
   /** Solved with no wrong move and without asking for the solution. */
@@ -82,7 +82,7 @@ export const SequenceStep: FC<SequenceStepProps> = ({
       later(() => playSound("wrong"), 140);
       setWrong((n) => n + 1);
       setWrongHere((n) => n + 1);
-      setMessage({ tone: "wrong", text: screen.wrong?.(played.move, ply / 2) ?? `Você jogou ${moveLabel(played.move)}. Não é o melhor aqui, tente de novo.` });
+      setMessage({ tone: "wrong", text: screen.wrong?.(played.move, ply / 2) ?? `Você jogou ${moveLabel(played.move)}. Não é o melhor aqui.` });
       setBusy(true);
       const before = fen;
       later(() => {
@@ -188,8 +188,8 @@ export const SequenceStep: FC<SequenceStepProps> = ({
         onDismiss={() => setMessage((m) => (m?.tone === "wrong" ? null : m))}
       />
     );
-  } else {
-    footer = <FeedbackBar tone="neutral" message={total > 1 ? `Lance ${doneMoves + 1} de ${total}. ${MOVE_HELP}` : MOVE_HELP} extra={giveUpButton} />;
+  } else if (total > 1 || giveUpButton) {
+    footer = <FeedbackBar tone="neutral" message={total > 1 ? `Lance ${doneMoves + 1} de ${total}.` : undefined} extra={giveUpButton} />;
   }
 
   return (

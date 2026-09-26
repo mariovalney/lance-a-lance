@@ -76,8 +76,6 @@ export const TapStep: FC<{ screen: TapScreen; onDone: StepDone }> = ({ screen, o
         onDismiss={() => setMessage(null)}
       />
     );
-  } else {
-    footer = <FeedbackBar tone="neutral" message="Toque em uma casa do tabuleiro." />;
   }
 
   return (
