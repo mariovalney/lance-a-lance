@@ -8,6 +8,7 @@ Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 
 - Never use em dashes or emojis in text he reads, and never in UI copy.
 - CLI commands he has to run: always a single line.
 - Git: NEVER squash commits. NEVER add `Co-authored-by` or any other co-authorship or attribution trailer to commits.
+- Git: commit and push straight to `main`, no branch and no pull request. CI runs on every push to main, so check it after pushing and fix a red run right away.
 - He is a developer and product person: explain trade-offs briefly, cite sources for chess facts when possible.
 
 ## Commands
