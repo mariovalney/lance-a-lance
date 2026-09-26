@@ -21,8 +21,6 @@ interface ResultScreenProps {
   onHome: () => void;
 }
 
-const HEADLINE = ["", "Lição concluída", "Muito bem", "Perfeito"];
-
 export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, xpBefore, xpAfter, prevRecords, next, onNext, onRetry, onHome }) => {
   const pct = pctOf(result);
   const stars = starsFor(pct);
@@ -44,7 +42,7 @@ export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, xpBefor
               <p className="text-sm font-medium text-muted-foreground">
                 <span className="font-mono">{lessonCode(lessonRef)}</span> · {lessonRef.meta.title}
               </p>
-              <h1 className="font-display text-[1.9rem] font-extrabold leading-tight tracking-tight">{HEADLINE[stars]}</h1>
+              <h1 className="font-display text-[1.9rem] font-extrabold leading-tight tracking-tight">Lição concluída</h1>
             </div>
           </div>
 
@@ -68,7 +66,7 @@ export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, xpBefor
             </div>
             {leveledUp && (
               <p className="flex items-center gap-1.5 text-sm font-semibold text-gold animate-in fade-in zoom-in-95 duration-500">
-                <Sparkles className="h-4 w-4" aria-hidden /> Você subiu para o nível {after.level}!
+                <Sparkles className="h-4 w-4" aria-hidden /> Novo nível
               </p>
             )}
           </div>
@@ -112,7 +110,6 @@ export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, xpBefor
                 ))}
               </ul>
             )}
-            <p className="text-sm text-muted-foreground">Cada vez que você refaz a lição, os exemplos mudam.</p>
           </section>
         </div>
       </main>

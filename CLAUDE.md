@@ -42,6 +42,7 @@ Lance a Lance: a mobile-first chess course in Brazilian Portuguese (11 modules, 
 ## Rules for content changes
 
 1. Short lessons: about 6 to 9 exercises, very little reading. Accessible Portuguese, no jargon without a one-line explanation.
+   Copy says only what the screen does not: no cheering ("Isso!", "Boa!", "Muito bem") on top of the "Certo! +10 XP" title, no "tente de novo" under "Ainda não", no footer repeating how to move a piece or answer.
 2. Every exercise must be verifiable: add a validator case in `scripts/validate-content.ts` if a new screen kind or rule appears.
 3. Positions must be legal (`isLegalPosition`) unless the screen is an explicit teaching diagram.
 4. Register new lessons in `curriculum.ts`; lesson ids are `m<module>-l<n>`.

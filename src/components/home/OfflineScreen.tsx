@@ -18,7 +18,7 @@ export const OfflineScreen: FC = () => {
         <div className="flex flex-col gap-1">
           <h1 className="font-display text-[1.5rem] font-extrabold leading-none tracking-tight">Sem conexão</h1>
           <p className="text-sm text-muted-foreground">
-            Seu progresso está guardado na sua conta. Assim que a internet voltar, é só continuar.
+            Seu progresso está guardado na sua conta.
           </p>
         </div>
       </div>

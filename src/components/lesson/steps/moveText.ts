@@ -7,4 +7,3 @@ export function moveLabel(m: Pick<Move, "san" | "piece" | "to" | "flags" | "prom
 }
 
 export const DEFAULT_ILLEGAL = "Esse lance não é permitido. Toque na peça para ver as casas possíveis.";
-export const MOVE_HELP = "Toque na peça e depois na casa de destino, ou arraste.";

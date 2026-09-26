@@ -43,7 +43,7 @@ function tapRounds(sides: Side[]): Screen[] {
         side === "black"
           ? `Você tocou em \`${t}\`. De pretas, as letras vão de \`h\` a \`a\` e o \`1\` fica lá em cima. Ache a coluna \`${f}\` e a fileira \`${r}\`.`
           : `Você tocou em \`${t}\`. Ache a coluna \`${f}\` e suba até a fileira \`${r}\`.`,
-      success: `Certo, essa é a \`${sq}\`.`,
+      success: "",
       reveal,
       mistakeNote: `Casa \`${sq}\` de ${sideLabel(side)}`,
     } satisfies Screen;

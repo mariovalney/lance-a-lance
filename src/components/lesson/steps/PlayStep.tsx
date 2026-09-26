@@ -9,7 +9,7 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
-import { DEFAULT_ILLEGAL, MOVE_HELP } from "@/components/lesson/steps/moveText";
+import { DEFAULT_ILLEGAL } from "@/components/lesson/steps/moveText";
 
 type Status = "playing" | "won" | "failed";
 const POINTS_BY_ATTEMPT = [10, 7, 5, 3];
@@ -50,7 +50,7 @@ export const PlayStep: FC<{ screen: PlayScreen; onDone: StepDone }> = ({ screen,
     }
     if (g.isStalemate()) return fail("Afogamento: o rei não está em xeque e não tem lances. Isso é empate. Deixe sempre uma casa livre até o golpe final.");
     if (g.isDraw()) return fail("A partida terminou empatada. Cuidado para não deixar suas peças serem capturadas.");
-    if (used >= screen.maxMoves) return fail(`Acabaram os ${screen.maxMoves} lances. Tente de novo com o plano da lição.`);
+    if (used >= screen.maxMoves) return fail(`Acabaram os ${screen.maxMoves} lances.`);
     setBusy(true);
     timer.current = window.setTimeout(() => {
       const reply = defenderMove(played.fen);
@@ -109,7 +109,7 @@ export const PlayStep: FC<{ screen: PlayScreen; onDone: StepDone }> = ({ screen,
     footer = (
       <FeedbackBar
         tone={message?.tone === "wrong" ? "wrong" : "neutral"}
-        message={message?.text ?? `Lances: ${moves} de ${screen.maxMoves}. ${screen.hint ?? MOVE_HELP}`}
+        message={message?.text ?? `Lances: ${moves} de ${screen.maxMoves}.${screen.hint ? ` ${screen.hint}` : ""}`}
         onDismiss={() => setMessage(null)}
         extra={
           <button type="button" onClick={skip} className="self-start text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">

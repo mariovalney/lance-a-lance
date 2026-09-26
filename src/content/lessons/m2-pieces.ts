@@ -83,7 +83,7 @@ function reachRounds(p: PieceInfo, n: number, withBlocker: boolean): Screen[] {
         if (t === behind) return `${p.The} não pula peças: o peão em \`${blocker}\` está no caminho.`;
         return `${p.The} não chega em \`${t}\` em um lance. ${p.illegal}`;
       },
-      success: `Isso. ${p.The} vai de \`${from}\` até \`${targets[0]}\` em um lance.`,
+      success: `${p.The} vai de \`${from}\` até \`${targets[0]}\` em um lance.`,
       reveal: { ...(marksFor(reachable, "soft") as Partial<Record<Square, "soft">>), [targets[0]]: "hint" },
       mistakeNote: `Casas que ${p.the} alcança`,
     });
@@ -126,7 +126,7 @@ function captureRounds(p: PieceInfo, n: number): Screen[] {
 
 /** Stars dropped along a random walk of the piece, so they are always reachable and close. */
 function pathRounds(p: PieceInfo, starCounts: number[]): Screen[] {
-  return starCounts.map((count, i) => {
+  return starCounts.map((count) => {
     for (let guard = 0; guard < 200; guard++) {
       const from = pick(ALL_SQUARES);
       const visited: Square[] = [];
@@ -153,7 +153,7 @@ function pathRounds(p: PieceInfo, starCounts: number[]): Screen[] {
         targets: stars,
         par: sol.length,
         illegal: p.illegal,
-        success: i === starCounts.length - 1 ? "Você já pensa como a peça anda." : "Boa!",
+        success: "",
         mistakeNote: `Caminho com ${p.the}`,
       };
       return screen;

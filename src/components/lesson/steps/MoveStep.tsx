@@ -10,7 +10,7 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
-import { DEFAULT_ILLEGAL, MOVE_HELP, moveLabel } from "@/components/lesson/steps/moveText";
+import { DEFAULT_ILLEGAL, moveLabel } from "@/components/lesson/steps/moveText";
 
 export const MoveStep: FC<{ screen: MoveScreen; onDone: StepDone }> = ({ screen, onDone }) => {
   const startFen = screen.board.fen;
@@ -38,7 +38,7 @@ export const MoveStep: FC<{ screen: MoveScreen; onDone: StepDone }> = ({ screen,
     }
     window.setTimeout(() => playSound("wrong"), 140);
     setWrongCount((n) => n + 1);
-    setMessage(screen.wrong?.(played.move) ?? `Você jogou ${moveLabel(played.move)}. Não é esse, tente outro lance.`);
+    setMessage(screen.wrong?.(played.move) ?? `Você jogou ${moveLabel(played.move)}. Não é esse.`);
     setBusy(true);
     timer.current = window.setTimeout(() => {
       setFen(startFen);
@@ -73,8 +73,6 @@ export const MoveStep: FC<{ screen: MoveScreen; onDone: StepDone }> = ({ screen,
     );
   } else if (message) {
     footer = <FeedbackBar tone="wrong" title={showHint ? "Olha a seta no tabuleiro" : "Ainda não"} message={message} onDismiss={() => setMessage(null)} />;
-  } else {
-    footer = <FeedbackBar tone="neutral" message={MOVE_HELP} />;
   }
 
   return (

@@ -26,7 +26,7 @@ function fileRounds(n: number): Screen[] {
     targets: squaresOfFile(f),
     wrong: (t) =>
       `Essa casa é da coluna \`${fileOf(t)}\`. Procure a letra \`${f}\` na borda de baixo e toque em qualquer casa acima dela.`,
-    success: `Isso! Tudo acima da letra \`${f}\` é a coluna \`${f}\`.`,
+    success: `Tudo acima da letra \`${f}\` é a coluna \`${f}\`.`,
     reveal: marksFor(squaresOfFile(f), "hint") as Partial<Record<Square, "hint">>,
     mistakeNote: `Coluna \`${f}\``,
   }));
@@ -41,7 +41,7 @@ function rankRounds(n: number): Screen[] {
     targets: squaresOfRank(r),
     wrong: (t) =>
       `Essa casa é da fileira \`${rankOf(t)}\`. Os números ficam na borda da esquerda: ache o \`${r}\` e siga para o lado.`,
-    success: `Boa! A fileira \`${r}\` atravessa o tabuleiro de lado a lado.`,
+    success: `A fileira \`${r}\` atravessa o tabuleiro de lado a lado.`,
     reveal: marksFor(squaresOfRank(r), "hint") as Partial<Record<Square, "hint">>,
     mistakeNote: `Fileira \`${r}\``,
   }));
@@ -64,7 +64,7 @@ function squareRounds(n: number, avoid: Square[] = []): Screen[] {
       targets: [sq],
       wrong: (t: Square) =>
         `Você tocou em \`${t}\`. Ache a coluna \`${f}\` e suba até a fileira \`${r}\`.`,
-      success: `Certo, essa é a \`${sq}\`.`,
+      success: "",
       reveal,
       mistakeNote: `Casa \`${sq}\``,
     } satisfies Screen;

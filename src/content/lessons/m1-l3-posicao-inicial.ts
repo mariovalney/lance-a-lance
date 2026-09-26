@@ -73,8 +73,8 @@ function whereRounds(pieces: PieceChar[]): Screen[] {
           : `A casa \`${t}\` começa vazia. As peças começam nas fileiras \`1\`, \`2\`, \`7\` e \`8\`.`;
       },
       success: many
-        ? `Isso. ${cap(ARTICLE[name] === "a" ? "as" : "os")} ${label.split(" ").map((w) => w + "s").join(" ")} começam em ${targets.map((s) => `\`${s}\``).join(" e ")}.`
-        : `Isso, ${ARTICLE[name]} ${label} começa em \`${targets[0]}\`.`,
+        ? `${cap(ARTICLE[name] === "a" ? "as" : "os")} ${label.split(" ").map((w) => w + "s").join(" ")} começam em ${targets.map((s) => `\`${s}\``).join(" e ")}.`
+        : `${cap(ARTICLE[name])} ${label} começa em \`${targets[0]}\`.`,
       reveal: marksFor(targets, "hint") as Partial<Record<Square, "hint">>,
       mistakeNote: `Onde começa ${ARTICLE[name]} ${label}`,
     } satisfies Screen;

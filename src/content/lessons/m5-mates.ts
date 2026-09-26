@@ -39,7 +39,7 @@ function mateInTwo(pool: Pool, n: number, key: string, hint: string): Screen[] {
       maxMoves: 2,
       mateIn: 2,
       hint,
-      success: "Técnica limpa!",
+      success: "",
       mistakeNote: "Mate em 2",
     } satisfies Screen;
   });
@@ -66,7 +66,7 @@ function fullGame(pieces: string[], maxMoves: number, key: string, hint: string,
       goal: "mate",
       maxMoves,
       hint,
-      success: "Você venceu o final do começo ao fim.",
+      success: "",
       mistakeNote: key,
     };
   }

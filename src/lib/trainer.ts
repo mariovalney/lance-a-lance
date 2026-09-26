@@ -201,7 +201,7 @@ export function puzzleScreen(p: TrainerPuzzle): SequenceScreen {
     },
     line,
     anyMateAtEnd: p.x === 1,
-    wrong: (m) => `\`${m.san}\` não é o lance. Tente outro.`,
+    wrong: (m) => `\`${m.san}\` não é o lance.`,
     success: "",
     mistakeNote: "Puzzle",
   };

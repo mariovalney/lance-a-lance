@@ -94,7 +94,7 @@ export const SignInScreen: FC<{ signupOpen: boolean; resetOpen: boolean; googleO
         </div>
         <div className="flex flex-col gap-1">
           <h1 className="font-display text-[1.75rem] font-extrabold leading-none tracking-tight">Lance a Lance</h1>
-          <p className="text-sm text-muted-foreground">Entre para o seu progresso acompanhar você em qualquer aparelho.</p>
+          <p className="text-sm text-muted-foreground">Seu progresso fica na sua conta, em qualquer aparelho.</p>
         </div>
       </div>
 

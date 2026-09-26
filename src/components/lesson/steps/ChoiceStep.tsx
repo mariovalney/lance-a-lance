@@ -33,9 +33,7 @@ export const ChoiceStep: FC<{ screen: ChoiceScreen; onDone: StepDone }> = ({ scr
       actionLabel="Continuar"
       onAction={finish}
     />
-  ) : (
-    <FeedbackBar tone="neutral" message="Escolha uma resposta." />
-  );
+  ) : null;
 
   const longest = Math.max(...screen.options.map((o) => o.label.length));
   const cols = longest > 12 ? "grid-cols-1" : screen.options.length === 3 ? "grid-cols-3" : "grid-cols-2";
