@@ -21,7 +21,7 @@ import { Engine, botMove } from "@/lib/engine/stockfish";
 import { legalMoves, parseUci, turnOf, uciOf, type Color, type MoveInput } from "@/lib/chess/game";
 import type { Square } from "@/lib/chess/squares";
 import { moveSound, playSound } from "@/lib/sound";
-import { getSettings, updateSettings } from "@/lib/settings";
+import { getSettings, updateSettings, useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
 type Side = "w" | "b" | "random";
@@ -69,6 +69,7 @@ function sideToPlay(side: Side): Color {
 
 export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
   const { state, recordGame } = useProgress();
+  const { coords } = useSettings();
   const stats = state.games;
   const rating = stats?.rating ?? START_RATING;
   const played = stats?.played ?? 0;
@@ -346,15 +347,20 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
               </section>
             </>
           ) : (
-            <MoveBoard
-              spec={{ orientation }}
-              fen={fen}
-              playerColor={player}
-              enabled={phase === "playing" && !thinking}
-              lastMove={lastMove}
-              onMove={onMove}
-              onIllegal={() => setIllegal(true)}
-            />
+            // The rank numbers take an 18 px column left of the board. Moving
+            // it half into the page margin, and adding the same on the right,
+            // leaves equal space on both sides of the board.
+            <div className={coords === "outside" ? "-ml-2 pr-2.5" : undefined}>
+              <MoveBoard
+                spec={{ orientation }}
+                fen={fen}
+                playerColor={player}
+                enabled={phase === "playing" && !thinking}
+                lastMove={lastMove}
+                onMove={onMove}
+                onIllegal={() => setIllegal(true)}
+              />
+            </div>
           )}
         </div>
       </main>
