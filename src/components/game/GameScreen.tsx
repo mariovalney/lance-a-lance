@@ -321,7 +321,6 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
                     </button>
                   ))}
                 </div>
-                <p className="text-sm text-muted-foreground">Abaixo de 1400 o nível do computador é aproximado.</p>
               </section>
               <section className="flex flex-col gap-2" aria-labelledby="lado">
                 <h2 id="lado" className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
