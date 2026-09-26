@@ -18,12 +18,10 @@ export const GameCard: FC<{ onOpen: () => void }> = ({ onOpen }) => {
         <span className="font-display text-base font-bold leading-tight">Partida</span>
         <span className="text-sm text-muted-foreground">
           Rating <span className="font-mono font-semibold tabular text-foreground">{rating}{provisional ? "?" : ""}</span>
-          {stats ? (
+          {stats && (
             <>
               {" "}· <span className="font-mono tabular">{stats.played}</span> {stats.played === 1 ? "partida" : "partidas"}
             </>
-          ) : (
-            " · contra o computador"
           )}
         </span>
       </div>
