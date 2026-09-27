@@ -136,6 +136,55 @@ if (!process.env.ONLY || process.env.ONLY === "treino") {
   console.log(`treino: ${data.puzzles.length} puzzles checados`);
 }
 
+if (!process.env.ONLY || process.env.ONLY.startsWith("m5") || process.env.ONLY === "caixa") {
+  // The box of the basic mates (src/content/lib/box.ts) on known positions, and
+  // its own reading of check, stalemate and a piece left en prise against chess.js.
+  const box = await import("@/content/lib/box");
+  const { load } = await import("@/lib/chess/game");
+  const { lessonDamaRei, lessonDuasTorres, lessonTorreRei } = await import("@/content/lessons/m5-mates");
+  const judged = (j: import("@/content/lib/box").BoxJudge, fen: string, san: string) => {
+    const g = load(fen);
+    const m = g.move(san);
+    return j.accept(m, g) ? "aceito" : j.wrong(m);
+  };
+  const ladder = "8/8/8/3k4/R7/8/1R6/6K1 w - - 0 1";
+  const shrinkQ = box.judgeShrink("8/8/8/3k4/8/8/8/Q3K3 w - - 0 1", "a dama", "knight");
+  const cases: { name: string; got: string | number; expected: string | number | RegExp }[] = [
+    { name: "caixa de uma torre na sétima", got: box.boxSize("4k3/R7/8/8/8/8/8/4K3 w - - 0 1"), expected: 7 },
+    { name: "dama a um salto de cavalo", got: box.boxSize("8/8/3k4/8/2Q5/8/8/4K3 w - - 0 1"), expected: 16 },
+    { name: "afogamento", got: judged(box.judgeShrink("7k/8/6K1/8/8/8/8/5Q2 w - - 0 1", "a dama", "knight"), "7k/8/6K1/8/8/8/8/5Q2 w - - 0 1", "Qf7"), expected: /afogamento/ },
+    { name: "peça solta", got: judged(box.judgeShrink("8/8/8/3k4/8/8/8/2R1K3 w - - 0 1", "a torre", "smallest"), "8/8/8/3k4/8/8/8/2R1K3 w - - 0 1", "Rc4"), expected: /captura a peça em `c4`/ },
+    { name: "salto de cavalo que encolhe", got: judged(shrinkQ, "8/8/8/3k4/8/8/8/Q3K3 w - - 0 1", "Qc3"), expected: "aceito" },
+    { name: "o rei não entra antes da hora", got: judged(shrinkQ, "8/8/8/3k4/8/8/8/Q3K3 w - - 0 1", "Kd2"), expected: /Agora quem joga é a dama/ },
+    { name: "degrau da escada", got: judged(box.judgeShrink(ladder, "uma torre", "check"), ladder, "Rb5+"), expected: "aceito" },
+    { name: "lance sem xeque na escada", got: judged(box.judgeShrink(ladder, "uma torre", "check"), ladder, "Rb3"), expected: /não recua/ },
+    { name: "trazer o rei", got: judged(box.judgeApproach("4k3/R7/8/8/8/8/8/4K3 w - - 0 1", "a torre"), "4k3/R7/8/8/8/8/8/4K3 w - - 0 1", "Ke2"), expected: "aceito" },
+    { name: "a torre espera", got: judged(box.judgeApproach("4k3/R7/8/8/8/8/8/4K3 w - - 0 1", "a torre"), "4k3/R7/8/8/8/8/8/4K3 w - - 0 1", "Ra6"), expected: /quem anda é o seu rei/ },
+  ];
+  for (const c of cases) {
+    const ok = c.expected instanceof RegExp ? typeof c.got === "string" && c.expected.test(c.got) : c.got === c.expected;
+    if (!ok) errors.push(`caixa (${c.name}): esperava ${String(c.expected)}, veio ${JSON.stringify(c.got)}`);
+  }
+  let positions = 0;
+  for (let run = 0; run < Math.max(5, RUNS / 10); run++) {
+    for (const lesson of [lessonDamaRei, lessonDuasTorres, lessonTorreRei]) {
+      for (const s of lesson.build()) {
+        if (s.kind !== "move") continue;
+        for (const m of load(s.board.fen).moves({ verbose: true })) {
+          const after = load(s.board.fen);
+          after.move(m);
+          const l = box.loneKingToMove(after.fen());
+          const takes = after.moves({ verbose: true }).some((r) => r.captured);
+          positions++;
+          if (l.check !== after.inCheck() || l.stalemate !== after.isStalemate() || Boolean(l.hanging) !== takes)
+            errors.push(`caixa: leitura diferente do chess.js depois de ${m.san} em ${s.board.fen}`);
+        }
+      }
+    }
+  }
+  console.log(`caixa: ${cases.length} casos e ${positions} posições checadas`);
+}
+
 if (!process.env.ONLY || process.env.ONLY === "analise") {
   // The sentences under a judged move, from hand-written analyses, so the rule
   // is checked without depending on the engine's timing.
