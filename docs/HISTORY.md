@@ -577,3 +577,21 @@ Mário asked for the move symbols in the review. He chose Lichess's set and an "
   - the symbols follow each move in Lichess's colours;
   - at a judged move a line says what it was and which move the engine preferred, drawn as an arrow;
   - the PGN carries each judgement's NAG (`$6`, `$2`, `$4`) and a comment with the better move, as Lichess exports them.
+
+### Why a move was bad, the material balance, and the history where it belongs
+
+- **The sentence.** The engine never explains a move. So the analysis keeps the line it calculated in every position, and `src/lib/chess/explain.ts` reads it for what is certain, in this order:
+  1. a mate let in ("Permite mate em 3.");
+  2. a mate let slip ("Deixava escapar um mate em 2.");
+  3. material lost against the best line ("Perde um cavalo.", "Perde a dama e ganha só uma torre.");
+  4. material left on the table ("Deixava de ganhar um bispo.").
+
+  Anything else, the positional reasons no engine puts into words, gets no sentence. The material is counted only up to the line's last quiet move: the engine's line often stops in the middle of a trade (a queen taken, the recapture past the end), and read to the end that looks like a piece won. The validator checks the rule on hand-written analyses (`ONLY=analise`), one of them the engine's own cut-off line. An analysis saved before the lines existed offers "Analisar de novo".
+- **From the game to its analysis.** The end of a game has "Ver análise", which opens the review and starts the analysis. A reload does not start it again.
+- **The material balance.** A number beside the rating during a game and in the review:
+  - 0 at the start;
+  - positive when Mário is ahead, in green;
+  - negative when the computer is, in red.
+
+  It counts the board with the usual values (1, 3, 3, 5, 9), so a promotion counts too. It shows who is ahead without saying what to do, so it needs no engine and fits rated games. He preferred it to Lichess's captured pieces and to a live evaluation bar, which gives away more than the opponent has.
+- **The history** of games is offered only where a new game is set up, not during a game or in a review.

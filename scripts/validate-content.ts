@@ -135,6 +135,66 @@ if (!process.env.ONLY || process.env.ONLY === "treino") {
   console.log(`treino: ${data.puzzles.length} puzzles checados`);
 }
 
+if (!process.env.ONLY || process.env.ONLY === "analise") {
+  // The sentences under a judged move, from hand-written analyses, so the rule
+  // is checked without depending on the engine's timing.
+  const { explainMove } = await import("@/lib/chess/explain");
+  const { MAX_CP } = await import("@shared/analysis");
+  type Eval = import("@shared/types").PositionEval;
+  const cp = (v: number, pv: string[]): Eval => ({ cp: v, best: pv[0] ?? null, pv });
+  const game = (moves: string[], analysis: Eval[]) =>
+    ({ id: "x", level: 800, player: "w", assisted: false, moves, outcome: "loss", reason: "resigned", ratingDelta: null, ratingAfter: null, xp: 0, startedAt: "", finishedAt: "", analysis }) as import("@shared/types").Game;
+  const opening = [cp(20, ["e2e4"]), cp(30, ["e7e5"]), cp(30, ["g1f3"]), cp(40, ["d7d6"]), cp(40, ["d2d4", "e5d4", "f3d4"])];
+  const cases: { name: string; game: import("@shared/types").Game; ply: number; expected: string | null }[] = [
+    {
+      name: "mate de dois lances",
+      game: game(["f2f3", "e7e5", "g2g4", "d8h4"], [cp(20, ["e2e4"]), cp(-50, ["e7e5"]), cp(-60, ["e2e4"]), { mate: -1, best: "d8h4", pv: ["d8h4"] }, { cp: -MAX_CP, best: null }]),
+      ply: 3,
+      expected: "Permite mate em 1.",
+    },
+    {
+      name: "dar mate não é erro",
+      game: game(["f2f3", "e7e5", "g2g4", "d8h4"], [cp(20, ["e2e4"]), cp(-50, ["e7e5"]), cp(-60, ["e2e4"]), { mate: -1, best: "d8h4", pv: ["d8h4"] }, { cp: -MAX_CP, best: null }]),
+      ply: 4,
+      expected: null,
+    },
+    {
+      name: "cavalo pendurado",
+      game: game(["e2e4", "e7e5", "g1f3", "d7d6", "f3g5"], [...opening, cp(-300, ["d8g5", "d2d4", "g5g6"])]),
+      ply: 5,
+      expected: "Perde um cavalo.",
+    },
+    {
+      // The engine's own line: a queen trade cut off by the end of the line
+      // (Qxd8, the recapture past it) must not read as material won.
+      name: "troca cortada no fim da linha",
+      game: game(
+        ["e2e4", "e7e5", "g1f3", "d7d6", "f3g5"],
+        [...opening.slice(0, 4), cp(61, ["d2d4", "e5d4", "f3d4", "g8f6", "b1c3", "g7g6", "c1e3", "f6g4"]), cp(-545, ["d8g5", "d2d4", "g5d8", "b1c3", "g8f6", "d4e5", "d6e5", "d1d8"])],
+      ),
+      ply: 5,
+      expected: "Perde um cavalo.",
+    },
+    {
+      name: "peça de graça ignorada",
+      game: game(["e2e4", "e7e5", "g1f3", "d7d6", "f3g5", "h7h6"], [...opening, cp(-300, ["d8g5", "d2d4", "g5g6"]), cp(20, ["g5f3", "g8f6"])]),
+      ply: 6,
+      expected: "Deixava de ganhar um cavalo.",
+    },
+    {
+      name: "imprecisão sem material",
+      game: game(["e2e4", "e7e5", "a2a3"], [cp(20, ["e2e4"]), cp(30, ["e7e5"]), cp(30, ["g1f3", "b8c6"]), cp(-40, ["g8f6", "b1c3"])]),
+      ply: 3,
+      expected: null,
+    },
+  ];
+  for (const c of cases) {
+    const got = explainMove(c.game, c.ply);
+    if (got !== c.expected) errors.push(`análise (${c.name}): esperava ${JSON.stringify(c.expected)}, veio ${JSON.stringify(got)}`);
+  }
+  console.log(`análise: ${cases.length} casos checados`);
+}
+
 if (errors.length) {
   console.error(`\n${errors.length} problema(s):`);
   for (const e of [...new Set(errors)].slice(0, 60)) console.error(" - " + e);

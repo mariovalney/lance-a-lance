@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { Chess } from "chess.js";
-import { Flag, Loader2 } from "lucide-react";
+import { Flag, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +26,8 @@ import type { Square } from "@/lib/chess/squares";
 import { moveSound, playSound } from "@/lib/sound";
 import { getSettings, updateSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
-import { goBack, paths } from "@/lib/router";
+import { goBack, navigate, paths } from "@/lib/router";
+import { materialFor } from "@/lib/chess/material";
 import { GameHeader, GameTitle, MoveList } from "@/components/game/parts";
 import { REASON, TITLE } from "@/components/game/text";
 
@@ -315,6 +316,15 @@ export const GameScreen: FC = () => {
         actionLabel="Nova partida"
         onAction={() => setPhase("setup")}
         autoAdvance={false}
+        extra={
+          <button
+            type="button"
+            onClick={() => navigate(paths.gameReview(game.id), { state: { analyse: true } })}
+            className="inline-flex items-center gap-1.5 self-start text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden /> Ver análise
+          </button>
+        }
       />
     );
   } else {
@@ -353,6 +363,8 @@ export const GameScreen: FC = () => {
         }
         delta={lastDelta}
         version={finished}
+        history={phase === "setup"}
+        material={phase === "setup" ? null : materialFor(board.fen, player)}
       />
 
       <main

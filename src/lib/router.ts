@@ -64,11 +64,15 @@ const depth = (): number => {
   return typeof state?.depth === "number" ? state.depth : 0;
 };
 
-/** Goes to an address of the app. `replace` leaves no entry for the back button. */
-export function navigate(path: string, { replace = false }: { replace?: boolean } = {}): void {
+/**
+ * Goes to an address of the app. `replace` leaves no entry for the back
+ * button; `state` tells the next screen why it was opened (read it with
+ * `routeState`).
+ */
+export function navigate(path: string, { replace = false, state = {} }: { replace?: boolean; state?: Record<string, unknown> } = {}): void {
   if (path === window.location.pathname + window.location.search) return;
-  if (replace) window.history.replaceState({ depth: depth() }, "", path);
-  else window.history.pushState({ depth: depth() + 1 }, "", path);
+  if (replace) window.history.replaceState({ ...state, depth: depth() }, "", path);
+  else window.history.pushState({ ...state, depth: depth() + 1 }, "", path);
   window.scrollTo(0, 0);
   notify();
 }
@@ -81,6 +85,18 @@ export function navigate(path: string, { replace = false }: { replace?: boolean 
 export function goBack(fallback: string): void {
   if (depth() > 0) window.history.back();
   else navigate(fallback, { replace: true });
+}
+
+/** What the screen was opened with, through `navigate`'s `state`. */
+export function routeState(): Record<string, unknown> {
+  const state = window.history.state as Record<string, unknown> | null;
+  return state ?? {};
+}
+
+/** Drops something `navigate` passed, so a reload does not act on it again. */
+export function forgetRouteState(key: string): void {
+  const { [key]: _dropped, ...rest } = routeState();
+  window.history.replaceState(rest, "");
 }
 
 /** The current address, as a screen. Re-renders on every navigation and on back and forward. */

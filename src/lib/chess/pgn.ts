@@ -4,6 +4,7 @@ import { GLYPH, judgements } from "@shared/analysis";
 import type { Game, GameEndReason } from "@shared/types";
 import { parseUci } from "@/lib/chess/game";
 import { JUDGEMENT_WORD } from "@/lib/chess/judgement";
+import { explainMove } from "@/lib/chess/explain";
 
 /** PGN's result tokens, from White's side. */
 function resultOf(game: Game): string {
@@ -90,7 +91,8 @@ export function gamePgn(game: Game): string {
       tokens.push(`$${GLYPH[mark].nag}`);
       if (best) {
         const bestSan = new Chess(board.fen()).move(parseUci(best)).san;
-        tokens.push(`{ ${JUDGEMENT_WORD[mark]}. Melhor era ${bestSan}. }`);
+        const why = explainMove(game, i + 1);
+        tokens.push(`{ ${JUDGEMENT_WORD[mark]}. Melhor era ${bestSan}.${why ? ` ${why}` : ""} }`);
         afterComment = true;
       }
     }

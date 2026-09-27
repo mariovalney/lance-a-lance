@@ -1,5 +1,5 @@
-import { replay } from "@shared/games";
-import { MAX_CP, MAX_MATE } from "@shared/analysis";
+import { UCI, replay } from "@shared/games";
+import { MAX_CP, MAX_MATE, MAX_PV } from "@shared/analysis";
 import type { PositionEval } from "@shared/types";
 import { Engine } from "@/lib/engine/stockfish";
 
@@ -28,12 +28,13 @@ export async function analyseGame(moves: string[], onProgress: (done: number, to
       } else if (chess.isGameOver()) {
         out.push({ cp: 0, best: null });
       } else {
-        const { score, best } = await engine.evaluate(moves.slice(0, ply), MS_PER_POSITION);
+        const { score, best, pv: line } = await engine.evaluate(moves.slice(0, ply), MS_PER_POSITION);
         const side = whiteToMove ? 1 : -1;
+        const pv = line.slice(0, MAX_PV).filter((m) => UCI.test(m));
         const entry: PositionEval =
           "mate" in score && score.mate !== 0
-            ? { mate: side * Math.max(-MAX_MATE, Math.min(MAX_MATE, score.mate)), best }
-            : { cp: side * Math.max(-(MAX_CP - 1), Math.min(MAX_CP - 1, "cp" in score ? score.cp : 0)), best };
+            ? { mate: side * Math.max(-MAX_MATE, Math.min(MAX_MATE, score.mate)), best, pv }
+            : { cp: side * Math.max(-(MAX_CP - 1), Math.min(MAX_CP - 1, "cp" in score ? score.cp : 0)), best, pv };
         out.push(entry);
       }
       onProgress(ply + 1, total);

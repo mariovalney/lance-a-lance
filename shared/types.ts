@@ -41,9 +41,10 @@ export type GameEndReason = "checkmate" | "stalemate" | "insufficient" | "repeti
 /**
  * The engine's view of one position, from White's side: centipawns, or a mate
  * in so many moves (positive when White mates). `best` is its move there, in
- * UCI, and null where the game is over.
+ * UCI, and null where the game is over; `pv` the line it calculated from there
+ * (the best move first), absent in analyses saved before lines were kept.
  */
-export type PositionEval = ({ cp: number } | { mate: number }) & { best: string | null };
+export type PositionEval = ({ cp: number } | { mate: number }) & { best: string | null; pv?: string[] };
 
 export interface Game {
   id: string;

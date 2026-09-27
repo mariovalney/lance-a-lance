@@ -86,10 +86,10 @@ export class Engine {
    * `ms`, from the side to move: centipawns or a mate in so many moves
    * (negative when the side to move gets mated), and its best move there.
    */
-  evaluate(moves: string[], ms: number): Promise<{ score: { cp: number } | { mate: number }; best: string }> {
+  evaluate(moves: string[], ms: number): Promise<{ score: { cp: number } | { mate: number }; best: string; pv: string[] }> {
     return this.queue(moves, `go movetime ${ms}`).then((r) => {
       if (!r.score) throw new Error("no score");
-      return { score: r.score, best: r.best };
+      return { score: r.score, best: r.best, pv: r.pv };
     });
   }
 
@@ -101,19 +101,23 @@ export class Engine {
     return run;
   }
 
-  private async search(moves: string[], go: string): Promise<{ best: string; score: { cp: number } | { mate: number } | null }> {
+  private async search(moves: string[], go: string): Promise<{ best: string; score: { cp: number } | { mate: number } | null; pv: string[] }> {
     this.searching = true;
     let score: { cp: number } | { mate: number } | null = null;
-    // The last full score wins: each `info` line is a deeper search than the one before.
+    let pv: string[] = [];
+    // The last full score wins, with the line it came with: each `info` line
+    // is a deeper search than the one before.
     this.onLine = (line) => {
       const m = /^info .*\bscore (cp|mate) (-?\d+)\b(?! (?:lower|upper)bound)/.exec(line);
-      if (m) score = m[1] === "cp" ? { cp: Number(m[2]) } : { mate: Number(m[2]) };
+      if (!m) return;
+      score = m[1] === "cp" ? { cp: Number(m[2]) } : { mate: Number(m[2]) };
+      pv = / pv (.+)$/.exec(line)?.[1].trim().split(/\s+/) ?? [];
     };
     try {
       const done = this.waitFor((l) => l.startsWith("bestmove"));
       this.send(moves.length ? `position startpos moves ${moves.join(" ")}` : "position startpos");
       this.send(go);
-      return { best: (await done).split(" ")[1], score };
+      return { best: (await done).split(" ")[1], score, pv };
     } finally {
       this.onLine = null;
       this.searching = false;

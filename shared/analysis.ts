@@ -86,13 +86,22 @@ export function judgements(analysis: PositionEval[]): (Judgement | null)[] {
   return analysis.slice(1).map((after, i) => judge(analysis[i], after, i % 2 === 0 ? "w" : "b"));
 }
 
+/** The longest line kept for a position: enough to see a piece fall, short enough to stay small. */
+export const MAX_PV = 8;
+
 /** A position's evaluation as the server accepts it. */
 export function isPositionEval(v: unknown): v is PositionEval {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
   const e = v as Record<string, unknown>;
-  const keys = Object.keys(e).sort().join(",");
+  const keys = Object.keys(e)
+    .filter((k) => k !== "pv")
+    .sort()
+    .join(",");
   const bestOk = e.best === null || (typeof e.best === "string" && UCI.test(e.best));
-  if (keys === "best,cp") return bestOk && Number.isInteger(e.cp) && Math.abs(e.cp as number) <= MAX_CP;
-  if (keys === "best,mate") return bestOk && Number.isInteger(e.mate) && e.mate !== 0 && Math.abs(e.mate as number) <= MAX_MATE;
+  const pvOk =
+    e.pv === undefined || (Array.isArray(e.pv) && e.pv.length <= MAX_PV && e.pv.every((m) => typeof m === "string" && UCI.test(m)));
+  if (!bestOk || !pvOk) return false;
+  if (keys === "best,cp") return Number.isInteger(e.cp) && Math.abs(e.cp as number) <= MAX_CP;
+  if (keys === "best,mate") return Number.isInteger(e.mate) && e.mate !== 0 && Math.abs(e.mate as number) <= MAX_MATE;
   return false;
 }

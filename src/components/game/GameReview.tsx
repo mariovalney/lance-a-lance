@@ -18,7 +18,9 @@ import { parseUci } from "@/lib/chess/game";
 import { moveLabel } from "@/components/lesson/steps/moveText";
 import { cn } from "@/lib/utils";
 import { RichText } from "@/components/common/RichText";
-import { goBack, navigate, paths } from "@/lib/router";
+import { forgetRouteState, goBack, navigate, paths, routeState } from "@/lib/router";
+import { materialFor } from "@/lib/chess/material";
+import { explainMove } from "@/lib/chess/explain";
 
 /** The game after its first `ply` moves. */
 function positionAt(moves: string[], ply: number) {
@@ -33,6 +35,9 @@ function bestAt(fen: string, uci: string) {
   const move = new Chess(fen).move(parseUci(uci));
   return { from: move.from as Square, to: move.to as Square, label: moveLabel(move) };
 }
+
+/** An analysis saved before the engine's lines were kept: it judges, but cannot say why. */
+const lacksLines = (g: Game) => Boolean(g.analysis?.some((e) => e.best !== null && !e.pv));
 
 /** Where the analysis is: not run, running (how far), or failed. A finished one lives on the game. */
 type Analysing = { kind: "idle" } | { kind: "running"; done: number; total: number } | { kind: "failed" };
@@ -93,6 +98,14 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   };
   const cancel = () => abort.current?.abort();
 
+  // Opened from the end of a game ("Ver análise"): the analysis starts on its
+  // own as soon as the game arrives, once, and a reload does not start it again.
+  const autoStart = useRef(routeState().analyse === true);
+  const start = useRef(analyse);
+  useEffect(() => {
+    start.current = analyse;
+  });
+
   useEffect(() => {
     let alive = true;
     games
@@ -101,6 +114,11 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
         if (!alive) return;
         setLoaded({ kind: "ready", game, sans: sansOf(game.moves) });
         setPly(game.moves.length);
+        if (autoStart.current) {
+          autoStart.current = false;
+          forgetRouteState("analyse");
+          if (!game.analysis || lacksLines(game)) void start.current(game);
+        }
       })
       .catch((error: unknown) => {
         if (alive) setLoaded({ kind: error instanceof ApiError && error.code === "not_found" ? "missing" : "failed" });
@@ -124,6 +142,8 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   // The move that led to the board shown, if the analysis judged it, and what the engine preferred there.
   const mark = ply > 0 ? marks[ply - 1] : null;
   const preferred = mark && game?.analysis?.[ply - 1]?.best ? bestAt(positionAt(game.moves, ply - 1).fen, game.analysis[ply - 1].best!) : null;
+  const why = mark && game ? explainMove(game, ply) : null;
+  const toAnalyse = game ? !game.analysis || lacksLines(game) : false;
 
   let footer;
   if (current.kind === "loading") {
@@ -161,8 +181,8 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
               <ChevronsRight className="!h-5 !w-5" />
             </Button>
           </div>
-          <div className={cn("grid gap-2", current.game.analysis ? "grid-cols-2" : "grid-cols-3")}>
-            {!current.game.analysis &&
+          <div className={cn("grid gap-2", toAnalyse ? "grid-cols-3" : "grid-cols-2")}>
+            {toAnalyse &&
               (analysing.kind === "running" ? (
                 <Button variant="outline" className="h-11 rounded-xl font-bold" aria-label="Cancelar a análise" onClick={cancel}>
                   <Loader2 className="!h-4 !w-4 animate-spin" />
@@ -173,7 +193,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
               ) : (
                 <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void analyse(current.game)}>
                   <Sparkles className="!h-4 !w-4" />
-                  Analisar
+                  {current.game.analysis ? "Analisar de novo" : "Analisar"}
                 </Button>
               ))}
             <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void exportPgn(current.game).then(setExported)}>
@@ -191,7 +211,12 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <GameHeader onBack={close} backLabel="Voltar para a partida" subtitle={game ? <GameTitle game={game} /> : "Revisão"} />
+      <GameHeader
+        onBack={close}
+        backLabel="Voltar para a partida"
+        subtitle={game ? <GameTitle game={game} /> : "Revisão"}
+        material={game && shown ? materialFor(shown.fen, game.player) : null}
+      />
 
       <main
         className="flex min-h-0 flex-1 flex-col overflow-y-auto"
@@ -204,7 +229,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
           assisted: Boolean(game?.assisted),
           hint: null,
           ply: game ? ply : null,
-          analysis: game?.analysis ? "done" : analysing.kind === "running" ? "running" : analysing.kind === "failed" ? "failed" : "none",
+          analysis: analysing.kind === "running" ? "running" : game?.analysis && !toAnalyse ? "done" : analysing.kind === "failed" ? "failed" : "none",
           marks: marks.map((m) => (m ? GLYPH[m].symbol : null)),
         })}
       >
@@ -232,6 +257,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
                       <RichText text={`Melhor era ${preferred.label}.`} className="inline" />
                     </>
                   )}
+                  {why && <> {why}</>}
                 </p>
               )}
               <MoveList

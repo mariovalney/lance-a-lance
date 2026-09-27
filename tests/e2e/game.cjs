@@ -60,6 +60,9 @@ const { chromium } = require("playwright");
   await p.getByRole("button", { name: /^Começar/ }).click();
   let g = await myTurn();
   check(g.phase === "playing" && g.player === "w", "the engine loads and white moves first");
+  const material = async () => p.locator("[data-material]").getAttribute("data-material").catch(() => null);
+  check((await material()) === "0", `the material balance starts at 0 (${await material()})`);
+  check((await p.getByRole("button", { name: "Partidas anteriores" }).count()) === 0, "the history is not offered during a game");
   let replies = 0;
   for (let i = 0; i < 3 && g.phase === "playing"; i++) {
     g = await playOne(g);
@@ -80,14 +83,25 @@ const { chromium } = require("playwright");
     check(await waitFor("Derrota"), "abandoning shows the loss");
     const lost = await ratingOnceChanged(800);
     check(lost < 800, `abandoning costs rating (800 -> ${lost})`);
+    await p.screenshot({ path: `${OUT}/game-over.png` });
+
+    // The end of a game leads to its analysis, which starts on its own.
+    await p.getByRole("button", { name: "Ver análise" }).click();
+    await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
+    for (let i = 0; i < 150 && (await game()).analysis !== "done"; i++) await p.waitForTimeout(200);
+    const ended = await game();
+    check(new URL(p.url()).pathname === `/partidas/${ended.id}` && ended.analysis === "done", `"Ver análise" opens the game and analyses it (${ended.analysis})`);
+    check((await p.getByRole("button", { name: "Partidas anteriores" }).count()) === 0, "the review offers no history either");
+    await p.goBack({ waitUntil: "networkidle" });
+    await p.locator("[data-level]").first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+    check(new URL(p.url()).pathname === "/partida" && (await p.locator("[data-level]").count()) > 0, "back from it is the setup of a new game");
   } else {
     console.log("the game ended on its own before the reload:", g.phase);
   }
-  await p.screenshot({ path: `${OUT}/game-over.png` });
   const afterLoss = await rating();
 
   /* ---------- black: the computer opens, leaving keeps the game, one move is called off ---------- */
-  await p.getByRole("button", { name: "Nova partida" }).click();
+  if (await p.getByRole("button", { name: "Nova partida" }).count()) await p.getByRole("button", { name: "Nova partida" }).click();
   await p.locator('[data-side="b"]').click();
   await p.getByRole("button", { name: /^Começar/ }).click();
   g = await myTurn();
@@ -122,12 +136,15 @@ const { chromium } = require("playwright");
   check((await rating()) === afterLoss, `the assisted game did not change the rating (${afterLoss} -> ${await rating()})`);
 
   /* ---------- the history, and a game replayed ---------- */
+  // Only where a new game is set up.
+  await p.getByRole("button", { name: "Nova partida" }).click();
   await p.getByRole("button", { name: "Partidas anteriores" }).click();
   await p.getByRole("dialog").getByText(/contra o computador/).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
   const rows = await p.getByRole("dialog").locator("li").allTextContents();
   check(rows.length === 2, `the history lists the two finished games (${rows.length}: ${rows.map((r) => r.replace(/\s+/g, " ")).join(" | ")})`);
   await p.screenshot({ path: `${OUT}/game-history.png` });
-  await p.getByRole("dialog").locator("li button").last().click();
+  // The newest: the assisted game, not analysed yet.
+  await p.getByRole("dialog").locator("li button").first().click();
   await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
   g = await game();
   const total = g.ply;
@@ -139,7 +156,7 @@ const { chromium } = require("playwright");
   const reloaded = await game();
   check(reloaded.phase === "review" && reloaded.id === g.id && reloaded.ply === total, "a reload stays on the same game");
   await p.getByRole("button", { name: "Início da partida" }).click();
-  check((await game()).ply === 0, "the review goes back to the initial position");
+  check((await game()).ply === 0 && (await material()) === "0", "the review goes back to the initial position, material even");
   await p.getByRole("button", { name: "Próximo lance" }).click();
   check((await game()).ply === 1, "and steps forward one move");
   await p.screenshot({ path: `${OUT}/game-review.png` });
@@ -163,7 +180,7 @@ const { chromium } = require("playwright");
   await p.getByRole("button", { name: "Copiar PGN" }).click();
   const analysed = await p.evaluate(() => navigator.clipboard.readText());
   const judged = g.marks.filter(Boolean).length;
-  check(judged === 0 || /\$[246] \{ [^}]+Melhor era \S+\. \}/.test(analysed), `the PGN carries the judgements (${judged} judged)`);
+  check(judged === 0 || /\$[246] \{ [^}]*Melhor era [^}]+\}/.test(analysed), `the PGN carries the judgements (${judged} judged)`);
 
   await p.getByRole("button", { name: "Fechar" }).click();
   await p.waitForTimeout(300);

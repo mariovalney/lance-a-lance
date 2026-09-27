@@ -31,7 +31,11 @@ export const GameHeader: FC<{
   delta?: number | null;
   /** Changes when a game finishes, so the delta animates and the history reloads. */
   version?: number;
-}> = ({ onBack, backLabel, subtitle, delta = null, version = 0 }) => {
+  /** The history of finished games; only where a new game is set up. */
+  history?: boolean;
+  /** The player's material balance on the board shown, when a board is shown. */
+  material?: number | null;
+}> = ({ onBack, backLabel, subtitle, delta = null, version = 0, history = false, material = null }) => {
   const { state, games } = useProgress();
   const stats = state.games;
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -46,9 +50,23 @@ export const GameHeader: FC<{
         <span className="font-display text-lg font-bold leading-tight">Partida</span>
         <span className="text-xs text-muted-foreground">{subtitle}</span>
       </div>
-      <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-full" onClick={() => setHistoryOpen(true)} aria-label="Partidas anteriores">
-        <History className="!h-5 !w-5" />
-      </Button>
+      {history && (
+        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-full" onClick={() => setHistoryOpen(true)} aria-label="Partidas anteriores">
+          <History className="!h-5 !w-5" />
+        </Button>
+      )}
+      {material !== null && (
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2.5 py-1.5 font-mono text-base font-bold tabular",
+            material > 0 ? "bg-success-soft text-success" : material < 0 ? "bg-danger-soft text-danger" : "bg-card shadow-[0_0_0_1px_hsl(var(--border))]",
+          )}
+          aria-label={`Saldo de material: ${material > 0 ? "+" : ""}${material}`}
+          data-material={material}
+        >
+          {material > 0 ? `+${material}` : material}
+        </span>
+      )}
       <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-[0_0_0_1px_hsl(var(--border))]" data-game-rating={stats.rating}>
         <span className="font-mono text-base font-bold tabular">
           {stats.rating}
@@ -67,24 +85,26 @@ export const GameHeader: FC<{
         )}
       </div>
 
-      <HistorySheet
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        description="Toque numa partida para rever os lances."
-        empty="Nenhuma partida ainda."
-        version={version}
-        load={games.page}
-        keyOf={(g) => g.id}
-        render={(g) => (
-          <GameRow
-            game={g}
-            onPick={() => {
-              setHistoryOpen(false);
-              navigate(paths.gameReview(g.id));
-            }}
-          />
-        )}
-      />
+      {history && (
+        <HistorySheet
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          description="Toque numa partida para rever os lances."
+          empty="Nenhuma partida ainda."
+          version={version}
+          load={games.page}
+          keyOf={(g) => g.id}
+          render={(g) => (
+            <GameRow
+              game={g}
+              onPick={() => {
+                setHistoryOpen(false);
+                navigate(paths.gameReview(g.id));
+              }}
+            />
+          )}
+        />
+      )}
     </header>
   );
 };
