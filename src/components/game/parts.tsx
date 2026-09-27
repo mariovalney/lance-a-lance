@@ -173,8 +173,7 @@ export const GameRow: FC<{ game: Game; onPick: () => void }> = ({ game: g, onPic
           {TITLE[g.outcome]} contra o computador <span className="font-mono tabular">{g.level}</span>
         </span>
         <span className="text-xs text-muted-foreground">
-          {REASON[g.reason]} {moves} {moves === 1 ? "lance" : "lances"}
-          · {new Date(g.finishedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+          {REASON[g.reason]} {moves} {moves === 1 ? "lance" : "lances"} · {new Date(g.finishedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
         </span>
       </span>
       {g.ratingDelta !== null && g.ratingAfter !== null && (
