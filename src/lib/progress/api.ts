@@ -6,6 +6,7 @@ import type {
   LessonRunInput,
   LessonRunOutcome,
   Page,
+  PositionEval,
   ProgressView,
   PuzzleAttempt,
   PuzzleStatus,
@@ -34,6 +35,8 @@ export const progressApi = {
   callOffGame: (id: string) => call<{ progress: ProgressView }>(`/games/${id}`, { method: "DELETE" }),
   gamePage: (page: number, size: number) => call<Page<Game>>(`/games?page=${page}&size=${size}`),
   gameById: (id: string) => call<{ game: Game }>(`/games/${encodeURIComponent(id)}`).then((answer) => answer.game),
+  saveAnalysis: (id: string, analysis: PositionEval[]) =>
+    call<{ game: Game }>(`/games/${encodeURIComponent(id)}/analysis`, { method: "PUT", body: JSON.stringify({ analysis }) }).then((answer) => answer.game),
 
   exportBackup: () => call<BackupV2>("/backup"),
   importBackup: (file: unknown) => call<{ progress: ProgressView }>("/backup", post(file)),

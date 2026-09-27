@@ -148,6 +148,23 @@ const { chromium } = require("playwright");
   check(await waitFor("Copiado"), "the game is copied");
   const pgn = await p.evaluate(() => navigator.clipboard.readText());
   check(/\[Result "(1-0|0-1|1\/2-1\/2)"\]/.test(pgn) && /\n1\. \S+/.test(pgn) && /\[Site "Lance a Lance"\]/.test(pgn), `as PGN (${pgn.split("\n").slice(0, 2).join(" ")})`);
+
+  /* ---------- the analysis: every move judged, kept with the game ---------- */
+  await p.getByRole("button", { name: "Analisar" }).click();
+  for (let i = 0; i < 150 && (await game()).analysis === "running"; i++) await p.waitForTimeout(200);
+  g = await game();
+  check(g.analysis === "done" && g.marks.length === g.moves, `the analysis runs to the end (${g.analysis}, ${g.marks.filter(Boolean).join(" ") || "no marks"})`);
+  const stored = await (await p.request.get(`${base}/api/games/${g.id}`)).json();
+  check(stored.game?.analysis?.length === g.moves + 1, `and is saved with the game (${stored.game?.analysis?.length} positions)`);
+  await p.screenshot({ path: `${OUT}/game-analysis.png` });
+  await p.reload({ waitUntil: "networkidle" });
+  await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
+  check((await game()).analysis === "done" && (await p.getByRole("button", { name: "Analisar" }).count()) === 0, "a reload keeps it, and nothing is left to analyse");
+  await p.getByRole("button", { name: "Copiar PGN" }).click();
+  const analysed = await p.evaluate(() => navigator.clipboard.readText());
+  const judged = g.marks.filter(Boolean).length;
+  check(judged === 0 || /\$[246] \{ [^}]+Melhor era \S+\. \}/.test(analysed), `the PGN carries the judgements (${judged} judged)`);
+
   await p.getByRole("button", { name: "Fechar" }).click();
   await p.waitForTimeout(300);
   check(new URL(p.url()).pathname === "/partida", `closing the review goes back to the game (${new URL(p.url()).pathname})`);

@@ -3,6 +3,7 @@ import { bodyLimit } from "hono/body-limit";
 import type { AccountData, BackupV2, Game, Stars } from "../../../shared/types.js";
 import { DAY } from "../../../shared/scoring.js";
 import { GAME_LEVELS, MAX_MOVES, UCI } from "../../../shared/games.js";
+import { isPositionEval } from "../../../shared/analysis.js";
 import { readAccount, readProgress, writeAccount } from "../account.js";
 import { pool, transaction } from "../db.js";
 import { readLegacyAccount } from "../legacy.js";
@@ -124,7 +125,11 @@ function parseAccountData(v: unknown): AccountData | null {
       (g.ratingAfter === null || nat(g.ratingAfter)) &&
       nat(g.xp) &&
       isDate(g.startedAt) &&
-      isDate(g.finishedAt),
+      isDate(g.finishedAt) &&
+      // Absent in the files written before the analysis existed.
+      (g.analysis === undefined ||
+        g.analysis === null ||
+        (Array.isArray(g.analysis) && g.analysis.length === (g.moves as unknown[]).length + 1 && g.analysis.every(isPositionEval))),
   );
   if (!lessonsOk || !runsOk || !recordsOk || !attemptsOk || !gamesOk) return null;
   return v as unknown as AccountData;

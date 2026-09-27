@@ -236,4 +236,10 @@ export const MIGRATIONS: Migration[] = [
     sql: "",
     run: (client) => recountGames(client, null),
   },
+  {
+    // The engine's evaluation of every position of a finished game, from the
+    // review's "Analisar": the move judgements are derived from it on read.
+    name: "007_game_analysis",
+    sql: "ALTER TABLE games ADD COLUMN analysis jsonb;",
+  },
 ];

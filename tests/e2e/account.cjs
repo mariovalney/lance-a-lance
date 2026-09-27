@@ -209,6 +209,9 @@ async function xpOnScreen(page) {
     /* ---------- somebody else's game is not there ---------- */
     const theirs = await second.request.get(`${BASE}/api/games/${gameId}`);
     check(theirs.status() === 404, `another account gets 404 for that game (${theirs.status()})`);
+    const analysis = [0, 1, 2].map(() => ({ cp: 0, best: null }));
+    const written = await second.request.put(`${BASE}/api/games/${gameId}/analysis`, { data: { analysis } });
+    check(written.status() === 404, `and cannot write its analysis (${written.status()})`);
     await second.goto(`${BASE}/partidas/${gameId}`, { waitUntil: "networkidle" });
     await second.getByText("Partida não encontrada.").waitFor({ timeout: 10_000 }).catch(() => undefined);
     check(await second.getByText("Partida não encontrada.").isVisible(), "and its address says it was not found");

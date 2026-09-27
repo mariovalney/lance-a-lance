@@ -1,4 +1,4 @@
-import type { AccountData, Game, GameEndReason, GameOutcome, LessonStats, ProgressView, PuzzleAttempt, Stars } from "../../shared/types.js";
+import type { AccountData, Game, GameEndReason, GameOutcome, LessonStats, PositionEval, ProgressView, PuzzleAttempt, Stars } from "../../shared/types.js";
 import { RECENT_PUZZLES, START_RATING } from "../../shared/scoring.js";
 import type { Db } from "./db.js";
 
@@ -47,9 +47,10 @@ export interface GameRow {
   xp: number;
   started_at: Date;
   finished_at: Date | null;
+  analysis: PositionEval[] | null;
 }
 
-export const GAME_COLUMNS = "id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, finished_at";
+export const GAME_COLUMNS = "id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, finished_at, analysis";
 
 export function gameJson(row: GameRow): Game {
   return {
@@ -65,6 +66,7 @@ export function gameJson(row: GameRow): Game {
     xp: row.xp,
     startedAt: row.started_at.toISOString(),
     finishedAt: row.finished_at?.toISOString() ?? null,
+    analysis: row.analysis,
   };
 }
 
@@ -271,10 +273,25 @@ export async function writeAccount(db: Db, userId: string, data: AccountData): P
   }
   for (const g of data.games) {
     await db.query(
-      `INSERT INTO games (id, user_id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, updated_at, finished_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+      `INSERT INTO games (id, user_id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, updated_at, finished_at, analysis)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13, $14)
        ON CONFLICT (id) DO NOTHING`,
-      [g.id, userId, g.level, g.player, g.assisted, g.moves, g.outcome, g.reason, g.ratingDelta, g.ratingAfter, g.xp, g.startedAt, g.finishedAt],
+      [
+        g.id,
+        userId,
+        g.level,
+        g.player,
+        g.assisted,
+        g.moves,
+        g.outcome,
+        g.reason,
+        g.ratingDelta,
+        g.ratingAfter,
+        g.xp,
+        g.startedAt,
+        g.finishedAt,
+        g.analysis ? JSON.stringify(g.analysis) : null,
+      ],
     );
   }
   await recountGames(db, userId);

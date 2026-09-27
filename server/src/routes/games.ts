@@ -6,6 +6,7 @@ import { GAME_COLUMNS, gameJson, readProgress, statsOf, type GameRow } from "../
 import { pool, query, transaction } from "../db.js";
 import { requireUser, type Vars } from "./auth.js";
 import { UUID, pageOf, playerDay } from "./util.js";
+import { isPositionEval } from "../../../shared/analysis.js";
 
 /**
  * Games against the computer. The engine runs in the browser; the app starts a
@@ -151,4 +152,30 @@ gameRoutes.get("/:id", async (c) => {
   ]);
   if (!rows[0]) return c.json({ error: "not_found" }, 404);
   return c.json({ game: gameJson(rows[0]) });
+});
+
+/**
+ * Saves the engine's evaluation of every position of a finished game, which
+ * the review computes in the browser. It scores nothing, so it is taken as
+ * given once its shape is right: one entry per position, the initial one
+ * included. Only the owner's game, with the same 404 as reading it.
+ */
+gameRoutes.put("/:id/analysis", async (c) => {
+  const id = c.req.param("id");
+  if (!UUID.test(id)) return c.json({ error: "not_found" }, 404);
+  const body = (await c.req.json().catch(() => null)) as { analysis?: unknown } | null;
+  const analysis = body?.analysis;
+  if (!Array.isArray(analysis) || analysis.length > MAX_MOVES + 1 || !analysis.every(isPositionEval)) {
+    return c.json({ error: "invalid_analysis" }, 400);
+  }
+  const { rows } = await query<GameRow>(
+    `UPDATE games SET analysis = $3::jsonb, updated_at = now()
+      WHERE id = $1 AND user_id = $2 AND finished_at IS NOT NULL AND cardinality(moves) + 1 = $4
+      RETURNING ${GAME_COLUMNS}`,
+    [id, c.get("user").id, JSON.stringify(analysis), analysis.length],
+  );
+  if (rows[0]) return c.json({ game: gameJson(rows[0]) });
+  // Either not this person's finished game, or the wrong number of positions.
+  const { rowCount } = await query("SELECT 1 FROM games WHERE id = $1 AND user_id = $2 AND finished_at IS NOT NULL", [id, c.get("user").id]);
+  return rowCount ? c.json({ error: "invalid_analysis" }, 400) : c.json({ error: "not_found" }, 404);
 });

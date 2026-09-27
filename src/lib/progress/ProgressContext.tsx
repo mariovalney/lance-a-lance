@@ -99,7 +99,7 @@ const ProgressStore: FC<{ initial: ProgressState; children: ReactNode }> = ({ in
   }, []);
 
   const games = useMemo<ProgressContextValue["games"]>(
-    () => ({ start: startGame, saveMoves, finish: finishGame, callOff: callOffGame, page: progressApi.gamePage, get: progressApi.gameById }),
+    () => ({ start: startGame, saveMoves, finish: finishGame, callOff: callOffGame, page: progressApi.gamePage, get: progressApi.gameById, saveAnalysis: progressApi.saveAnalysis }),
     [startGame, saveMoves, finishGame, callOffGame],
   );
 

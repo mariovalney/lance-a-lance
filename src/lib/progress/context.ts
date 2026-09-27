@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { BackupV2, GameStartInput, LessonRunOutcome } from "@shared/types";
+import type { BackupV2, GameStartInput, LessonRunOutcome, PositionEval } from "@shared/types";
 import type { Game, LessonRunResult, Page, ProgressState, PuzzleAttempt, PuzzleStatus } from "@/lib/progress/types";
 
 export interface ProgressContextValue {
@@ -21,6 +21,8 @@ export interface ProgressContextValue {
     page: (page: number, size: number) => Promise<Page<Game>>;
     /** A finished game of this account; `not_found` for anyone else's. */
     get: (id: string) => Promise<Game>;
+    /** Keeps the engine's evaluation of every position with a finished game. */
+    saveAnalysis: (id: string, analysis: PositionEval[]) => Promise<Game>;
   };
   reset: () => Promise<void>;
   exportBackup: () => Promise<BackupV2>;

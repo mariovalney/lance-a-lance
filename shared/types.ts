@@ -38,6 +38,13 @@ export type GameOutcome = "win" | "draw" | "loss";
 /** How a game ended: by the rules of the final position, or by resigning. */
 export type GameEndReason = "checkmate" | "stalemate" | "insufficient" | "repetition" | "fifty" | "resigned";
 
+/**
+ * The engine's view of one position, from White's side: centipawns, or a mate
+ * in so many moves (positive when White mates). `best` is its move there, in
+ * UCI, and null where the game is over.
+ */
+export type PositionEval = ({ cp: number } | { mate: number }) & { best: string | null };
+
 export interface Game {
   id: string;
   /** Rating of the computer level. */
@@ -55,6 +62,8 @@ export interface Game {
   xp: number;
   startedAt: string;
   finishedAt: string | null;
+  /** One entry per position, the initial one included, once the game was analysed. */
+  analysis: PositionEval[] | null;
 }
 
 export interface GameStats {

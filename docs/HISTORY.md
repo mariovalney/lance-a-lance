@@ -554,3 +554,26 @@ Reloading a game's review dropped Mário on the new game setup: the screen was i
 - **The review is its own screen** (`GameReview`), apart from the game in progress, which keeps its moves in the read model as they are saved, so going to a review and back resumes from the last move.
 - **Through sign in.** A password sign in happens at whatever address the app was opened on, so the app opens there. Google comes back to the address it started from: `?next=` is kept in a cookie next to the OAuth state and only honoured if it is one of the app's own addresses (`safeReturnPath`), so the sign in cannot be used to send somebody elsewhere.
 - A lesson's result shows at the lesson's address, and a reload starts the lesson again, since its examples are drawn anew on every run.
+
+## 18. Judged moves in the review
+
+Mário asked for the move symbols in the review. He chose Lichess's set and an "Analisar" button that runs once and keeps the result.
+
+- **The symbols:**
+  - `?!` inaccuracy;
+  - `?` mistake;
+  - `??` blunder.
+
+  There is no ! or !!: Lichess marks no good moves, and the rule chess.com uses for them is not public.
+- **The rule** (`shared/analysis.ts`) is Lichess's:
+  - a move is judged by how much it drops the mover's winning chances, `2 / (1 + exp(-0.00368208 * cp)) - 1` with the evaluation capped at ±1000;
+  - 0.1, 0.2 and 0.3 are the thresholds;
+  - a mate that appears or is let go is judged by the evaluation on the other side of it, with Lichess's cut-offs of 999 and 700;
+  - giving mate is never judged.
+
+  Sources: `modules/tree/src/main/Advice.scala` in lila (https://github.com/lichess-org/lila/blob/master/modules/tree/src/main/Advice.scala) and https://lichess.org/page/accuracy.
+- **Where it runs.** The server has no engine, so the review runs the full-strength Stockfish in the browser, 300 ms per position, about half a minute for a game of 80 moves on a phone. It then saves the evaluation of every position with the game: `games.analysis`, from White's side, with the engine's best move. The judgements are derived on read, never stored, so the rule can change without touching the data. The analysis scores nothing, so the server checks only its shape and that the game is the caller's. It goes into the backup too.
+- **In the review:**
+  - the symbols follow each move in Lichess's colours;
+  - at a judged move a line says what it was and which move the engine preferred, drawn as an arrow;
+  - the PGN carries each judgement's NAG (`$6`, `$2`, `$4`) and a comment with the better move, as Lichess exports them.

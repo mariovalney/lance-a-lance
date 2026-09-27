@@ -26,11 +26,14 @@ export class Engine {
   // search at once, and that corrupts the running one ("unreachable").
   private chain: Promise<unknown> = Promise.resolve();
   private searching = false;
+  /** Every line of the running search, for the score in its `info` lines. */
+  private onLine: ((line: string) => void) | null = null;
 
   constructor(url = ENGINE_URL) {
     this.worker = new Worker(url);
     this.worker.onmessage = (e: MessageEvent) => {
       const line = String(e.data);
+      this.onLine?.(line);
       const i = this.waiters.findIndex((w) => w.match(line));
       if (i >= 0) this.waiters.splice(i, 1)[0].resolve(line);
     };
@@ -74,21 +77,45 @@ export class Engine {
    * engine sees repetitions too.
    */
   bestMove(moves: string[], level: BotLevel | null): Promise<string> {
+    const go = !level ? `go movetime ${HINT_TIME_MS}` : level.elo ? `go movetime ${MOVE_TIME_MS}` : `go depth ${level.depth ?? 1}`;
+    return this.queue(moves, go).then((r) => r.best);
+  }
+
+  /**
+   * The engine's evaluation of the position after these moves, searched for
+   * `ms`, from the side to move: centipawns or a mate in so many moves
+   * (negative when the side to move gets mated), and its best move there.
+   */
+  evaluate(moves: string[], ms: number): Promise<{ score: { cp: number } | { mate: number }; best: string }> {
+    return this.queue(moves, `go movetime ${ms}`).then((r) => {
+      if (!r.score) throw new Error("no score");
+      return { score: r.score, best: r.best };
+    });
+  }
+
+  private queue(moves: string[], go: string) {
     // A newer question makes the one still being searched moot: cut it short.
     if (this.searching) this.send("stop");
-    const run = this.chain.then(() => this.search(moves, level));
+    const run = this.chain.then(() => this.search(moves, go));
     this.chain = run.catch(() => undefined);
     return run;
   }
 
-  private async search(moves: string[], level: BotLevel | null): Promise<string> {
+  private async search(moves: string[], go: string): Promise<{ best: string; score: { cp: number } | { mate: number } | null }> {
     this.searching = true;
+    let score: { cp: number } | { mate: number } | null = null;
+    // The last full score wins: each `info` line is a deeper search than the one before.
+    this.onLine = (line) => {
+      const m = /^info .*\bscore (cp|mate) (-?\d+)\b(?! (?:lower|upper)bound)/.exec(line);
+      if (m) score = m[1] === "cp" ? { cp: Number(m[2]) } : { mate: Number(m[2]) };
+    };
     try {
       const done = this.waitFor((l) => l.startsWith("bestmove"));
       this.send(moves.length ? `position startpos moves ${moves.join(" ")}` : "position startpos");
-      this.send(!level ? `go movetime ${HINT_TIME_MS}` : level.elo ? `go movetime ${MOVE_TIME_MS}` : `go depth ${level.depth ?? 1}`);
-      return (await done).split(" ")[1];
+      this.send(go);
+      return { best: (await done).split(" ")[1], score };
     } finally {
+      this.onLine = null;
       this.searching = false;
     }
   }

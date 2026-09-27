@@ -1,6 +1,6 @@
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { Chess } from "chess.js";
-import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Loader2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MoveBoard } from "@/components/board/MoveBoard";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
@@ -11,6 +11,13 @@ import { ApiError } from "@/lib/auth/api";
 import { replay } from "@shared/games";
 import type { Square } from "@/lib/chess/squares";
 import { gamePgn, pgnFileName } from "@/lib/chess/pgn";
+import { GLYPH, judgements } from "@shared/analysis";
+import { JUDGEMENT_COLOR, JUDGEMENT_WORD } from "@/lib/chess/judgement";
+import { analyseGame } from "@/lib/engine/analyse";
+import { parseUci } from "@/lib/chess/game";
+import { moveLabel } from "@/components/lesson/steps/moveText";
+import { cn } from "@/lib/utils";
+import { RichText } from "@/components/common/RichText";
 import { goBack, navigate, paths } from "@/lib/router";
 
 /** The game after its first `ply` moves. */
@@ -20,6 +27,15 @@ function positionAt(moves: string[], ply: number) {
   const last = history[history.length - 1];
   return { fen: chess.fen(), lastMove: last ? ([last.from, last.to] as [Square, Square]) : null };
 }
+
+/** The engine's move in a position, as the lessons write moves: "`Nf3` (cavalo para f3)". */
+function bestAt(fen: string, uci: string) {
+  const move = new Chess(fen).move(parseUci(uci));
+  return { from: move.from as Square, to: move.to as Square, label: moveLabel(move) };
+}
+
+/** Where the analysis is: not run, running (how far), or failed. A finished one lives on the game. */
+type Analysing = { kind: "idle" } | { kind: "running"; done: number; total: number } | { kind: "failed" };
 
 /** Every move of a game, in SAN. */
 const sansOf = (moves: string[]) => (replay(moves) ?? new Chess()).history();
@@ -56,6 +72,26 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   const [attempt, setAttempt] = useState(0);
   const [ply, setPly] = useState(0);
   const [exported, setExported] = useState<"copied" | "saved" | null>(null);
+  const [analysing, setAnalysing] = useState<Analysing>({ kind: "idle" });
+  const abort = useRef<AbortController | null>(null);
+
+  // Leaving the screen stops an analysis halfway: nothing is saved.
+  useEffect(() => () => abort.current?.abort(), []);
+
+  const analyse = async (g: Game) => {
+    const controller = new AbortController();
+    abort.current = controller;
+    setAnalysing({ kind: "running", done: 0, total: g.moves.length + 1 });
+    try {
+      const analysis = await analyseGame(g.moves, (done, total) => setAnalysing({ kind: "running", done, total }), controller.signal);
+      const saved = await games.saveAnalysis(g.id, analysis);
+      setLoaded({ kind: "ready", game: saved, sans: sansOf(saved.moves) });
+      setAnalysing({ kind: "idle" });
+    } catch {
+      setAnalysing(controller.signal.aborted ? { kind: "idle" } : { kind: "failed" });
+    }
+  };
+  const cancel = () => abort.current?.abort();
 
   useEffect(() => {
     let alive = true;
@@ -84,6 +120,10 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   const close = () => goBack(paths.game);
   const game = current.kind === "ready" ? current.game : null;
   const shown = game ? positionAt(game.moves, ply) : null;
+  const marks = game?.analysis ? judgements(game.analysis) : [];
+  // The move that led to the board shown, if the analysis judged it, and what the engine preferred there.
+  const mark = ply > 0 ? marks[ply - 1] : null;
+  const preferred = mark && game?.analysis?.[ply - 1]?.best ? bestAt(positionAt(game.moves, ply - 1).fen, game.analysis[ply - 1].best!) : null;
 
   let footer;
   if (current.kind === "loading") {
@@ -121,7 +161,21 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
               <ChevronsRight className="!h-5 !w-5" />
             </Button>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className={cn("grid gap-2", current.game.analysis ? "grid-cols-2" : "grid-cols-3")}>
+            {!current.game.analysis &&
+              (analysing.kind === "running" ? (
+                <Button variant="outline" className="h-11 rounded-xl font-bold" aria-label="Cancelar a análise" onClick={cancel}>
+                  <Loader2 className="!h-4 !w-4 animate-spin" />
+                  <span className="font-mono tabular">
+                    {analysing.done}/{analysing.total}
+                  </span>
+                </Button>
+              ) : (
+                <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void analyse(current.game)}>
+                  <Sparkles className="!h-4 !w-4" />
+                  Analisar
+                </Button>
+              ))}
             <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void exportPgn(current.game).then(setExported)}>
               {exported ? <Check className="!h-4 !w-4" /> : <Copy className="!h-4 !w-4" />}
               {exported === "copied" ? "Copiado" : exported === "saved" ? "Arquivo salvo" : "Copiar PGN"}
@@ -150,6 +204,8 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
           assisted: Boolean(game?.assisted),
           hint: null,
           ply: game ? ply : null,
+          analysis: game?.analysis ? "done" : analysing.kind === "running" ? "running" : analysing.kind === "failed" ? "failed" : "none",
+          marks: marks.map((m) => (m ? GLYPH[m].symbol : null)),
         })}
       >
         <div className="mx-auto flex min-h-0 w-full max-w-[30rem] flex-1 flex-col gap-4 px-4 pb-4 pt-3">
@@ -161,11 +217,32 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
                 playerColor={game.player}
                 enabled={false}
                 lastMove={shown.lastMove}
+                extraArrows={preferred ? [{ from: preferred.from, to: preferred.to, tone: "good" }] : undefined}
                 balanceCoords
                 onMove={() => undefined}
                 onIllegal={() => undefined}
               />
-              <MoveList sans={current.sans} current={ply} onPick={setPly} />
+              {analysing.kind === "failed" && <p className="text-sm text-muted-foreground">A análise não terminou. Tente de novo.</p>}
+              {mark && (
+                <p className="text-sm">
+                  <span className={cn("font-bold", JUDGEMENT_COLOR[mark])}>{JUDGEMENT_WORD[mark]}.</span>
+                  {preferred && (
+                    <>
+                      {" "}
+                      <RichText text={`Melhor era ${preferred.label}.`} className="inline" />
+                    </>
+                  )}
+                </p>
+              )}
+              <MoveList
+                sans={current.sans}
+                current={ply}
+                onPick={setPly}
+                mark={(p) => {
+                  const m = marks[p - 1];
+                  return m ? <span className={cn("font-bold", JUDGEMENT_COLOR[m])}>{GLYPH[m].symbol}</span> : null;
+                }}
+              />
             </>
           )}
         </div>
