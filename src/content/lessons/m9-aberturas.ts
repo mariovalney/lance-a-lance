@@ -2,6 +2,7 @@ import type { LessonDef, Screen } from "@/content/types";
 import { hangingPieces } from "@/content/lib/analysis";
 import { afterMove, boardFor } from "@/content/lib/positions";
 import { legalMoves, playLine, uciOf } from "@/lib/chess/game";
+import { readMove } from "@/lib/chess/notation";
 import { START_FEN, type Square } from "@/lib/chess/squares";
 import { shuffle } from "@/lib/random";
 
@@ -87,6 +88,56 @@ function keepEverythingSafe(key: string, before: string[], prompt: string, targe
   };
 }
 
+/** A choice of the next move in a line, each option checked to be legal. */
+function nextMove(key: string, before: string[], prompt: string, options: string[], correct: string, explain: string, note: string): Screen {
+  const fen = fenAfter(before);
+  const legal = new Set(legalMoves(fen).map((m) => m.san));
+  for (const san of options) if (!legal.has(san)) throw new Error(`${san} is not legal after ${before.join(" ")}`);
+  return {
+    kind: "choice",
+    key,
+    prompt,
+    board: boardFor(fen, { lastMove: lastOf(before) }),
+    options: shuffle(options).map((san) => ({ id: san, label: san, mono: true })),
+    correct,
+    explain,
+    mistakeNote: note,
+  };
+}
+
+/** Play the one move that carries the idea. */
+function ideaMove(key: string, before: string[], prompt: string, san: string, wrong: string, success: string, note: string): Screen {
+  const fen = fenAfter(before);
+  const move = legalMoves(fen).find((m) => m.san === san);
+  if (!move) throw new Error(`${san} is not legal after ${before.join(" ")}`);
+  return {
+    kind: "move",
+    key,
+    prompt,
+    board: boardFor(fen, { lastMove: lastOf(before) }),
+    accept: (m) => m.san === san,
+    solution: uciOf(move),
+    wrong: (m) => `\`${m.san}\` (${readMove(m)}) não é o lance. ${wrong}`,
+    success,
+    mistakeNote: note,
+  };
+}
+
+/** Tap the pieces or squares the idea is about. */
+function tapIdea(key: string, before: string[], prompt: string, targets: Square[], wrong: string, success: string, note: string): Screen {
+  const fen = fenAfter(before);
+  return {
+    kind: targets.length > 1 ? "tapAll" : "tap",
+    key,
+    prompt,
+    board: boardFor(fen, { lastMove: lastOf(before) }),
+    targets,
+    wrong: () => wrong,
+    success,
+    mistakeNote: note,
+  } as Screen;
+}
+
 /* ---------- Italiana ---------- */
 
 export const lessonItaliana: LessonDef = {
@@ -117,12 +168,39 @@ export const lessonItaliana: LessonDef = {
       success: "Essa é a base da Italiana. Refaça algumas vezes para decorar.",
       note: "Linha da Italiana",
     }),
+    nextMove(
+      "italiana-bc4",
+      ["e2e4", "e7e5", "g1f3", "b8c6"],
+      "Qual lance monta a Italiana?",
+      ["Bc4", "Bb5", "d4", "Nc3"],
+      "Bc4",
+      "`Bc4` coloca o bispo mirando `f7`: essa é a Italiana. `Bb5` seria a Espanhola, outra abertura.",
+      "Lance da Italiana",
+    ),
     {
       kind: "explain",
       title: "O plano",
-      text: "Com a Italiana armada, as brancas seguem um roteiro simples:",
-      steps: ["Rocar e colocar a torre em `e1`.", "Preparar `d4` com `c3` para dominar o centro.", "Se as pretas descuidarem de `f7`, atacar com `Ng5` ou sacrifícios."],
+      text: "Depois da abertura, o plano das brancas é simples:",
+      steps: ["Faça o roque e leve a torre para `e1`.", "Jogue `c3` e depois `d4`: o centro fica seu.", "Se as pretas descuidarem de `f7`, ataque com `Ng5`."],
     },
+    nextMove(
+      "italiana-c3",
+      ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"],
+      "Qual lance prepara `d4`?",
+      ["c3", "a3", "h3", "Qe2"],
+      "c3",
+      "`c3` apoia `d4`: quando o peão chegar lá, outro peão protege.",
+      "Plano da Italiana",
+    ),
+    ideaMove(
+      "italiana-ng5",
+      ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6"],
+      "As pretas tiraram o cavalo e `f7` ficou com um defensor só. Ataque esse peão.",
+      "Ng5",
+      "O cavalo em `g5` junta forças com o bispo contra `f7`.",
+      "Cavalo e bispo contra `f7`. As pretas precisam defender já.",
+      "Atacar f7",
+    ),
     lineScreen({
       key: "italiana-legal",
       prompt: "Mate de Legal: as pretas prenderam seu cavalo, mas foram descuidadas. Comece capturando em `e5` com o cavalo, mesmo largando a dama.",
@@ -167,6 +245,39 @@ export const lessonLondon: LessonDef = {
       success: "Essa estrutura serve contra quase tudo. Depois vêm `Bd3`, `O-O` e às vezes `Ne5`.",
       note: "Linha da London",
     }),
+    tapIdea(
+      "london-piramide",
+      ["d2d4", "d7d5", "c1f4", "g8f6", "e2e3", "e7e6", "g1f3", "c7c5", "c2c3", "b8c6", "b1d2", "f8d6", "f4g3"],
+      "Toque nos três peões da pirâmide que segura o centro.",
+      ["c3", "d4", "e3"],
+      "Procure os peões brancos do centro que se protegem em escada.",
+      "`c3` protege `d4`, e `e3` também. Com a pirâmide, o centro não cai.",
+      "A pirâmide da London",
+    ),
+    {
+      kind: "explain",
+      title: "O plano",
+      text: "A London quase sempre segue o mesmo roteiro:",
+      steps: ["Monte a pirâmide `c3`, `d4` e `e3`.", "Complete com `Bd3`, `Nbd2` e o roque.", "Depois, o cavalo pode pular para `e5`."],
+    },
+    nextMove(
+      "london-c3",
+      ["d2d4", "d7d5", "c1f4", "g8f6", "e2e3", "e7e6", "g1f3", "c7c5"],
+      "As pretas atacam `d4` com `c5`. Qual lance mantém o centro firme?",
+      ["c3", "dxc5", "Nc3", "Bb5+"],
+      "c3",
+      "`c3` protege `d4` com outro peão, e a pirâmide fica de pé.",
+      "Plano da London",
+    ),
+    nextMove(
+      "london-bd3",
+      ["d2d4", "d7d5", "c1f4", "g8f6", "e2e3", "e7e6", "g1f3", "c7c5", "c2c3", "b8c6", "b1d2", "f8d6", "f4g3", "e8g8"],
+      "Qual é o próximo passo do plano?",
+      ["Bd3", "a4", "Rg1", "Ke2"],
+      "Bd3",
+      "`Bd3` tira a última peça menor de casa e deixa o roque pronto.",
+      "Plano da London",
+    ),
     {
       kind: "explain",
       title: "O ponto de atenção",
@@ -216,6 +327,30 @@ export const lessonGambitoDama: LessonDef = {
     }),
     {
       kind: "explain",
+      title: "O plano",
+      text: "As brancas querem que as pretas larguem `d5`. Por isso:",
+      steps: ["Pressione `d5` com `c4` e `Nc3`.", "Crave o cavalo de `f6`, que defende `d5`, com `Bg5`.", "Complete com `e3`, `Nf3`, `Bd3` e o roque."],
+    },
+    ideaMove(
+      "gambito-bg5",
+      ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6"],
+      "O cavalo de `f6` defende `d5`. Crave-o.",
+      "Bg5",
+      "O bispo em `g5` prende o cavalo na frente da dama.",
+      "Agora o cavalo não pode sair sem entregar a dama, e `d5` fica mais fraco.",
+      "Cravar o defensor de d5",
+    ),
+    tapIdea(
+      "gambito-cravado",
+      ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5"],
+      "Toque na peça preta cravada pelo bispo.",
+      ["f6"],
+      "Siga a diagonal do bispo de `g5` até a dama preta.",
+      "O cavalo de `f6` está entre o bispo e a dama.",
+      "Ver a cravada",
+    ),
+    {
+      kind: "explain",
       title: "Se as pretas aceitarem",
       text: "Depois de 2...`dxc4`, não corra atrás do peão com pressa. Jogue `e3` e recupere com o bispo: ele sai já ativo.",
       board: { fen: fenAfter(["d2d4", "d7d5", "c2c4", "d5c4"]), arrows: [{ from: "f1", to: "c4", tone: "good" }], marks: { c4: "focus" } },
@@ -229,6 +364,15 @@ export const lessonGambitoDama: LessonDef = {
       success: "Material igual e centro das brancas.",
       note: "Gambito da Dama Aceito",
     }),
+    nextMove(
+      "gambito-a4",
+      ["d2d4", "d7d5", "c2c4", "d5c4", "e2e3", "b7b5"],
+      "As pretas seguram o peão de `c4` com `b5`. Qual lance desmancha isso?",
+      ["a4", "Bxc4", "Nc3", "Qc2"],
+      "a4",
+      "`a4` ataca o peão de `b5`, que segura `c4`. Se as pretas jogarem `c6`, vem `axb5 cxb5` e `Qf3`, atacando a torre de `a8`. `Bxc4` perderia o bispo para `bxc4`.",
+      "Punir quem segura o peão",
+    ),
     quiz("gambito-quiz", "O que é um gambito?", "Oferecer material em troca de centro, tempo ou ataque", ["Uma armadilha que ganha a dama", "Um jeito de fazer o roque mais cedo"], "O que é gambito"),
   ],
 };
@@ -246,7 +390,17 @@ export const lessonPretasE4: LessonDef = {
       title: "1...e5",
       text: "Contra 1.`e4`, responder 1...`e5` segue os mesmos princípios: centro, desenvolvimento e roque. Você aprende a jogar dos dois lados.",
       board: { fen: fenAfter(["e2e4", "e7e5"]), orientation: "black" },
+      steps: ["Responda `e5` e defenda com `Nc6`.", "Desenvolva o bispo e o cavalo de `g8`, e faça o roque.", "Quando der, jogue `d5`: é o lance que solta as pretas."],
     },
+    nextMove(
+      "pretas-nc6",
+      ["e2e4", "e7e5", "g1f3"],
+      "O cavalo branco ataca `e5`. Qual defesa também tira uma peça de casa?",
+      ["Nc6", "f6", "Qe7", "d6"],
+      "Nc6",
+      "`Nc6` defende e desenvolve. `f6` enfraquece o rei, `Qe7` traz a dama cedo, e `d6` defende mas prende o bispo de `f8`.",
+      "Defender e5 desenvolvendo",
+    ),
     lineScreen({
       key: "pretas-italiana",
       prompt: "As brancas vão de Italiana. Responda com as pretas.",
@@ -256,6 +410,15 @@ export const lessonPretasE4: LessonDef = {
       success: "Posição equilibrada e fácil de jogar.",
       note: "Pretas contra a Italiana",
     }),
+    nextMove(
+      "pretas-bc5",
+      ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"],
+      "O bispo branco mira `f7`. Qual lance desenvolve e mira `f2` de volta?",
+      ["Bc5", "h6", "a6", "Qf6"],
+      "Bc5",
+      "`Bc5` faz com as brancas o que elas fazem com você: mira o peão que só o rei defende.",
+      "Pretas contra a Italiana",
+    ),
     {
       kind: "explain",
       title: "Contra o ataque em f7",
@@ -282,6 +445,7 @@ export const lessonPretasE4: LessonDef = {
       success: "Você tem respostas para as duas aberturas mais comuns com `e4` `e5`.",
       note: "Pretas contra a Espanhola",
     }),
+    quiz("pretas-e4-quiz", "Qual lance costuma soltar o jogo das pretas nessas aberturas?", "d5, que briga pelo centro", ["h6, que prende o cavalo", "a6, que ameaça o bispo"], "Plano das pretas"),
   ],
 };
 
@@ -298,7 +462,35 @@ export const lessonPretasD4: LessonDef = {
       title: "Recusando o gambito",
       text: "Contra 1.`d4` `d5` 2.`c4`, o lance `e6` defende `d5` com um peão e mantém o centro. É uma das defesas mais sólidas do xadrez.",
       board: { fen: fenAfter(["d2d4", "d7d5", "c2c4", "e7e6"]), orientation: "black", marks: { d5: "good" } },
+      steps: ["Segure `d5` com `e6` e `Nf6`.", "Coloque o bispo em `e7` e faça o roque.", "Depois, prepare `c5` para ganhar espaço."],
     },
+    nextMove(
+      "pretas-e6",
+      ["d2d4", "d7d5", "c2c4"],
+      "Qual lance segura `d5` com um peão?",
+      ["e6", "Nf6", "a6", "h6"],
+      "e6",
+      "`e6` protege `d5` com um peão e abre o bispo de `f8`. (`c6` também serve: é outra defesa, a Eslava.)",
+      "Segurar d5",
+    ),
+    tapIdea(
+      "pretas-atras",
+      ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5"],
+      "O bispo branco crava o seu cavalo. Toque na peça que está atrás dele.",
+      ["d8"],
+      "Siga a diagonal de `g5`, passando pelo cavalo.",
+      "A dama. Se o cavalo sair, a dama cai.",
+      "Ver a cravada",
+    ),
+    ideaMove(
+      "pretas-be7",
+      ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5"],
+      "Desfaça a cravada tirando uma peça de casa.",
+      "Be7",
+      "Coloque o bispo em `e7`, entre o cavalo e a dama.",
+      "Com o bispo no meio, o cavalo está livre de novo e o roque ficou pronto.",
+      "Desfazer a cravada",
+    ),
     lineScreen({
       key: "pretas-grd",
       prompt: "Jogue o Gambito da Dama Recusado com as pretas.",
