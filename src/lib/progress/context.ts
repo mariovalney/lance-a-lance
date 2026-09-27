@@ -19,6 +19,8 @@ export interface ProgressContextValue {
     /** Only before both sides moved. */
     callOff: (id: string) => Promise<void>;
     page: (page: number, size: number) => Promise<Page<Game>>;
+    /** A finished game of this account; `not_found` for anyone else's. */
+    get: (id: string) => Promise<Game>;
   };
   reset: () => Promise<void>;
   exportBackup: () => Promise<BackupV2>;

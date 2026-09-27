@@ -169,6 +169,18 @@ async function xpOnScreen(page) {
   check(backup.data?.puzzleAttempts?.length === 3, "the exported file carries the puzzle history");
   check(backup.data?.lessons?.length === 2, "the exported file carries the lessons");
 
+  /* ---------- a finished game of this account, for the access check ---------- */
+  // Played through the API: two moves and a resignation. A game left open by
+  // an earlier run is resigned first, since only one can be open.
+  const today = new Date().toISOString().slice(0, 10);
+  const unfinished = (await (await first.request.get(BASE + "/api/progress")).json()).progress.games.current;
+  if (unfinished) await first.request.post(`${BASE}/api/games/${unfinished.id}/finish`, { data: { moves: unfinished.moves, resigned: true, day: today } });
+  const started = await (await first.request.post(BASE + "/api/games", { data: { level: 400, player: "w", assisted: false } })).json();
+  const gameId = started.game?.id;
+  await first.request.post(`${BASE}/api/games/${gameId}/finish`, { data: { moves: ["e2e4", "e7e5"], resigned: true, day: today } });
+  const own = await first.request.get(`${BASE}/api/games/${gameId}`);
+  check(own.ok() && (await own.json()).game?.id === gameId, "the owner gets the game at its address");
+
   /* ---------- signing out goes back to the sign in screen, and empties it --- */
   await first.getByRole("button", { name: "Sair" }).click();
   await first.waitForTimeout(1500);
@@ -193,6 +205,14 @@ async function xpOnScreen(page) {
     check((await xpOnScreen(second)) === 0, "another account on the same browser starts empty");
     const untouched = (await (await second.request.get(BASE + "/api/progress")).json()).progress;
     check(untouched.xp === 0, `and nothing was pushed into it (${untouched.xp} XP)`);
+
+    /* ---------- somebody else's game is not there ---------- */
+    const theirs = await second.request.get(`${BASE}/api/games/${gameId}`);
+    check(theirs.status() === 404, `another account gets 404 for that game (${theirs.status()})`);
+    await second.goto(`${BASE}/partidas/${gameId}`, { waitUntil: "networkidle" });
+    await second.getByText("Partida não encontrada.").waitFor({ timeout: 10_000 }).catch(() => undefined);
+    check(await second.getByText("Partida não encontrada.").isVisible(), "and its address says it was not found");
+    await second.goto(BASE + "/", { waitUntil: "networkidle" });
 
     /* ---------- import into that second, empty account ---------- */
     third = await open(browser);

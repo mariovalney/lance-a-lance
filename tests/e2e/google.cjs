@@ -151,6 +151,21 @@ const waitForHealth = async (base) => {
   await signInWithGoogle(again);
   check((await xpOnScreen(again)) === XP, `the same Google identity comes back to the same account (${await xpOnScreen(again)} XP)`);
 
+  /* ---------- Google lands back on the address it started from ---------- */
+  const deep = await (await browser.newContext(phone)).newPage();
+  await deep.goto(BASE + "/treino", { waitUntil: "networkidle" });
+  await deep.waitForTimeout(700);
+  await nextIdentity(deep, { sub: `sub-${STAMP}-a`, email: fresh, email_verified: true });
+  await signInWithGoogle(deep);
+  check(new URL(deep.url()).pathname === "/treino", `signing in from /treino comes back to it (${new URL(deep.url()).pathname})`);
+
+  // Anything but one of the app's own addresses lands on the root: the sign in
+  // is never a way to send somebody elsewhere.
+  const away = await (await browser.newContext(phone)).newPage();
+  await nextIdentity(away, { sub: `sub-${STAMP}-a`, email: fresh, email_verified: true });
+  await away.goto(BASE + "/api/auth/google?next=" + encodeURIComponent("//evil.example/x"), { waitUntil: "networkidle" });
+  check(away.url() === BASE + "/", `a next that leaves the app lands on the root (${away.url()})`);
+
   /* ---------- a verified email links to the account with a password ------- */
   // The admin's own account is the one with both a password and progress, so
   // it is what proves that linking keeps everything where it was.

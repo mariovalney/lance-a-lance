@@ -101,7 +101,8 @@ export const SignInScreen: FC<{ signupOpen: boolean; resetOpen: boolean; googleO
       {googleOpen && (
         <div className="flex flex-col gap-4">
           <Button asChild variant="outline" className="h-11 gap-2 rounded-xl font-bold">
-            <a href={GOOGLE_SIGN_IN}>
+            {/* Back to this same address once Google is done. */}
+            <a href={`${GOOGLE_SIGN_IN}?next=${encodeURIComponent(window.location.pathname)}`}>
               <GoogleMark />
               Entrar com Google
             </a>

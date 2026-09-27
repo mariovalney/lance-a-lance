@@ -21,6 +21,7 @@ import {
   verifyPassword,
   type User,
 } from "../auth.js";
+import { safeReturnPath } from "../../../shared/routes.js";
 import { query } from "../db.js";
 import { env } from "../env.js";
 import { authorizeUrl, googleEnabled, identityFromCode } from "../google.js";
@@ -140,6 +141,8 @@ authRoutes.get("/config", async (c) =>
  * double-submit cookie pattern: nothing is signed, so there is no secret.
  */
 const OAUTH_COOKIE = "la_oauth";
+/** The app address the flow started on, to land back there. */
+const OAUTH_NEXT_COOKIE = "la_oauth_next";
 const OAUTH_MINUTES = 10;
 
 /** Back to the app with something the interface can turn into a sentence. */
@@ -162,6 +165,14 @@ authRoutes.get("/google", (c) => {
     sameSite: "Lax",
     maxAge: OAUTH_MINUTES * 60,
   });
+  // Only one of the app's own addresses, never somewhere else: see safeReturnPath.
+  setCookie(c, OAUTH_NEXT_COOKIE, safeReturnPath(c.req.query("next")), {
+    path: "/api/auth",
+    httpOnly: true,
+    secure: env.cookieSecure,
+    sameSite: "Lax",
+    maxAge: OAUTH_MINUTES * 60,
+  });
   return c.redirect(authorizeUrl(origin, state), 302);
 });
 
@@ -169,7 +180,9 @@ authRoutes.get("/google/callback", async (c) => {
   if (!googleEnabled()) return backToApp(c, "google_unavailable");
 
   const expected = getCookie(c, OAUTH_COOKIE);
+  const next = safeReturnPath(getCookie(c, OAUTH_NEXT_COOKIE));
   deleteCookie(c, OAUTH_COOKIE, { path: "/api/auth", secure: env.cookieSecure, sameSite: "Lax" });
+  deleteCookie(c, OAUTH_NEXT_COOKIE, { path: "/api/auth", secure: env.cookieSecure, sameSite: "Lax" });
   const state = c.req.query("state") ?? "";
   // Nothing to compare against, or the wrong value: this browser did not start
   // the flow, or it started it too long ago.
@@ -199,7 +212,7 @@ authRoutes.get("/google/callback", async (c) => {
 
   const { token, expiresAt } = await createSession(result.user.id);
   setSessionCookie(c, token, expiresAt);
-  return backToApp(c);
+  return c.redirect(next, 302);
 });
 
 /**

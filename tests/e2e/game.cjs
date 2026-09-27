@@ -40,6 +40,11 @@ const { chromium } = require("playwright");
     return myTurn();
   };
   const rating = async () => Number(await p.locator("[data-game-rating]").getAttribute("data-game-rating"));
+  /** The rating once it moves away from `from`, or `from` after 5 s: the result and the new rating can land in separate renders. */
+  const ratingOnceChanged = async (from) => {
+    for (let i = 0; i < 25 && (await rating()) === from; i++) await p.waitForTimeout(200);
+    return rating();
+  };
   const waitFor = async (text) => p.getByText(text).first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
   const card = p.locator("section[aria-label='Partida contra o computador']");
 
@@ -73,7 +78,8 @@ const { chromium } = require("playwright");
     await p.getByRole("button", { name: "Abandonar" }).click();
     await p.getByRole("dialog").getByRole("button", { name: "Abandonar" }).click();
     check(await waitFor("Derrota"), "abandoning shows the loss");
-    check((await rating()) < 800, `abandoning costs rating (800 -> ${await rating()})`);
+    const lost = await ratingOnceChanged(800);
+    check(lost < 800, `abandoning costs rating (800 -> ${lost})`);
   } else {
     console.log("the game ended on its own before the reload:", g.phase);
   }
@@ -122,10 +128,16 @@ const { chromium } = require("playwright");
   check(rows.length === 2, `the history lists the two finished games (${rows.length}: ${rows.map((r) => r.replace(/\s+/g, " ")).join(" | ")})`);
   await p.screenshot({ path: `${OUT}/game-history.png` });
   await p.getByRole("dialog").locator("li button").last().click();
-  await p.waitForTimeout(300);
+  await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
   g = await game();
   const total = g.ply;
   check(g.phase === "review" && total > 0, `a game opens for review at its last move (${total})`);
+  const reviewPath = new URL(p.url()).pathname;
+  check(reviewPath === `/partidas/${g.id}`, `at its own address (${reviewPath})`);
+  await p.reload({ waitUntil: "networkidle" });
+  await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
+  const reloaded = await game();
+  check(reloaded.phase === "review" && reloaded.id === g.id && reloaded.ply === total, "a reload stays on the same game");
   await p.getByRole("button", { name: "Início da partida" }).click();
   check((await game()).ply === 0, "the review goes back to the initial position");
   await p.getByRole("button", { name: "Próximo lance" }).click();
@@ -137,6 +149,14 @@ const { chromium } = require("playwright");
   const pgn = await p.evaluate(() => navigator.clipboard.readText());
   check(/\[Result "(1-0|0-1|1\/2-1\/2)"\]/.test(pgn) && /\n1\. \S+/.test(pgn) && /\[Site "Lance a Lance"\]/.test(pgn), `as PGN (${pgn.split("\n").slice(0, 2).join(" ")})`);
   await p.getByRole("button", { name: "Fechar" }).click();
+  await p.waitForTimeout(300);
+  check(new URL(p.url()).pathname === "/partida", `closing the review goes back to the game (${new URL(p.url()).pathname})`);
+
+  // Somebody else's game, or no game at all, is not found, and says so.
+  await p.goto(`${base}/partidas/00000000-0000-4000-8000-000000000000`, { waitUntil: "networkidle" });
+  check(await waitFor("Partida não encontrada."), "an unknown game is not found");
+  await p.getByRole("button", { name: "Voltar", exact: true }).click();
+  await p.waitForTimeout(300);
 
   await p.getByRole("button", { name: "Voltar ao início" }).click();
   await p.waitForTimeout(300);

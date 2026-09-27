@@ -19,6 +19,25 @@ const { chromium } = require("playwright");
   await p.getByRole("button", { name: /Philidor/ }).first().click();
   await p.waitForTimeout(400);
   console.log("opened lesson:", (await p.locator("main").first().textContent()).slice(0, 80).replace(/\s+/g, " "));
+  const problems = [];
+  const check = (ok, what) => {
+    console.log(`${ok ? "ok   " : "FALHA"} ${what}`);
+    if (!ok) problems.push(what);
+  };
+  // Every screen has an address, so a reload stays on it.
+  const lessonPath = new URL(p.url()).pathname;
+  check(/^\/licoes\/m11-l\d+$/.test(lessonPath), `a lesson has its address (${lessonPath})`);
+  await p.reload({ waitUntil: "networkidle" });
+  check(new URL(p.url()).pathname === lessonPath && (await p.locator("main").count()) > 0, "and a reload starts it again there");
+  await p.goBack({ waitUntil: "networkidle" }).catch(() => undefined);
+  check(new URL(p.url()).pathname === "/" && (await p.getByRole("button", { name: /Finais/ }).count()) > 0, "the back button goes home");
+  await p.goto(SITE + "/treino", { waitUntil: "networkidle" });
+  await p.reload({ waitUntil: "networkidle" });
+  check(new URL(p.url()).pathname === "/treino" && (await p.locator("main[data-solution]").count()) > 0, "the trainer survives a reload");
+  await p.goto(SITE + "/licoes/m99-l9", { waitUntil: "networkidle" });
+  check(new URL(p.url()).pathname === "/", "a lesson that does not exist goes home");
+  console.log(`problems: ${problems.length ? problems.join(" ; ") : "none"}`);
   console.log("errors", errors.length ? errors : "none");
   await b.close();
+  process.exit(problems.length || errors.length ? 1 : 0);
 })();

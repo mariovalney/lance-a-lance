@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { Chess } from "chess.js";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Flag, History, Loader2, Minus, X } from "lucide-react";
+import { Flag, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,12 +13,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { MoveBoard } from "@/components/board/MoveBoard";
-import { HistorySheet } from "@/components/common/HistorySheet";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { DEFAULT_ILLEGAL, moveLabel } from "@/components/lesson/steps/moveText";
 import { useProgress } from "@/lib/progress/useProgress";
-import { PROVISIONAL_GAMES } from "@/lib/progress/scoring";
-import type { Game, GameEndReason, GameOutcome } from "@/lib/progress/types";
+import type { Game } from "@/lib/progress/types";
 import { RATED_AFTER, isRatedGame } from "@shared/scoring";
 import { endOf, replay } from "@shared/games";
 import { BOT_LEVELS, levelByRating, levelNear, type BotLevel } from "@/lib/engine/levels";
@@ -28,11 +26,13 @@ import type { Square } from "@/lib/chess/squares";
 import { moveSound, playSound } from "@/lib/sound";
 import { getSettings, updateSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
-import { gamePgn, pgnFileName } from "@/lib/chess/pgn";
+import { goBack, paths } from "@/lib/router";
+import { GameHeader, GameTitle, MoveList } from "@/components/game/parts";
+import { REASON, TITLE } from "@/components/game/text";
 
 type Side = "w" | "b" | "random";
 /** `saving` covers starting, finishing and calling off: the server has to answer first. */
-type Phase = "setup" | "loading" | "playing" | "saving" | "over" | "failed" | "review";
+type Phase = "setup" | "loading" | "playing" | "saving" | "over" | "failed";
 type Failure = "start" | "engine" | "finish" | "calloff";
 
 /** The engine's suggestion in an assisted game. */
@@ -51,17 +51,6 @@ const SIDES: { id: Side; label: string }[] = [
   { id: "b", label: "Pretas" },
   { id: "random", label: "Sorteio" },
 ];
-
-const TITLE: Record<GameOutcome, string> = { win: "Vitória", draw: "Empate", loss: "Derrota" };
-
-const REASON: Record<GameEndReason, string> = {
-  checkmate: "Xeque-mate.",
-  stalemate: "Afogamento.",
-  insufficient: "Material insuficiente.",
-  repetition: "Mesma posição três vezes.",
-  fifty: "Regra dos 50 lances.",
-  resigned: "Você abandonou.",
-};
 
 const FAILURE: Record<Failure, string> = {
   start: "A partida não começou.",
@@ -95,7 +84,8 @@ function boardAt(moves: string[]) {
   };
 }
 
-export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
+/** A game against the computer at `/partida`: the one in progress, or the setup for a new one. */
+export const GameScreen: FC = () => {
   const { state, games } = useProgress();
   const stats = state.games;
   const engines = useGameEngines();
@@ -114,9 +104,7 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
   const [hint, setHint] = useState<Hint | null>(null);
   const [lastDelta, setLastDelta] = useState<number | null>(null);
   const [confirmResign, setConfirmResign] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [finished, setFinished] = useState(0);
-  const [review, setReview] = useState<{ game: Game; ply: number } | null>(null);
 
   // The game being played, read by the async replies so they never see an
   // older render's values. `game` mirrors it for rendering.
@@ -125,28 +113,6 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
   const resigned = useRef(false);
   // Bumped on every new game, so a reply computed for an old one is dropped.
   const gameId = useRef(0);
-  const moveList = useRef<HTMLOListElement>(null);
-
-  const shownSans = review ? boardAt(review.game.moves).sans : board.sans;
-  const highlighted = review ? review.ply : shownSans.length;
-  // Keeps the current move in view by scrolling the list alone, never the
-  // screen: the board stays where it is. Again when the list changes height,
-  // as it does when the footer grows at the end of a game.
-  useEffect(() => {
-    const list = moveList.current;
-    if (!list) return;
-    const keepInView = () => {
-      const move = list.querySelector<HTMLElement>("[data-current]");
-      if (!move) return;
-      if (move.offsetTop < list.scrollTop) list.scrollTop = move.offsetTop - 8;
-      else if (move.offsetTop + move.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = move.offsetTop + move.offsetHeight - list.clientHeight + 8;
-    };
-    keepInView();
-    const resized = new ResizeObserver(keepInView);
-    resized.observe(list);
-    return () => resized.disconnect();
-  }, [highlighted, shownSans.length]);
-
   /** Hands the end to the server, which reads the result off the final position. */
   const finish = useCallback(
     async (resign: boolean) => {
@@ -317,50 +283,11 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
     else setPhase("setup");
   };
 
-  const openReview = (g: Game) => {
-    setHistoryOpen(false);
-    setReview({ game: g, ply: g.moves.length });
-    setPhase("review");
-  };
-
-  // Copies the reviewed game as PGN; where the clipboard is out of reach
-  // (an old browser, a page not served over HTTPS), saves it as a file.
-  const [exported, setExported] = useState<"copied" | "saved" | null>(null);
-  const exportPgn = async (g: Game) => {
-    const pgn = gamePgn(g);
-    try {
-      await navigator.clipboard.writeText(pgn);
-      setExported("copied");
-    } catch {
-      const url = URL.createObjectURL(new Blob([pgn], { type: "application/x-chess-pgn" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = pgnFileName(g);
-      document.body.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      setExported("saved");
-    }
-  };
-  useEffect(() => {
-    if (!exported) return;
-    const t = setTimeout(() => setExported(null), 2000);
-    return () => clearTimeout(t);
-  }, [exported]);
-
-  const closeReview = () => {
-    setReview(null);
-    setPhase(current.current ? "playing" : "setup");
-  };
-
-  const provisional = stats.played < PROVISIONAL_GAMES;
-  const player: Color = review?.game.player ?? game?.player ?? "w";
-  const shown = review ? boardAt(review.game.moves.slice(0, review.ply)) : board;
-  const turn = turnOf(shown.fen);
-  const legal = phase === "playing" && !thinking && turn === player ? legalMoves(shown.fen).map(uciOf) : [];
+  const player: Color = game?.player ?? "w";
+  const turn = turnOf(board.fen);
+  const legal = phase === "playing" && !thinking && turn === player ? legalMoves(board.fen).map(uciOf) : [];
   const rated = game ? isRatedGame(game.assisted, game.moves.length) : false;
-  const headerGame = review?.game ?? (phase === "setup" ? null : game);
+  const headerGame = phase === "setup" ? null : game;
 
   let footer;
   if (phase === "setup") {
@@ -390,38 +317,6 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
         autoAdvance={false}
       />
     );
-  } else if (phase === "review" && review) {
-    const last = review.game.moves.length;
-    const step = (ply: number) => setReview({ ...review, ply: Math.max(0, Math.min(last, ply)) });
-    footer = (
-      <div className="border-t bg-card px-4 pt-3 pb-safe">
-        <div className="mx-auto flex w-full max-w-[30rem] flex-col gap-2">
-          <div className="grid grid-cols-4 gap-2">
-            <Button variant="outline" className="h-11 rounded-xl" aria-label="Início da partida" disabled={review.ply === 0} onClick={() => step(0)}>
-              <ChevronsLeft className="!h-5 !w-5" />
-            </Button>
-            <Button variant="outline" className="h-11 rounded-xl" aria-label="Lance anterior" disabled={review.ply === 0} onClick={() => step(review.ply - 1)}>
-              <ChevronLeft className="!h-5 !w-5" />
-            </Button>
-            <Button variant="outline" className="h-11 rounded-xl" aria-label="Próximo lance" disabled={review.ply === last} onClick={() => step(review.ply + 1)}>
-              <ChevronRight className="!h-5 !w-5" />
-            </Button>
-            <Button variant="outline" className="h-11 rounded-xl" aria-label="Fim da partida" disabled={review.ply === last} onClick={() => step(last)}>
-              <ChevronsRight className="!h-5 !w-5" />
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void exportPgn(review.game)}>
-              {exported ? <Check className="!h-4 !w-4" /> : <Copy className="!h-4 !w-4" />}
-              {exported === "copied" ? "Copiado" : exported === "saved" ? "Arquivo salvo" : "Copiar PGN"}
-            </Button>
-            <Button className="h-11 rounded-xl font-bold" onClick={closeReview}>
-              Fechar
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
   } else {
     const assistText = game?.assisted && turn === player && !thinking ? (hint ? `Melhor lance: ${hint.label}.` : "Calculando o melhor lance.") : undefined;
     footer = (
@@ -442,51 +337,23 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
     );
   }
 
-  // A review lists the whole game and marks where the board is.
-  const sans = shownSans;
-
   return (
     <div className="flex h-full flex-col bg-background">
-      <header className="mx-auto flex w-full max-w-[30rem] items-center gap-1.5 px-2 pt-2">
-        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-full" onClick={review ? closeReview : onExit} aria-label="Voltar ao início">
-          <ArrowLeft className="!h-5 !w-5" />
-        </Button>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="font-display text-lg font-bold leading-tight">Partida</span>
-          <span className="text-xs text-muted-foreground">
-            {headerGame ? (
-              <>
-                Computador <span className="font-mono tabular">{headerGame.level}</span>
-                {headerGame.assisted ? " · assistida" : ""}
-              </>
-            ) : (
-              <>
-                <span className="font-mono tabular">{stats.played}</span> {stats.played === 1 ? "partida" : "partidas"}
-              </>
-            )}
-          </span>
-        </div>
-        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-full" onClick={() => setHistoryOpen(true)} aria-label="Partidas anteriores">
-          <History className="!h-5 !w-5" />
-        </Button>
-        <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-[0_0_0_1px_hsl(var(--border))]" data-game-rating={stats.rating}>
-          <span className="font-mono text-base font-bold tabular">
-            {stats.rating}
-            {provisional && <span className="text-muted-foreground">?</span>}
-          </span>
-          {lastDelta !== null && (
-            <span
-              key={finished}
-              className={cn(
-                "animate-in fade-in zoom-in-90 rounded-full px-1.5 font-mono text-xs font-bold tabular duration-300",
-                lastDelta >= 0 ? "bg-success-soft text-success" : "bg-danger-soft text-danger",
-              )}
-            >
-              {lastDelta >= 0 ? `+${lastDelta}` : lastDelta}
-            </span>
-          )}
-        </div>
-      </header>
+      <GameHeader
+        onBack={() => goBack(paths.home)}
+        backLabel="Voltar ao início"
+        subtitle={
+          headerGame ? (
+            <GameTitle game={headerGame} />
+          ) : (
+            <>
+              <span className="font-mono tabular">{stats.played}</span> {stats.played === 1 ? "partida" : "partidas"}
+            </>
+          )
+        }
+        delta={lastDelta}
+        version={finished}
+      />
 
       <main
         className="flex min-h-0 flex-1 flex-col overflow-y-auto"
@@ -495,10 +362,10 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
           player,
           turn,
           legal,
-          moves: sans.length,
+          moves: board.sans.length,
           assisted: Boolean(game?.assisted),
           hint: hint ? `${hint.from}${hint.to}` : null,
-          ply: review?.ply ?? null,
+          ply: null,
         })}
       >
         {/* In a game the screen holds still: the board keeps its place and
@@ -510,61 +377,22 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
             <>
               <MoveBoard
                 spec={{ orientation: player === "w" ? "white" : "black" }}
-                fen={shown.fen}
+                fen={board.fen}
                 playerColor={player}
                 enabled={phase === "playing" && !thinking}
-                lastMove={shown.lastMove}
+                lastMove={board.lastMove}
                 extraArrows={hint && phase === "playing" ? [{ from: hint.from, to: hint.to, tone: "good" }] : undefined}
                 balanceCoords
                 onMove={onMove}
                 onIllegal={() => setIllegal(true)}
               />
-              {sans.length > 0 && (
-                <ol
-                  ref={moveList}
-                  className="relative grid min-h-[4.5rem] flex-1 grid-cols-[2rem_4.5rem_1fr] content-start gap-x-2 gap-y-1 overflow-y-auto rounded-xl border bg-card px-3.5 py-2.5 font-mono text-sm tabular"
-                  aria-label="Lances da partida"
-                >
-                  {Array.from({ length: Math.ceil(sans.length / 2) }, (_, i) => (
-                    <li key={i} className="contents">
-                      <span className="text-muted-foreground">{i + 1}.</span>
-                      {[2 * i, 2 * i + 1].map((ply) =>
-                        ply < sans.length ? (
-                          <button
-                            key={ply}
-                            type="button"
-                            disabled={!review}
-                            data-current={highlighted === ply + 1 || undefined}
-                            onClick={() => review && setReview({ ...review, ply: ply + 1 })}
-                            className={cn("justify-self-start rounded px-1 -mx-1 text-left disabled:cursor-default", highlighted === ply + 1 && "font-bold", review && "hover:bg-accent")}
-                          >
-                            {sans[ply]}
-                          </button>
-                        ) : (
-                          <span key={ply} />
-                        ),
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              )}
+              <MoveList sans={board.sans} current={board.sans.length} />
             </>
           )}
         </div>
       </main>
 
       {footer}
-
-      <HistorySheet
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        description="Toque numa partida para rever os lances."
-        empty="Nenhuma partida ainda."
-        version={finished}
-        load={games.page}
-        keyOf={(g) => g.id}
-        render={(g) => <GameRow game={g} onPick={openReview} />}
-      />
 
       <Dialog open={confirmResign} onOpenChange={setConfirmResign}>
         <DialogContent className="max-w-[22rem] rounded-2xl">
@@ -648,40 +476,3 @@ const GameSetup: FC<{
     </div>
   </>
 );
-
-/** One finished game in the history; tapping it opens the review. */
-const GameRow: FC<{ game: Game; onPick: (g: Game) => void }> = ({ game: g, onPick }) => {
-  if (!g.outcome || !g.reason || !g.finishedAt) return null;
-  const Icon = g.outcome === "win" ? Check : g.outcome === "draw" ? Minus : X;
-  const moves = Math.ceil(g.moves.length / 2);
-  return (
-    <button type="button" onClick={() => onPick(g)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-accent">
-      <span
-        className={cn(
-          "grid h-7 w-7 shrink-0 place-items-center rounded-full",
-          g.outcome === "win" ? "bg-success-soft text-success" : g.outcome === "loss" ? "bg-danger-soft text-danger" : "bg-secondary text-muted-foreground",
-        )}
-        aria-label={TITLE[g.outcome]}
-      >
-        <Icon className="h-4 w-4" />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-semibold">
-          {TITLE[g.outcome]} contra o computador <span className="font-mono tabular">{g.level}</span>
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {REASON[g.reason]} {moves} {moves === 1 ? "lance" : "lances"}
-          {g.assisted ? " · assistida" : ""} · {new Date(g.finishedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-        </span>
-      </span>
-      {g.ratingDelta !== null && g.ratingAfter !== null && (
-        <span className="flex flex-col items-end">
-          <span className={cn("font-mono text-sm font-bold tabular", g.ratingDelta >= 0 ? "text-success" : "text-danger")}>
-            {g.ratingDelta >= 0 ? `+${g.ratingDelta}` : g.ratingDelta}
-          </span>
-          <span className="font-mono text-[11px] tabular text-muted-foreground">{g.ratingAfter}</span>
-        </span>
-      )}
-    </button>
-  );
-};

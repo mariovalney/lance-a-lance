@@ -11,6 +11,7 @@ import { backupRoutes } from "./routes/backup.js";
 import { gameRoutes } from "./routes/games.js";
 import { lessonRoutes, progressRoutes } from "./routes/progress.js";
 import { puzzleRoutes } from "./routes/puzzles.js";
+import { isClientPath } from "../../shared/routes.js";
 
 const app = new Hono<Vars>();
 
@@ -74,13 +75,6 @@ app.use(
   }),
 );
 
-/**
- * The addresses the app answers. Everything else is a typo or a probe and gets
- * a 404, rather than the app shell pretending the address exists. Keep this in
- * step with the routing in `src/App.tsx` and with `navigateFallbackAllowlist`
- * in `vite.config.ts`, which is the same list for the service worker.
- */
-const CLIENT_ROUTES = ["/", "/redefinir", "/admin"];
 
 const page = async (file: string) => {
   const { readFile } = await import("node:fs/promises");
@@ -89,8 +83,9 @@ const page = async (file: string) => {
 
 app.get("*", async (c) => {
   if (!hasBuild) return c.json({ error: "not_found" }, 404);
-  const path = new URL(c.req.url).pathname.replace(/\/+$/, "") || "/";
-  if (CLIENT_ROUTES.includes(path)) {
+  // The addresses the app answers (shared/routes.ts). Everything else is a
+  // typo or a probe and gets a 404, rather than the shell pretending it exists.
+  if (isClientPath(new URL(c.req.url).pathname)) {
     return c.html(await page("index.html"), 200, { "cache-control": "no-cache" });
   }
   return c.html(await page("404.html").catch(() => "<!doctype html><title>404</title><a href=\"/\">Ir para o início</a>"), 404, {

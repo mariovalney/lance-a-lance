@@ -136,3 +136,19 @@ gameRoutes.get("/", async (c) => {
   ]);
   return c.json({ total: Number(count.rows[0].total), items: rows.map(gameJson) });
 });
+
+/**
+ * One finished game, for its review at `/partidas/<id>`. Somebody else's game,
+ * a game that does not exist and an address that is not an id all get the same
+ * 404, so the answer never says whether a game exists.
+ */
+gameRoutes.get("/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!UUID.test(id)) return c.json({ error: "not_found" }, 404);
+  const { rows } = await query<GameRow>(`SELECT ${GAME_COLUMNS} FROM games WHERE id = $1 AND user_id = $2 AND finished_at IS NOT NULL`, [
+    id,
+    c.get("user").id,
+  ]);
+  if (!rows[0]) return c.json({ error: "not_found" }, 404);
+  return c.json({ game: gameJson(rows[0]) });
+});

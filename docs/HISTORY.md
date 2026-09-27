@@ -533,3 +533,24 @@ The move list under the board grew the page, and keeping the last move in view s
 ### Copying a game as PGN
 
 Mário wanted to send a reviewed game out for analysis. The review has a "Copiar PGN" button: the game in PGN (Portable Game Notation, the text every analysis board imports, Lichess and chess.com included) goes to the clipboard, or, where the clipboard is out of reach, to a `.pgn` file. The seven required tags, the computer's level as its Elo, a Termination tag, and the moves in SAN (`src/lib/chess/pgn.ts`).
+
+## 17. An address for every screen
+
+Reloading a game's review dropped Mário on the new game setup: the screen was in-memory state, remembered per tab in `sessionStorage`, and only `/`, `/redefinir` and `/admin` were addresses. He chose addresses for every screen:
+
+| Address | Screen |
+|---|---|
+| `/` | home |
+| `/treino` | the puzzle trainer |
+| `/partida` | the game in progress, or a new one |
+| `/partidas/<id>` | a finished game's review |
+| `/licoes/<id>` | a lesson |
+| `/admin` | the admin |
+| `/redefinir` | the password reset |
+
+- **One list.** The patterns live in `shared/routes.ts`. The server, the service worker's fallback and the app read that same list, where there used to be three hand-kept copies. Everything else is still a 404.
+- **No router library.** `src/lib/router.ts` is the History API and one hook. The app's back arrows go back in the history when the tab came from another screen of the app, and replace the address otherwise. The Android back button walks between screens.
+- **A game's address checks access.** `GET /api/games/:id` finds only a finished game of the signed-in account. Another person's game, a missing game and an address that is not an id all get the same 404, so the answer never says whether a game exists.
+- **The review is its own screen** (`GameReview`), apart from the game in progress, which keeps its moves in the read model as they are saved, so going to a review and back resumes from the last move.
+- **Through sign in.** A password sign in happens at whatever address the app was opened on, so the app opens there. Google comes back to the address it started from: `?next=` is kept in a cookie next to the OAuth state and only honoured if it is one of the app's own addresses (`safeReturnPath`), so the sign in cannot be used to send somebody elsewhere.
+- A lesson's result shows at the lesson's address, and a reload starts the lesson again, since its examples are drawn anew on every run.

@@ -133,11 +133,15 @@ const rowFor = (page, email) => page.locator(`[data-user="${email}"]`);
     ["/", 200],
     ["/redefinir", 200],
     ["/admin", 200],
+    ["/treino", 200],
+    ["/partida", 200],
+    ["/partidas/00000000-0000-4000-8000-000000000000", 200],
+    ["/licoes/m1-l1", 200],
   ]) {
     const response = await page.goto(BASE + path, { waitUntil: "domcontentloaded" });
     check(response.status() === expected, `${path} answers ${response.status()}`);
   }
-  for (const path of ["/dsdsdsds", "/admin/tudo", "/asaaaaaaaaa"]) {
+  for (const path of ["/dsdsdsds", "/admin/tudo", "/asaaaaaaaaa", "/partidas/nao-e-um-id", "/licoes/qualquer", "/partida/x"]) {
     const response = await page.goto(BASE + path, { waitUntil: "domcontentloaded" });
     check(response.status() === 404, `${path} answers ${response.status()}, not the app`);
   }

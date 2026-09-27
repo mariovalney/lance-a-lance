@@ -3,6 +3,7 @@ import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { CLIENT_PATHS } from "./shared/routes.ts";
 
 /**
  * What the footer shows. Easypanel hands the commit it is building to the
@@ -77,10 +78,10 @@ function pwaPlugin(): Plugin[] {
         },
       ],
       // Only the addresses the app answers fall back to the shell. Anything
-      // else has to reach the server, which answers 404. Same list as
-      // CLIENT_ROUTES in server/src/index.ts and the routing in src/App.tsx.
+      // else has to reach the server, which answers 404. The list is
+      // shared/routes.ts; here a trailing slash is allowed too.
       navigateFallback: "index.html",
-      navigateFallbackAllowlist: [/^\/$/, /^\/redefinir\/?$/, /^\/admin\/?$/],
+      navigateFallbackAllowlist: CLIENT_PATHS.map((pattern) => new RegExp(pattern.source.replace(/\$$/, "\\/?$"))),
       navigateFallbackDenylist: [/^\/api\//],
       cleanupOutdatedCaches: true,
     },

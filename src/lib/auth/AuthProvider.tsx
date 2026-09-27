@@ -12,6 +12,8 @@ function forgetOldBrowserCopies(): void {
     for (const key of Object.keys(localStorage)) {
       if (key === "lance-a-lance:progress:v1" || key === "lance-a-lance:api:v1" || key.startsWith("lance-a-lance:puzzlelog:")) localStorage.removeItem(key);
     }
+    // The screen used to be remembered per tab; it is the address now.
+    sessionStorage.removeItem("lance-a-lance:route:v1");
   } catch {
     /* nothing to clear */
   }
