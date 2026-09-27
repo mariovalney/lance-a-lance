@@ -150,7 +150,7 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
       name: "mate de dois lances",
       game: game(["f2f3", "e7e5", "g2g4", "d8h4"], [cp(20, ["e2e4"]), cp(-50, ["e7e5"]), cp(-60, ["e2e4"]), { mate: -1, best: "d8h4", pv: ["d8h4"] }, { cp: -MAX_CP, best: null }]),
       ply: 3,
-      expected: "Permite mate em 1.",
+      expected: "Depois de g4, o computador pode dar xeque-mate no lance seguinte.",
     },
     {
       name: "dar mate não é erro",
@@ -162,7 +162,7 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
       name: "cavalo pendurado",
       game: game(["e2e4", "e7e5", "g1f3", "d7d6", "f3g5"], [...opening, cp(-300, ["d8g5", "d2d4", "g5g6"])]),
       ply: 5,
-      expected: "Perde um cavalo.",
+      expected: "Com Ng5, você perde um cavalo.",
     },
     {
       // The engine's own line: a queen trade cut off by the end of the line
@@ -173,13 +173,23 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
         [...opening.slice(0, 4), cp(61, ["d2d4", "e5d4", "f3d4", "g8f6", "b1c3", "g7g6", "c1e3", "f6g4"]), cp(-545, ["d8g5", "d2d4", "g5d8", "b1c3", "g8f6", "d4e5", "d6e5", "d1d8"])],
       ),
       ply: 5,
-      expected: "Perde um cavalo.",
+      expected: "Com Ng5, você perde um cavalo.",
+    },
+    {
+      // The best line loses something too: the sentence counts only what is worse.
+      name: "perde mais do que o melhor lance",
+      game: game(
+        ["e2e4", "e7e5", "g1f3", "d7d6", "f3g5"],
+        [...opening.slice(0, 4), cp(40, ["f3e5", "d6e5", "f1c4"]), cp(-300, ["d8g5", "d2d4", "g5g2", "h1g1", "g2h3"])],
+      ),
+      ply: 5,
+      expected: "Com Ng5, você perde um peão a mais do que com Nxe5 e deixa de ganhar um peão.",
     },
     {
       name: "peça de graça ignorada",
-      game: game(["e2e4", "e7e5", "g1f3", "d7d6", "f3g5", "h7h6"], [...opening, cp(-300, ["d8g5", "d2d4", "g5g6"]), cp(20, ["g5f3", "g8f6"])]),
+      game: game(["e2e4", "e7e5", "g1f3", "d7d6", "f3g5", "h7h6"], [...opening, cp(-300, ["d8g5", "d2d4", "g5g6"]), cp(-150, ["g5f3", "g8f6"])]),
       ply: 6,
-      expected: "Deixava de ganhar um cavalo.",
+      expected: "Com h6, o computador deixa de ganhar um cavalo.",
     },
     {
       // Two searches that disagree must not mark the engine's own move.
@@ -201,14 +211,32 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
   const afterNg5 = replay(["e2e4", "e7e5", "g1f3", "d7d6", "f3g5"])!.fen();
   const bestCases: { name: string; got: string | null; expected: string | null }[] = [
     { name: "peça de graça", got: explainBest(afterNg5, ["d8g5", "d2d4", "g5g6"], { cp: 300 }, "b"), expected: "Ganha um cavalo." },
-    { name: "mate em 1", got: explainBest(afterNg5, ["d8g5"], { mate: 1 }, "b"), expected: "Dá mate." },
-    { name: "mate em 3", got: explainBest(afterNg5, ["d8g5"], { mate: 3 }, "b"), expected: "Leva a mate em 3." },
+    { name: "mate em 1", got: explainBest(afterNg5, ["d8g5"], { mate: 1 }, "b"), expected: "Dá xeque-mate." },
+    { name: "mate em 3", got: explainBest(afterNg5, ["d8g5"], { mate: 3 }, "b"), expected: "Leva a xeque-mate em 3 lances." },
     { name: "lance quieto", got: explainBest(afterNg5, ["h7h6", "g5f3"], { cp: 20 }, "b"), expected: null },
   ];
   for (const c of bestCases) {
     if (c.got !== c.expected) errors.push(`melhor lance (${c.name}): esperava ${JSON.stringify(c.expected)}, veio ${JSON.stringify(c.got)}`);
   }
   console.log(`melhor lance: ${bestCases.length} casos checados`);
+
+  // Mário's game, 25. Kf2??: the engine's own evaluations and lines. Kf1 also
+  // loses both rooks but wins the bishop back; Kf2 lets Black force a draw.
+  {
+    const { Chess } = await import("chess.js");
+    const san = "d4 Nf6 Nc3 e6 e4 Bb4 a3 Ba5 e5 d5 Bb5+ Nbd7 Bg5 h6 Bh4 Kf8 exf6 Bxc3+ bxc3 Nxf6 Nf3 g5 Bg3 c6 Bd3 Qa5 Qd2 c5 Be5 c4 Bxf6 e5 Bxh8 e4 Ne5 e3 fxe3 cxd3 Qxd3 Bh3 Qh7 Ke7 Ng6+ Kd8 Qg8+ Kc7 Qxa8 Qxc3+ Kf2".split(" ");
+    const chess = new Chess();
+    const moves = san.map((m) => {
+      const mv = chess.move(m);
+      return mv.from + mv.to + (mv.promotion ?? "");
+    });
+    const analysis: Eval[] = moves.map(() => cp(0, []));
+    analysis.push(cp(0, ["c3c2", "f2e1", "c2c3", "e1e2", "c3b2", "e2d3", "h3f5", "e3e4"]));
+    analysis[48] = cp(553, ["e1f1", "c3a1", "f1e2", "a1h1", "h8e5", "c7b6", "g2h3", "f7g6"]);
+    const got = explainMove(game(moves, analysis), 49);
+    const expected = "Você estava ganhando, e com Kf2 o jogo fica equilibrado.";
+    if (got !== expected) errors.push(`análise (Kf2 da partida): esperava ${JSON.stringify(expected)}, veio ${JSON.stringify(got)}`);
+  }
 
   const { judgements } = await import("@shared/analysis");
   const unstable = cases.find((c) => c.name === "o lance do motor não é erro")!.game;

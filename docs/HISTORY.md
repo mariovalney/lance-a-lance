@@ -610,3 +610,10 @@ With the engine's line in a modal, Mário asked that the back button close the m
   - The assisted switch no longer says the game is not rated. The header and the end of the game already say it.
 - **The game history is a page.** `/partidas` replaced the sheet, with rated and assisted games in separate tabs (the list takes `assisted=true|false`). The tab is kept with the page's history entry, so closing a review or reloading lands on the same tab. The paged list itself (`HistoryList`) is shared with the trainer's history, which stays a sheet.
 - **The engine's own move is never judged.** Mário found 24...Qxc3+ marked "?" with "Melhor era Qxc3+". Each position is searched on its own for 300 ms, and in a sharp position two neighbouring searches can disagree by more than a threshold, so the drop between them judged the very move the engine had chosen. `judgeMove` in `shared/analysis.ts` now leaves a move unjudged when it is the best move of the position before it, whatever the numbers say.
+- **Sentences that say whose move it was, in plain words.** Mário's 25. Kf2?? read "Melhor era Kf1. Perde duas torres e dois peões.", which looked like a warning against Kf1. And Kf1 does lose both rooks too: it wins the bishop back and keeps White about +5.5, while Kf2 lets Black force a draw (Stockfish in the app's own build, depth 18). The sentences now:
+  - name the move and whose it was: "Com Kf2, você…", "Com d5, o computador…". Each side was already judged from its own point of view; the sentence did not say so.
+  - come first from the evaluation when a won position turns level: "Você estava ganhando, e com Kf2 o jogo fica equilibrado.";
+  - count material against the engine's best line, each line net of its own like-for-like trades: "perde dois peões a mais do que com Kf1 e deixa de ganhar um bispo";
+  - say mates in plain words: "Depois de Bxg2, você pode dar xeque-mate em 5 lances."
+
+  The validator carries the Kf2 position with the engine's own lines.
