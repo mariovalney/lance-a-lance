@@ -617,3 +617,4 @@ With the engine's line in a modal, Mário asked that the back button close the m
   - say mates in plain words: "Depois de Bxg2, você pode dar xeque-mate em 5 lances."
 
   The validator carries the Kf2 position with the engine's own lines.
+- **A mate let in names who lets whom, and its first move.** Under the computer's 30. exd5 in one of Mário's games, "Depois de exd5, você pode dar xeque-mate em 3 lances." read as White mating: the sentence sits under the computer's move and right after the computer's best move. The mate was real (30...Qf2+ 31.Kd1 Qxe3 32.dxe6 Rc1#, Stockfish depth 22), and the move starting it was shown nowhere. He chose to keep judging both sides, as Lichess does. The sentence is now "Com exd5, o computador deixa você dar xeque-mate em 3 lances, começando por Qf2+ (dama para f2, xeque)."

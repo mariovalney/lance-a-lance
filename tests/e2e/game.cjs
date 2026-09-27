@@ -224,9 +224,11 @@ const { chromium } = require("playwright");
   await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
   check((await game()).analysis === "done" && (await p.getByRole("button", { name: "Analisar" }).count()) === 0, "a reload keeps it, and nothing is left to analyse");
   await p.getByRole("button", { name: "Copiar PGN" }).click();
+  // The clipboard still holds the copy made before the analysis until this one lands.
+  await waitFor("Copiado");
   const analysed = await p.evaluate(() => navigator.clipboard.readText());
   const judged = g.marks.filter(Boolean).length;
-  check(judged === 0 || /\$[246] \{ [^}]*Melhor era [^}]+\}/.test(analysed), `the PGN carries the judgements (${judged} judged)`);
+  check(judged === 0 || /\$[246] \{ [^}]*Melhor era [^}]+\}/.test(analysed), `the PGN carries the judgements (${judged} judged: ${analysed.split("\n\n")[1]?.slice(0, 200)})`);
 
   await p.getByRole("button", { name: "Fechar" }).click();
   await p.waitForTimeout(300);

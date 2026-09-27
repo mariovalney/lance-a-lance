@@ -4,6 +4,7 @@ import { replay } from "@shared/games";
 import type { Game, PositionEval } from "@shared/types";
 import { parseUci, type Color } from "@/lib/chess/game";
 import { PIECE_NAME, PIECE_VALUE, materialFor } from "@/lib/chess/material";
+import { describeMove } from "@/lib/chess/notation";
 
 /**
  * Why a judged move was bad, in one sentence, read off the lines the engine
@@ -132,8 +133,22 @@ export function explainMove(game: Game, ply: number): string | null {
   const other = mine ? "o computador" : "você";
   const inMoves = (n: number) => (n === 1 ? "no lance seguinte" : `em ${n} lances`);
 
+  // A mate let in: whose move let it in, who gets it, and the move it starts with.
   const mateAfter = mateFor(after, mover);
-  if (mateAfter < 0) return `Depois de ${san}, ${other} pode dar xeque-mate ${inMoves(-mateAfter)}.`;
+  if (mateAfter < 0) {
+    const n = -mateAfter;
+    let first = "";
+    if (after.best) {
+      try {
+        const board = new Chess(fen);
+        board.move(parseUci(game.moves[ply - 1]));
+        first = `${n === 1 ? ", com" : ", começando por"} ${describeMove(board.move(parseUci(after.best)))}`;
+      } catch {
+        first = "";
+      }
+    }
+    return `Com ${san}, ${who} deixa ${other} dar xeque-mate ${inMoves(n)}${first}.`;
+  }
   const mateBefore = mateFor(before, mover);
   if (mateBefore > 0 && mateAfter <= 0) {
     return `${Who} tinha xeque-mate ${mateBefore === 1 ? "no lance" : `em ${mateBefore} lances`} e deixou escapar com ${san}.`;

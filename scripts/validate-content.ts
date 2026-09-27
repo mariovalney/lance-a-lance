@@ -150,7 +150,17 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
       name: "mate de dois lances",
       game: game(["f2f3", "e7e5", "g2g4", "d8h4"], [cp(20, ["e2e4"]), cp(-50, ["e7e5"]), cp(-60, ["e2e4"]), { mate: -1, best: "d8h4", pv: ["d8h4"] }, { cp: -MAX_CP, best: null }]),
       ply: 3,
-      expected: "Depois de g4, o computador pode dar xeque-mate no lance seguinte.",
+      expected: "Com g4, você deixa o computador dar xeque-mate no lance seguinte, com Qh4# (dama para h4, xeque-mate).",
+    },
+    {
+      // Légal's trap: the computer's 5...Bxd1 lets White mate in two.
+      name: "o computador deixa mate",
+      game: game(
+        ["e2e4", "e7e5", "g1f3", "d7d6", "f1c4", "c8g4", "b1c3", "g7g6", "f3e5", "g4d1"],
+        [...opening.slice(0, 4), cp(40, ["f1c4"]), cp(40, ["g8f6"]), cp(60, ["h2h3"]), cp(50, ["g8f6"]), cp(150, ["f3e5"]), cp(300, ["d6e5", "d1g4"]), { mate: 2, best: "c4f7", pv: ["c4f7", "e8e7", "c3d5"] }],
+      ),
+      ply: 10,
+      expected: "Com Bxd1, o computador deixa você dar xeque-mate em 2 lances, começando por Bxf7+ (bispo captura em f7, xeque).",
     },
     {
       name: "dar mate não é erro",
