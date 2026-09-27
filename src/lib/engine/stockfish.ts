@@ -15,7 +15,7 @@ export const ENGINE_URL = "/engine/stockfish-19-lite-single.js";
 const MOVE_TIME_MS = 700;
 
 /** Time the full-strength engine gets for the assisted game's hint. */
-const HINT_TIME_MS = 800;
+export const HINT_TIME_MS = 800;
 
 /** One Stockfish in a Web Worker, spoken to over UCI. */
 export class Engine {

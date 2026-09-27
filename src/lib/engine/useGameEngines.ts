@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Engine, botMove } from "@/lib/engine/stockfish";
+import { Engine, HINT_TIME_MS, botMove } from "@/lib/engine/stockfish";
 import type { BotLevel } from "@/lib/engine/levels";
 
 /**
@@ -38,8 +38,11 @@ export function useGameEngines() {
     return botMove(o.engine, fen, moves, o.level);
   }, []);
 
-  /** The best move for whoever is to play after `moves`, or null without a helper. */
-  const best = useCallback(async (moves: string[]) => (helper.current ? helper.current.bestMove(moves, null) : null), []);
+  /**
+   * The best move for whoever is to play after `moves`, with the line behind it
+   * and its score from that side, or null without a helper.
+   */
+  const best = useCallback(async (moves: string[]) => (helper.current ? helper.current.evaluate(moves, HINT_TIME_MS) : null), []);
 
   return useMemo(() => ({ load, reply, best }), [load, reply, best]);
 }

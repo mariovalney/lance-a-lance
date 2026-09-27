@@ -188,6 +188,21 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
       expected: null,
     },
   ];
+  // The assisted game's reason for the best move, from its line and its score.
+  const { explainBest } = await import("@/lib/chess/explain");
+  const { replay } = await import("@shared/games");
+  const afterNg5 = replay(["e2e4", "e7e5", "g1f3", "d7d6", "f3g5"])!.fen();
+  const bestCases: { name: string; got: string | null; expected: string | null }[] = [
+    { name: "peça de graça", got: explainBest(afterNg5, ["d8g5", "d2d4", "g5g6"], { cp: 300 }, "b"), expected: "Ganha um cavalo." },
+    { name: "mate em 1", got: explainBest(afterNg5, ["d8g5"], { mate: 1 }, "b"), expected: "Dá mate." },
+    { name: "mate em 3", got: explainBest(afterNg5, ["d8g5"], { mate: 3 }, "b"), expected: "Leva a mate em 3." },
+    { name: "lance quieto", got: explainBest(afterNg5, ["h7h6", "g5f3"], { cp: 20 }, "b"), expected: null },
+  ];
+  for (const c of bestCases) {
+    if (c.got !== c.expected) errors.push(`melhor lance (${c.name}): esperava ${JSON.stringify(c.expected)}, veio ${JSON.stringify(c.got)}`);
+  }
+  console.log(`melhor lance: ${bestCases.length} casos checados`);
+
   for (const c of cases) {
     const got = explainMove(c.game, c.ply);
     if (got !== c.expected) errors.push(`análise (${c.name}): esperava ${JSON.stringify(c.expected)}, veio ${JSON.stringify(got)}`);

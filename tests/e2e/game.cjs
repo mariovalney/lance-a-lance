@@ -47,6 +47,41 @@ const { chromium } = require("playwright");
   };
   const waitFor = async (text) => p.getByText(text).first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
   const card = p.locator("section[aria-label='Partida contra o computador']");
+  /** A judged move opens the engine's line in a dialog of its own; the review stays put. */
+  const checkLine = async (marks) => {
+    const judgedAt = marks.findIndex(Boolean);
+    if (judgedAt >= 0) {
+      await p.locator("ol[aria-label='Lances da partida'] button").nth(judgedAt).click();
+      const reviewPly = (await game()).ply;
+      await p.getByRole("button", { name: "Ver lances" }).click();
+      const lineStep = async () => Number(await p.locator("[data-line-ply]").getAttribute("data-line-ply"));
+      await p.locator("[data-line-ply]").waitFor({ timeout: 5_000 }).catch(() => undefined);
+      const lineAttr = (name) => p.locator("[data-line-ply]").getAttribute(name);
+      check((await lineStep()) === 0 && (await lineAttr("data-line-arrow")) === "", "the engine's line opens before its move, with no arrow yet");
+      check(judgedAt === 0 || /^[a-h][1-8][a-h][1-8]$/.test(await lineAttr("data-line-last")), `and the game's last move marked (${await lineAttr("data-line-last")})`);
+      await p.getByRole("button", { name: "Próximo lance da linha" }).click();
+      check((await lineStep()) === 1 && /^[a-h][1-8][a-h][1-8]$/.test(await lineAttr("data-line-arrow")), `each step shows its move as an arrow (${await lineAttr("data-line-arrow")})`);
+      await p.getByRole("button", { name: "Fim da linha" }).click();
+      check((await lineStep()) > 1, `to its end (${await lineStep()})`);
+      await p.screenshot({ path: `${OUT}/game-line.png` });
+      // The back button closes the dialog and nothing else.
+      const reviewAt = p.url();
+      await p.goBack({ waitUntil: "commit" }).catch(() => undefined);
+      await p.waitForTimeout(400);
+      check(
+        (await p.locator("[data-line-ply]").count()) === 0 && p.url() === reviewAt && (await game()).ply === reviewPly,
+        `the back button closes it and leaves the review on the same move (${new URL(p.url()).pathname})`,
+      );
+      // Closed with Escape, it leaves no step behind for the back button.
+      await p.getByRole("button", { name: "Ver lances" }).click();
+      await p.locator("[data-line-ply]").waitFor({ timeout: 5_000 }).catch(() => undefined);
+      await p.keyboard.press("Escape");
+      await p.waitForTimeout(400);
+      check((await p.locator("[data-line-ply]").count()) === 0 && p.url() === reviewAt, "Escape closes it too");
+    } else {
+      console.log("no judged move in this game: the line dialog is not checked");
+    }
+  };
 
   await p.goto(base, { waitUntil: "networkidle" });
   check((await card.textContent()).includes("Rating 800?"), "the home card starts at 800, provisional");
@@ -92,6 +127,7 @@ const { chromium } = require("playwright");
     const ended = await game();
     check(new URL(p.url()).pathname === `/partidas/${ended.id}` && ended.analysis === "done", `"Ver análise" opens the game and analyses it (${ended.analysis})`);
     check((await p.getByRole("button", { name: "Partidas anteriores" }).count()) === 0, "the review offers no history either");
+    await checkLine(ended.marks);
     await p.goBack({ waitUntil: "networkidle" });
     await p.locator("[data-level]").first().waitFor({ timeout: 10_000 }).catch(() => undefined);
     check(new URL(p.url()).pathname === "/partida" && (await p.locator("[data-level]").count()) > 0, "back from it is the setup of a new game");
@@ -175,37 +211,6 @@ const { chromium } = require("playwright");
   check(stored.game?.analysis?.length === g.moves + 1, `and is saved with the game (${stored.game?.analysis?.length} positions)`);
   await p.screenshot({ path: `${OUT}/game-analysis.png` });
 
-  // A judged move opens the engine's line in a dialog of its own; the review stays put.
-  const judgedAt = g.marks.findIndex(Boolean);
-  if (judgedAt >= 0) {
-    await p.locator("ol[aria-label='Lances da partida'] button").nth(judgedAt).click();
-    const reviewPly = (await game()).ply;
-    await p.getByRole("button", { name: "Ver lances" }).click();
-    const lineStep = async () => Number(await p.locator("[data-line-ply]").getAttribute("data-line-ply"));
-    await p.locator("[data-line-ply]").waitFor({ timeout: 5_000 }).catch(() => undefined);
-    check((await lineStep()) === 0, "the engine's line opens before its move");
-    await p.getByRole("button", { name: "Próximo lance da linha" }).click();
-    check((await lineStep()) === 1, "and steps through it");
-    await p.getByRole("button", { name: "Fim da linha" }).click();
-    check((await lineStep()) > 1, `to its end (${await lineStep()})`);
-    await p.screenshot({ path: `${OUT}/game-line.png` });
-    // The back button closes the dialog and nothing else.
-    const reviewAt = p.url();
-    await p.goBack({ waitUntil: "commit" }).catch(() => undefined);
-    await p.waitForTimeout(400);
-    check(
-      (await p.locator("[data-line-ply]").count()) === 0 && p.url() === reviewAt && (await game()).ply === reviewPly,
-      `the back button closes it and leaves the review on the same move (${new URL(p.url()).pathname})`,
-    );
-    // Closed with Escape, it leaves no step behind for the back button.
-    await p.getByRole("button", { name: "Ver lances" }).click();
-    await p.locator("[data-line-ply]").waitFor({ timeout: 5_000 }).catch(() => undefined);
-    await p.keyboard.press("Escape");
-    await p.waitForTimeout(400);
-    check((await p.locator("[data-line-ply]").count()) === 0 && p.url() === reviewAt, "Escape closes it too");
-  } else {
-    console.log("no judged move in this game: the line dialog is not checked");
-  }
   await p.reload({ waitUntil: "networkidle" });
   await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
   check((await game()).analysis === "done" && (await p.getByRole("button", { name: "Analisar" }).count()) === 0, "a reload keeps it, and nothing is left to analyse");

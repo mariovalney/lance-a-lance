@@ -28,6 +28,7 @@ import { getSettings, updateSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { goBack, navigate, paths } from "@/lib/router";
 import { materialFor } from "@/lib/chess/material";
+import { explainBest } from "@/lib/chess/explain";
 import { GameHeader, GameTitle, MoveList } from "@/components/game/parts";
 import { REASON, TITLE } from "@/components/game/text";
 
@@ -42,6 +43,8 @@ interface Hint {
   to: Square;
   /** "`Nf3` (cavalo para f3)" */
   label: string;
+  /** What the engine's line shows it wins, when that is sure ("Ganha um peão."). */
+  why: string | null;
 }
 
 /** The computer never answers faster than this, so its move can be seen. */
@@ -160,17 +163,19 @@ export const GameScreen: FC = () => {
     [games, finish],
   );
 
-  /** The full-strength engine's move for the player, shown as an arrow. */
+  /** The full-strength engine's move for the player, named under the board with its reason. */
   const suggest = useCallback(
     async (id: number) => {
       const g = current.current;
       if (!g?.assisted) return;
       setHint(null);
       try {
-        const uci = await engines.best([...g.moves]);
-        if (!uci || id !== gameId.current || current.current?.moves.length !== g.moves.length) return;
-        const move = new Chess(chess.current.fen()).move(parseUci(uci));
-        setHint({ from: move.from as Square, to: move.to as Square, label: moveLabel(move) });
+        const found = await engines.best([...g.moves]);
+        if (!found || id !== gameId.current || current.current?.moves.length !== g.moves.length) return;
+        const fen = chess.current.fen();
+        const move = new Chess(fen).move(parseUci(found.best));
+        const why = explainBest(fen, found.pv, found.score, g.player);
+        setHint({ from: move.from as Square, to: move.to as Square, label: moveLabel(move), why });
       } catch {
         /* no hint this move */
       }
@@ -328,7 +333,7 @@ export const GameScreen: FC = () => {
       />
     );
   } else {
-    const assistText = game?.assisted && turn === player && !thinking ? (hint ? `Melhor lance: ${hint.label}.` : "Calculando o melhor lance.") : undefined;
+    const assistText = game?.assisted && turn === player && !thinking ? (hint ? `Melhor lance: ${hint.label}.${hint.why ? ` ${hint.why}` : ""}` : "Calculando o melhor lance.") : undefined;
     footer = (
       <FeedbackBar
         tone={illegal ? "wrong" : "neutral"}
@@ -393,7 +398,6 @@ export const GameScreen: FC = () => {
                 playerColor={player}
                 enabled={phase === "playing" && !thinking}
                 lastMove={board.lastMove}
-                extraArrows={hint && phase === "playing" ? [{ from: hint.from, to: hint.to, tone: "good" }] : undefined}
                 balanceCoords
                 onMove={onMove}
                 onIllegal={() => setIllegal(true)}
@@ -482,7 +486,7 @@ const GameSetup: FC<{
     <div className="flex items-center justify-between gap-4 rounded-xl border bg-card px-3.5 py-3">
       <Label htmlFor="game-assisted" className="flex flex-col gap-0.5 text-[15px]">
         Partida assistida
-        <span className="text-xs font-normal text-muted-foreground">Mostra o melhor lance a cada jogada. Não vale rating.</span>
+        <span className="text-xs font-normal text-muted-foreground">Mostra o melhor lance a cada jogada.</span>
       </Label>
       <Switch id="game-assisted" checked={assisted} onCheckedChange={onAssisted} />
     </div>

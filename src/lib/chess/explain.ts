@@ -67,6 +67,18 @@ function playLine(fen: string, line: string[], color: Color) {
   return settled;
 }
 
+/** Takes like for like out of a trade: a pawn for a pawn is no part of the story. */
+function netOut(gone: PieceType[], taken: PieceType[]) {
+  const rest = [...gone];
+  const kept = taken.filter((p) => {
+    const i = rest.indexOf(p);
+    if (i < 0) return true;
+    rest.splice(i, 1);
+    return false;
+  });
+  return { gone: rest, taken: kept };
+}
+
 /** Mates in the evaluation, from `color`'s side: moves to mate, positive for `color`, 0 for none. */
 function mateFor(e: PositionEval, color: Color): number {
   if (!("mate" in e)) return 0;
@@ -101,16 +113,23 @@ export function explainMove(game: Game, ply: number): string | null {
   if (best.net - played.net < MATERIAL_MARGIN) return null;
 
   if (played.net <= -MATERIAL_MARGIN) {
-    // A pawn for a pawn is no part of the story: like for like cancels out.
-    const lost = [...played.lost];
-    const won = played.won.filter((p) => {
-      const i = lost.indexOf(p);
-      if (i < 0) return true;
-      lost.splice(i, 1);
-      return false;
-    });
+    const { gone: lost, taken: won } = netOut(played.lost, played.won);
     if (lost.length) return won.length ? `Perde ${namePieces(lost)} e ganha só ${namePieces(won)}.` : `Perde ${namePieces(lost)}.`;
   }
   if (best.net >= MATERIAL_MARGIN && best.won.length) return `Deixava de ganhar ${namePieces(best.won)}.`;
   return null;
+}
+
+/**
+ * Why the engine's best move is best, for the assisted game, from its line and
+ * its score from the side to move (`color`): a mate it leads to, or material
+ * the line wins. Null when the line shows nothing that sure.
+ */
+export function explainBest(fen: string, pv: string[], score: { cp: number } | { mate: number }, color: Color): string | null {
+  if ("mate" in score && score.mate > 0) return score.mate === 1 ? "Dá mate." : `Leva a mate em ${score.mate}.`;
+  const line = playLine(fen, pv, color);
+  if (line.net < MATERIAL_MARGIN) return null;
+  const { gone: won, taken: lost } = netOut(line.won, line.lost);
+  if (!won.length) return null;
+  return lost.length ? `Ganha ${namePieces(won)} e perde só ${namePieces(lost)}.` : `Ganha ${namePieces(won)}.`;
 }

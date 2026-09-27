@@ -39,8 +39,10 @@ export const LineDialog: FC<{
   fen: string;
   /** The engine's line, in UCI, its preferred move first. */
   line: string[];
+  /** The game's move that led to `fen`, marked before the line starts. */
+  previous: [Square, Square] | null;
   orientation: Color;
-}> = ({ open, onOpenChange, fen, line, orientation }) => {
+}> = ({ open, onOpenChange, fen, line, previous, orientation }) => {
   const { steps, label } = useMemo(() => stepsOf(fen, line), [fen, line]);
   const [step, setStep] = useState(0);
   // Every opening starts from the position before the move.
@@ -51,6 +53,9 @@ export const LineDialog: FC<{
   }
 
   const last = steps.length - 1;
+  // Each step of the line shows its move as an arrow; before it, the game's own last move.
+  const shownMove = step === 0 ? previous : steps[step].lastMove;
+  const arrow = step === 0 ? null : steps[step].lastMove;
   const go = (to: number) => setStep(Math.max(0, Math.min(last, to)));
   // Move numbers as the game had them: "7. d4" or "7... Nf6".
   const [, turn, , , , moveNumber] = fen.split(" ");
@@ -59,7 +64,13 @@ export const LineDialog: FC<{
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[24rem] rounded-2xl" data-line-ply={step} aria-describedby={undefined}>
+      <DialogContent
+        className="max-w-[24rem] rounded-2xl"
+        data-line-ply={step}
+        data-line-last={shownMove?.join("") ?? ""}
+        data-line-arrow={arrow?.join("") ?? ""}
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle className="font-display">
             <RichText text={label ? `Melhor era ${label}` : "Melhor lance"} />
@@ -70,7 +81,8 @@ export const LineDialog: FC<{
           fen={steps[step].fen}
           playerColor={orientation}
           enabled={false}
-          lastMove={steps[step].lastMove}
+          lastMove={shownMove}
+          extraArrows={arrow ? [{ from: arrow[0], to: arrow[1], tone: "focus" }] : undefined}
           onMove={() => undefined}
           onIllegal={() => undefined}
         />

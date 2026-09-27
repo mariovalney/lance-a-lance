@@ -294,6 +294,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
           onOpenChange={setLineOpen}
           fen={positionAt(game.moves, ply - 1).fen}
           line={bestLine}
+          previous={positionAt(game.moves, ply - 1).lastMove}
           orientation={game.player}
         />
       ) : null}

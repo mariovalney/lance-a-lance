@@ -604,3 +604,7 @@ With the engine's line in a modal, Mário asked that the back button close the m
 - **The back button** leaves that entry, which closes the dialog.
 - **Closing it any other way** (X, Escape, tapping outside) takes the entry away again.
 - **A button inside the dialog that leaves the screen** ("Sair sem salvar", a row of the game history) leaves the dialog's entry first. The trainer test caught the first version: it left only the dialog and stayed in the lesson.
+- **Arrows in the line, text in the assisted game.**
+  - The engine's line in "Ver lances" opens with the game's last move marked, and shows each move of the line as an arrow while stepping through it. Only there.
+  - The assisted game went the other way: its best move stays under the board as text, with the reason when the engine's line shows one for certain (a mate, material won: `explainBest`), and no arrow on the board.
+  - The assisted switch no longer says the game is not rated. The header and the end of the game already say it.
