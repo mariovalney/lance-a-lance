@@ -650,3 +650,38 @@ Cursos (mariovalney/cursos) was born from this repository and grew its own lesso
 - Every wrong move says why: the king moved before the pieces, stalemate, a piece left en prise, or how many squares the box still has and how few it could have.
 - 5.3's explanation had an arrow that put the queen next to the king, undefended. Its board now marks the box.
 - The validator checks the box on known positions, and its reading of check, stalemate and a piece en prise against chess.js after every legal move of the built screens.
+
+## 20. Every lesson from module 5 on, deeper, and lesson versions
+
+After 5.3 to 5.5, Mário asked for the same review of every lesson from 5.1 on: what is shallow gets improved, "not only more exercises, but strategy explanations too", in words "simple, not boring or too technical, no AI accent or redundancy, the way a teacher would talk". Before it, 29 of those 36 lessons were under the six exercises CLAUDE.md asks for; the openings, Lucena and Philidor had three.
+
+### The pattern
+
+- **A method, not a definition.** The explanation says how to find or build the idea, in numbered steps, and the tip names the common mistake. When a lesson turns to a second idea (a defense after an attack, a plan after a structure), a short second explanation introduces it, and the lamp shows both.
+- **Six to eight exercises**, generated where possible, each answer saying why.
+- **How it sounds.** Short sentences, "você" and the imperative, a chess term only with its meaning, the reason in everyday terms ("o cavalo no canto só tem 2 casas; no centro, 8"), and none of "é importante notar", "vale ressaltar", "além disso", lists of three adjectives or a closing summary line. A step does not repeat the title, and feedback does not repeat the prompt.
+
+### Per module
+
+| Module | Explanations | New exercises |
+|---|---|---|
+| 5 | the mate search in steps; how to spot the back rank mate, and its two defenses; why `f7` is weak and how to defend | real mates in one and back rank mates from Lichess puzzles (CC0, the pools were already in `puzzles.json` and unused), the window a pawn opens, who defends `f7`, the whole defense of the scholar's mate with Black |
+| 6 | four questions about the opponent's move; why forcing moves come first; what a threat is; "loose pieces drop off" (John Nunn) and three fixes | a quiet threat (a new generator: after it a black piece can be won and none of yours can), protect your loose piece, a real hanging piece puzzle, more checklist cases |
+| 7 | the center in numbers; development ending when the rooks see each other; castling and the pawn shield; each common error with its punishment | the center from Black, the shield pawns, three weakening choices, the move that breaks a principle (five positions); every option checked to be legal |
+| 8 | how to set up each tactic, in three steps | the piece that starts the blow, on a real position, and a sixth puzzle |
+| 9 | each opening's plan | "qual é o próximo lance" at key moments and one idea move per opening (Ng5 against `f7`, the London pyramid, Bg5 pinning the defender of `d5`, `a4` against `...b5` in the accepted gambit, Nc6 and Bc5 for Black, Be7 to undo the pin) |
+| 10 | what to do with each kind of pawn (blockade the isolated one; "passed pawns must be pushed", Nimzowitsch), the open file in order, how to make and use an outpost, how to fix a bad piece | semi-open file, doubling the rooks, knight or bishop on the outpost, the plan against an isolated pawn |
+| 11 | the square in steps, why the opposition decides, king and pawn in steps with the rook pawn exception, the bridge in four steps, when the rook leaves the sixth rank | more rounds; Lucena and Philidor also in the mirror, with the rook moves of each idea |
+
+The trap in 9.3 is the known one of the Queen's Gambit Accepted: 3...b5? 4.a4 c6 5.axb5 cxb5 6.Qf3, hitting the rook on a8 (Wikipedia, "Queen's Gambit Accepted"); the validator plays it and the app shows it.
+
+### Lesson versions
+
+A lesson reworked after someone completed it would only earn half, as a review. Mário decided that a lesson that changed must be worth redoing: its first run on the new version earns full XP, and it says so on the home.
+
+- `shared/lessons.ts` gives each lesson a content version (1 unless listed). The lessons of modules 5 to 11 are at 2.
+- Migration `008_lesson_versions` adds `lesson_progress.version`, 1 for every row already there. Nothing is reset: completions and stars stay.
+- A run is a review only when the lesson was completed on its current version. The read model and the backup carry the version; a file without it reads as 1.
+- On the home, such a lesson keeps its stars and shows "Nova versão". Once nothing is left undone, the continue card suggests it ("Refazer") before the weakest lesson.
+
+A lesson whose content changes enough to deserve another run gets the next number in `shared/lessons.ts`.
