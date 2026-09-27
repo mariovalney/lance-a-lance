@@ -16,6 +16,8 @@ export interface LessonStats {
   bestStars: Stars;
   bestPct: number;
   completions: number;
+  /** The content version of the lesson's latest completion (shared/lessons.ts). */
+  version: number;
   /** Mistakes from the most recent run, for review. */
   lastMistakes: string[];
 }
@@ -165,7 +167,8 @@ export interface AccountData {
     puzzles: Omit<PuzzleStats, "recent">;
     games: Omit<GameStats, "current">;
   };
-  lessons: (LessonStats & { lessonId: string; firstCompletedAt: string | null; lastPlayedAt: string | null })[];
+  /** `version` is absent in files written before lesson versions existed, and reads as 1. */
+  lessons: (Omit<LessonStats, "version"> & { version?: number; lessonId: string; firstCompletedAt: string | null; lastPlayedAt: string | null })[];
   lessonRuns: { lessonId: string; pct: number; stars: Stars; xp: number; mistakes: number; at: string }[];
   records: { key: string; value: number }[];
   puzzleAttempts: Omit<PuzzleAttempt, "id">[];

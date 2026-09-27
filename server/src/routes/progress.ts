@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { LessonRunInput, LessonRunOutcome } from "../../../shared/types.js";
+import { lessonVersion } from "../../../shared/lessons.js";
 import { nextStreak, pctOf, starsFor, xpFor } from "../../../shared/scoring.js";
 import { clearAccount, readProgress, statsOf } from "../account.js";
 import { pool, transaction } from "../db.js";
@@ -49,11 +50,14 @@ lessonRoutes.post("/runs", async (c) => {
   await transaction(async (client) => {
     // Locks the player's row, so two runs of the same lesson cannot both count as the first.
     const stats = await statsOf(client, userId, true);
-    const done = await client.query<{ completions: number }>("SELECT completions FROM lesson_progress WHERE user_id = $1 AND lesson_id = $2", [
-      userId,
-      run.lessonId,
-    ]);
-    outcome.repeat = (done.rows[0]?.completions ?? 0) > 0;
+    const version = lessonVersion(run.lessonId);
+    const done = await client.query<{ completions: number; version: number }>(
+      "SELECT completions, version FROM lesson_progress WHERE user_id = $1 AND lesson_id = $2",
+      [userId, run.lessonId],
+    );
+    // A repeat is a lesson already completed on its current content; a reworked one earns in full once more.
+    const row = done.rows[0];
+    outcome.repeat = Boolean(row && row.completions > 0 && row.version >= version);
     outcome.xp = xpFor(run.points, outcome.repeat);
     const streak = nextStreak({ current: stats.streak_current, best: stats.streak_best, lastDay: stats.streak_last_day }, run.day);
     await client.query(
@@ -62,16 +66,17 @@ lessonRoutes.post("/runs", async (c) => {
       [userId, outcome.xp, streak.current, streak.best, streak.lastDay],
     );
     await client.query(
-      `INSERT INTO lesson_progress (user_id, lesson_id, best_stars, best_pct, completions, last_mistakes, first_completed_at, last_played_at)
-       VALUES ($1, $2, $3, $4, 1, $5, now(), now())
+      `INSERT INTO lesson_progress (user_id, lesson_id, best_stars, best_pct, completions, version, last_mistakes, first_completed_at, last_played_at)
+       VALUES ($1, $2, $3, $4, 1, $6, $5, now(), now())
        ON CONFLICT (user_id, lesson_id) DO UPDATE SET
          best_stars = GREATEST(lesson_progress.best_stars, EXCLUDED.best_stars),
          best_pct = GREATEST(lesson_progress.best_pct, EXCLUDED.best_pct),
          completions = lesson_progress.completions + 1,
+         version = GREATEST(lesson_progress.version, EXCLUDED.version),
          last_mistakes = EXCLUDED.last_mistakes,
          first_completed_at = COALESCE(lesson_progress.first_completed_at, EXCLUDED.first_completed_at),
          last_played_at = now()`,
-      [userId, run.lessonId, outcome.stars, outcome.pct, run.mistakes.slice(0, 20)],
+      [userId, run.lessonId, outcome.stars, outcome.pct, run.mistakes.slice(0, 20), version],
     );
     await client.query("INSERT INTO lesson_runs (user_id, lesson_id, pct, stars, xp, mistakes) VALUES ($1, $2, $3, $4, $5, $6)", [
       userId,

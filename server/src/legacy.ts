@@ -40,6 +40,7 @@ export function readLegacyAccount(stateRaw: unknown, puzzleLog: Record<string, u
       bestStars: stars(l.bestStars),
       bestPct: pct(l.bestPct),
       completions: nat(l.completions),
+      version: 1,
       lastMistakes: Array.isArray(l.lastMistakes) ? l.lastMistakes.filter((m): m is string => typeof m === "string").slice(0, 20) : [],
       firstCompletedAt: iso(l.firstCompletedAt),
       lastPlayedAt: iso(l.lastPlayedAt),

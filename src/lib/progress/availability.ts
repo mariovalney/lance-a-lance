@@ -1,11 +1,28 @@
 import { ALL_LESSONS, type LessonRef } from "@/content/curriculum";
 import type { ProgressState } from "@/lib/progress/types";
+import { lessonVersion } from "@shared/lessons";
 
 /** Every ready lesson is open: the learner picks any order. "next" marks the suggested one. */
 export type LessonStatus = "done" | "next" | "available" | "soon";
 
 export function isCompleted(state: ProgressState, lessonId: string): boolean {
   return (state.lessons[lessonId]?.completions ?? 0) > 0;
+}
+
+/** Completed, but on content that has changed since: worth playing again, and worth full XP once. */
+export function isOutdated(state: ProgressState, lessonId: string): boolean {
+  const l = state.lessons[lessonId];
+  return Boolean(l && l.completions > 0 && l.version < lessonVersion(lessonId));
+}
+
+/** A run of this lesson now is a review: completed on its current content. */
+export function isRepeat(state: ProgressState, lessonId: string): boolean {
+  return isCompleted(state, lessonId) && !isOutdated(state, lessonId);
+}
+
+/** The first completed lesson whose content changed since, in curriculum order. */
+export function outdatedLesson(state: ProgressState): LessonRef | null {
+  return ALL_LESSONS.find((ref) => ref.meta.lesson && isOutdated(state, ref.meta.id)) ?? null;
 }
 
 export function lessonStatus(state: ProgressState, ref: LessonRef): LessonStatus {
