@@ -10,9 +10,11 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
+import { useXpFor } from "@/components/lesson/xp";
 import { DEFAULT_ILLEGAL, moveLabel } from "@/components/lesson/steps/moveText";
 
 export const MoveStep: FC<{ screen: MoveScreen; onDone: StepDone }> = ({ screen, onDone }) => {
+  const xp = useXpFor();
   const startFen = screen.board.fen;
   const player = turnOf(startFen);
   const [fen, setFen] = useState(startFen);
@@ -63,7 +65,7 @@ export const MoveStep: FC<{ screen: MoveScreen; onDone: StepDone }> = ({ screen,
     footer = (
       <FeedbackBar
         tone={wrongCount === 0 ? "correct" : "partial"}
-        title={`${wrongCount === 0 ? "Certo!" : "Conseguiu."} +${points} XP`}
+        title={`${wrongCount === 0 ? "Certo!" : "Conseguiu."} +${xp(points)} XP`}
         message={`${moveLabel(solved)}. ${text}`}
         actionLabel="Continuar"
         onAction={() =>

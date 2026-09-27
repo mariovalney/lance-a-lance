@@ -1,7 +1,8 @@
 import type { LessonDef, MarkKind, Screen } from "@/content/types";
 import { puzzleRounds } from "@/content/lib/puzzles";
-import { boardFor, isLegalPosition, placementToFen } from "@/content/lib/positions";
-import { legalMoves, uciOf } from "@/lib/chess/game";
+import { boardFor, isLegalPosition, mirrorFiles, placementToFen } from "@/content/lib/positions";
+import { legalMoves, playLine, uciOf } from "@/lib/chess/game";
+import { FILES } from "@/lib/chess/squares";
 import { ALL_SQUARES, fileIndex, rankOf, toSquare, type Square } from "@/lib/chess/squares";
 import { pick, randInt, shuffle } from "@/lib/random";
 
@@ -50,7 +51,7 @@ function makeRace(wantCatch: boolean | null): Race | null {
 }
 
 function raceChoice(): Screen[] {
-  return shuffle([true, false, Math.random() < 0.5]).flatMap((want) => {
+  return shuffle([true, false, true, false]).flatMap((want) => {
     const r = makeRace(want);
     if (!r) return [];
     const c = catches(r.pawn, r.bk);
@@ -214,51 +215,143 @@ function keySquareMove(): Screen | null {
 const LUCENA_FEN = "1K6/1P1k4/8/8/8/8/r7/2R5 w - - 0 1";
 const PHILIDOR_FEN = "4k3/R7/1r2P3/3K4/8/8/8/8 b - - 0 1";
 
+/** The same position seen in the mirror (a-file to h-file), half the time. */
+function mirrored<T>(pick: (mirror: boolean) => T): T {
+  return pick(Math.random() < 0.5);
+}
+
+const mirrorSquare = (sq: string) => `${FILES[7 - FILES.indexOf(sq[0] as (typeof FILES)[number])]}${sq[1]}`;
+const mirrorUci = (uci: string) => mirrorSquare(uci.slice(0, 2)) + mirrorSquare(uci.slice(2, 4)) + uci.slice(4);
+
+const LUCENA_LINE = ["c1d1", "d7e7", "d1d4", "a2a1", "b8c7", "a1c1", "c7b6", "c1b1", "b6c6", "b1c1", "c6b5", "c1b1", "d4b4"];
+const LUCENA_COMMENTS = [
+  "Xeque para afastar o rei preto mais uma coluna.",
+  "A ponte: a torre vai para a 4ª fileira, para bloquear os xeques depois.",
+  "O rei sai da frente do peão.",
+  "O rei vai para o lado da torre, fugindo dos xeques.",
+  "Continua descendo.",
+  "Mais perto da ponte.",
+  "Ponte pronta: a torre bloqueia o xeque e o peão vai promover.",
+];
+
 function lucenaLine(): Screen {
+  return mirrored((mirror) => {
+    const fen = mirror ? mirrorFiles(LUCENA_FEN) : LUCENA_FEN;
+    const line = mirror ? LUCENA_LINE.map(mirrorUci) : LUCENA_LINE;
+    const played = playLine(fen, line)!;
+    return {
+      kind: "sequence",
+      key: `lucena-ponte:${fen}`,
+      prompt: "Posição de Lucena. Construa a ponte: afaste o rei preto, coloque a torre na 4ª fileira e saia com o rei.",
+      board: boardFor(fen),
+      line,
+      comments: LUCENA_COMMENTS,
+      wrong: (_m, i) => {
+        const next = played.moves[i * 2];
+        return next ? `O lance é \`${next.san}\`. ${LUCENA_COMMENTS[i]}` : "Siga o plano da ponte.";
+      },
+      success: "Essa é a técnica de Lucena, a vitória mais importante dos finais de torre.",
+      mistakeNote: "Lucena: construir a ponte",
+    } satisfies Screen;
+  });
+}
+
+/** After the check that pushes the king away: build the bridge. */
+function bridgeMove(): Screen {
+  return mirrored((mirror) => {
+    const base = playLine(LUCENA_FEN, ["c1d1", "d7e7"])!;
+    const fenBase = base.fens[base.fens.length - 1];
+    const fen = mirror ? mirrorFiles(fenBase) : fenBase;
+    const sol = legalMoves(fen).find((m) => m.piece === "r" && rankOf(m.to as Square) === 4)!;
+    return {
+      kind: "move",
+      key: `lucena-ponte-torre:${fen}`,
+      prompt: "O rei preto já foi afastado. Leve a torre para a fileira da ponte.",
+      board: boardFor(fen),
+      accept: (m) => m.piece === "r" && rankOf(m.to as Square) === 4,
+      solution: uciOf(sol),
+      wrong: (m) => (m.piece === "r" ? "A ponte fica na 4ª fileira: dali a torre se coloca entre o seu rei e os xeques." : "Primeiro a torre vai para a 4ª fileira. O rei sai depois."),
+      success: "Ponte armada. Agora o rei pode sair da frente do peão.",
+      mistakeNote: "Lucena: a ponte",
+    } satisfies Screen;
+  });
+}
+
+function bridgeChoice(): Screen {
   return {
-    kind: "sequence",
-    key: "lucena-ponte",
-    prompt: "Posição de Lucena. Construa a ponte: empurre o rei preto, coloque a torre na 4ª fileira e saia com o rei.",
+    kind: "choice",
+    key: "lucena-fileira",
+    prompt: "Na Lucena, em qual fileira a torre faz a ponte?",
     board: boardFor(LUCENA_FEN),
-    line: ["c1d1", "d7e7", "d1d4", "a2a1", "b8c7", "a1c1", "c7b6", "c1b1", "b6c6", "b1c1", "c6b5", "c1b1", "d4b4"],
-    comments: [
-      "Xeque para afastar o rei preto mais uma coluna.",
-      "A ponte: a torre vai para a 4ª fileira, para bloquear os xeques depois.",
-      "O rei sai da frente do peão.",
-      "Aproxima o rei da torre, fugindo dos xeques.",
-      "Continua descendo.",
-      "Mais perto da ponte.",
-      "Ponte pronta: a torre bloqueia o xeque e o peão vai promover.",
+    options: [
+      { id: "4", label: "4ª" },
+      { id: "1", label: "1ª" },
+      { id: "7", label: "7ª" },
     ],
-    wrong: (_m, i) =>
-      [
-        "Primeiro dê xeque na coluna `d` para afastar o rei: `Rd1+`.",
-        "Leve a torre para `d4`: é a ponte que vai bloquear os xeques.",
-        "Saia com o rei para `c7`.",
-        "Rei para `b6`, perto da torre.",
-        "Rei para `c6`.",
-        "Rei para `b5`.",
-        "Bloqueie com a torre em `b4`.",
-      ][i] ?? "Siga o plano da ponte.",
-    success: "Essa é a técnica de Lucena, a vitória mais importante dos finais de torre.",
-    mistakeNote: "Lucena: construir a ponte",
+    correct: "4",
+    explain: "Na 4ª, a torre fica perto o bastante para se colocar entre o seu rei e a torre dele quando os xeques chegarem.",
+    mistakeNote: "Lucena: a ponte",
   };
 }
 
+const PHILIDOR_SIXTH = "4k3/R7/8/3KP3/8/8/8/1r6 b - - 0 1";
+
 function philidorMove(): Screen {
+  return mirrored((mirror) => {
+    const fen = mirror ? mirrorFiles(PHILIDOR_FEN) : PHILIDOR_FEN;
+    const sol = legalMoves(fen).find((m) => m.piece === "r" && rankOf(m.to as Square) === 1)!;
+    const pawnFrom = mirror ? mirrorSquare("e5") : "e5";
+    const pawnTo = mirror ? mirrorSquare("e6") : "e6";
+    return {
+      kind: "move",
+      key: `philidor-atras:${fen}`,
+      prompt: "Você defende com as pretas. O peão branco chegou à 6ª fileira. Qual é o lance da defesa?",
+      board: boardFor(fen, { lastMove: [pawnFrom as Square, pawnTo as Square] }),
+      accept: (m) => m.piece === "r" && rankOf(m.to as Square) <= 2,
+      solution: uciOf(sol),
+      wrong: (m) =>
+        m.piece === "r"
+          ? "Com o peão na 6ª, a torre vai para longe, para dar xeques por trás do rei branco."
+          : "O rei fica onde está, na frente do peão. Quem trabalha agora é a torre.",
+      success: "Agora o rei branco não tem onde se esconder dos xeques por trás. É empate.",
+      mistakeNote: "Philidor: xeques por trás",
+    } satisfies Screen;
+  });
+}
+
+function philidorSixth(): Screen {
+  return mirrored((mirror) => {
+    const fen = mirror ? mirrorFiles(PHILIDOR_SIXTH) : PHILIDOR_SIXTH;
+    const sol = legalMoves(fen).find((m) => m.piece === "r" && rankOf(m.to as Square) === 6)!;
+    return {
+      kind: "move",
+      key: `philidor-sexta:${fen}`,
+      prompt: "Você defende com as pretas. O peão branco ainda está na 5ª fileira. Coloque a torre no lugar certo.",
+      board: boardFor(fen),
+      accept: (m) => m.piece === "r" && rankOf(m.to as Square) === 6,
+      solution: uciOf(sol),
+      wrong: (m) =>
+        m.piece === "r" ? "A torre vai para a 6ª fileira: dali ela não deixa o rei branco avançar." : "O rei fica na frente do peão. Quem se mexe é a torre.",
+      success: "Torre na 6ª: o rei branco não passa. Se o peão avançar, a torre desce para dar xeques por trás.",
+      mistakeNote: "Philidor: torre na 6ª",
+    } satisfies Screen;
+  });
+}
+
+function philidorChoice(): Screen {
   return {
-    kind: "move",
-    key: "philidor-atras",
-    prompt: "Posição de Philidor, você defende com as pretas. O peão branco chegou à 6ª fileira. Qual é o lance da defesa?",
-    board: boardFor(PHILIDOR_FEN, { lastMove: ["e5", "e6"] }),
-    accept: (m) => m.piece === "r" && rankOf(m.to as Square) <= 2,
-    solution: "b6b1",
-    wrong: (m) =>
-      m.piece === "r"
-        ? "Com o peão na 6ª, a torre vai para longe, para dar xeques por trás do rei branco: `Rb1`."
-        : "O rei fica onde está, na frente do peão. Quem trabalha agora é a torre.",
-    success: "Agora o rei branco não tem onde se esconder dos xeques por trás. É empate.",
-    mistakeNote: "Philidor: xeques por trás",
+    kind: "choice",
+    key: "philidor-quando",
+    prompt: "Na defesa de Philidor, quando a torre sai da 6ª fileira?",
+    board: boardFor("4k3/R7/1r6/3KP3/8/8/8/8 w - - 0 1"),
+    options: [
+      { id: "peao", label: "Quando o peão chega na 6ª" },
+      { id: "xeque", label: "Quando o rei branco dá xeque" },
+      { id: "nunca", label: "Nunca" },
+    ],
+    correct: "peao",
+    explain: "Com o peão na 6ª, o rei branco perde o esconderijo na frente dele. Aí a torre desce e dá xeques por trás, sem fim.",
+    mistakeNote: "Philidor: quando trocar de fileira",
   };
 }
 
@@ -275,7 +368,12 @@ export const lessonQuadrado: LessonDef = {
     {
       kind: "explain",
       title: "O quadrado do peão",
-      text: "Imagine um quadrado do peão até a casa de promoção. Se o rei adversário conseguir **entrar no quadrado** na vez dele, ele alcança o peão. Se não, o peão vira dama.",
+      text: "Dá para saber sem contar lance por lance se o rei alcança o peão:",
+      steps: [
+        "Conte as casas do peão até a promoção.",
+        "Imagine um quadrado com esse tamanho, do peão até a última fileira, para o lado do rei.",
+        "Se o rei entrar no quadrado na vez dele, alcança. Se não, o peão vira dama.",
+      ],
       board: {
         fen: "8/8/3k4/P7/8/8/8/7K b - - 0 1",
         marks: Object.fromEntries(squareOf("a5").map((s) => [s, "soft" as MarkKind])),
@@ -283,7 +381,7 @@ export const lessonQuadrado: LessonDef = {
       tip: "Peão ainda na casa inicial conta como se estivesse uma casa à frente, por causa do avanço duplo.",
     },
     ...raceChoice(),
-    ...compact([enterSquareMove()]),
+    ...compact([enterSquareMove(), enterSquareMove()]),
   ],
 };
 
@@ -297,10 +395,11 @@ export const lessonOposicao: LessonDef = {
       kind: "explain",
       title: "Oposição",
       text: "Quando os reis ficam frente a frente com **uma casa entre eles**, nenhum pode avançar. Quem precisa jogar tem que ceder espaço. Quem **não** precisa jogar tem a oposição.",
+      tip: "Nos finais de rei e peão, é a oposição que decide se o seu rei passa e o peão promove.",
       board: { fen: "8/8/4k3/8/4K3/4P3/8/8 b - - 0 1", marks: { e4: "focus", e6: "focus", e5: "bad" } },
     },
     ...oppositionChoice(),
-    ...compact([takeOpposition(), takeOpposition()]),
+    ...compact([takeOpposition(), takeOpposition(), takeOpposition()]),
   ],
 };
 
@@ -314,10 +413,11 @@ export const lessonReiPeao: LessonDef = {
       kind: "explain",
       title: "Casas-chave",
       text: "Cada peão tem **casas-chave**: se o seu rei chegar a uma delas, o peão promove. Para um peão até a 4ª fileira, são as três casas duas fileiras à frente dele.",
+      steps: ["Rei na frente do peão, não atrás.", "Leve o rei para uma casa-chave.", "Se o rei dele atrapalhar, tome a oposição."],
       board: { fen: "8/8/8/8/8/4P3/8/4K2k w - - 0 1", marks: { d5: "good", e5: "good", f5: "good" } },
-      tip: "Regra prática: rei na frente do peão, não atrás dele.",
+      tip: "Com peão da coluna `a` ou `h`, é diferente: o rei do outro lado costuma empatar no canto.",
     },
-    ...compact([keySquareMove(), keySquareMove()]),
+    ...compact([keySquareMove(), keySquareMove(), keySquareMove()]),
     ...puzzleRounds("pawnEndgame", 3, {
       lookFor: "o plano que vence (ou salva) o final",
       hint: "Pense em oposição, casas-chave e na regra do quadrado.",
@@ -331,16 +431,19 @@ export const lessonLucena: LessonDef = {
   id: "m11-l4",
   title: "Posição de Lucena",
   summary: "Como vencer o final de torre e peão: construa a ponte.",
-  minutes: 4,
+  minutes: 6,
   build: () => [
     {
       kind: "explain",
       title: "A posição de Lucena",
-      text: "Rei na frente do próprio peão, na 7ª fileira, e o rei adversário cortado por uma coluna. O rei quer sair, mas os xeques atrapalham. A solução é a **ponte**: a torre na 4ª fileira bloqueia os xeques.",
+      text: "Rei na frente do próprio peão, na 7ª fileira, e o rei dele cortado por uma coluna. O seu rei quer sair, mas os xeques atrapalham. A solução é a **ponte**:",
+      steps: ["Dê xeque para afastar o rei dele mais uma coluna.", "Leve a torre para a 4ª fileira.", "Tire o seu rei da frente do peão.", "Quando os xeques chegarem, a torre se coloca no caminho."],
       board: { fen: LUCENA_FEN, marks: { b8: "focus", b7: "focus", d7: "soft" }, arrows: [{ from: "c1", to: "d1", tone: "hint" }] },
     },
+    bridgeChoice(),
+    bridgeMove(),
     lucenaLine(),
-    ...puzzleRounds("rookEndgame", 2, {
+    ...puzzleRounds("rookEndgame", 3, {
       lookFor: "o melhor lance neste final de torre",
       hint: "Torre ativa e rei ativo decidem os finais de torre.",
       success: "Final de torre resolvido.",
@@ -353,7 +456,7 @@ export const lessonPhilidor: LessonDef = {
   id: "m11-l5",
   title: "Posição de Philidor",
   summary: "Como empatar o final de torre com um peão a menos.",
-  minutes: 3,
+  minutes: 6,
   build: () => [
     {
       kind: "explain",
@@ -362,8 +465,10 @@ export const lessonPhilidor: LessonDef = {
       steps: ["Rei na frente do peão.", "Torre na 6ª fileira enquanto o peão não chega nela.", "Peão na 6ª: torre para a 1ª fileira e xeques por trás."],
       board: { fen: "4k3/R7/1r6/3KP3/8/8/8/8 w - - 0 1", arrows: [{ from: "b6", to: "h6", tone: "hint" }] },
     },
+    philidorChoice(),
+    philidorSixth(),
     philidorMove(),
-    ...puzzleRounds("rookEndgame", 2, {
+    ...puzzleRounds("rookEndgame", 3, {
       lookFor: "o melhor lance neste final de torre",
       hint: "Torre ativa e rei ativo decidem os finais de torre.",
       success: "Final de torre resolvido.",

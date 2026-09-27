@@ -158,8 +158,9 @@ fs.mkdirSync(OUT, { recursive: true });
       if (solved) {
         if (SHOTS && !shotKinds.has("play-won")) { shotKinds.add("play-won"); await page.screenshot({ path: `${OUT}/${SCHEME}-${current.split(" ")[0]}-play-won.png` }); }
         await page.waitForTimeout(200);
+        // The win continues on its own after a countdown, which a screenshot can outlast.
         const c = page.getByRole("button", { name: /^Continuar/ });
-        if (await c.count()) await c.first().click();
+        if (await c.count()) await c.first().click({ timeout: 2000 }).catch(() => undefined);
       } else {
         await page.getByRole("button", { name: "Pular este exercício" }).first().click();
       }

@@ -5,7 +5,7 @@ import type { ModuleDef } from "@/content/types";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { StarRating } from "@/components/common/StarRating";
 import { useProgress } from "@/lib/progress/useProgress";
-import { lessonStatus, type LessonStatus } from "@/lib/progress/availability";
+import { isOutdated, lessonStatus, type LessonStatus } from "@/lib/progress/availability";
 import { cn } from "@/lib/utils";
 
 interface ModuleSectionProps {
@@ -57,7 +57,14 @@ export const ModuleSection: FC<ModuleSectionProps> = ({ module, defaultOpen = fa
         <p className="pb-2 pl-[3.25rem] text-sm text-muted-foreground">{module.description}</p>
         <ul className="flex flex-col gap-1 pb-3 pl-[3.25rem]">
           {refs.map((ref) => (
-            <LessonRow key={ref.meta.id} lessonRef={ref} status={lessonStatus(state, ref)} stars={state.lessons[ref.meta.id]?.bestStars ?? 0} onStart={onStart} />
+            <LessonRow
+              key={ref.meta.id}
+              lessonRef={ref}
+              status={lessonStatus(state, ref)}
+              stars={state.lessons[ref.meta.id]?.bestStars ?? 0}
+              updated={isOutdated(state, ref.meta.id)}
+              onStart={onStart}
+            />
           ))}
         </ul>
       </CollapsibleContent>
@@ -69,10 +76,12 @@ interface LessonRowProps {
   lessonRef: LessonRef;
   status: LessonStatus;
   stars: number;
+  /** Completed on content that has changed since. */
+  updated: boolean;
   onStart: (ref: LessonRef) => void;
 }
 
-const LessonRow: FC<LessonRowProps> = ({ lessonRef, status, stars, onStart }) => {
+const LessonRow: FC<LessonRowProps> = ({ lessonRef, status, stars, updated, onStart }) => {
   const Icon = STATUS_ICON[status];
   const playable = status !== "soon";
   return (
@@ -111,9 +120,15 @@ const LessonRow: FC<LessonRowProps> = ({ lessonRef, status, stars, onStart }) =>
           {status === "done" && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <StarRating value={stars} />
-              <span className="inline-flex items-center gap-1">
-                <RotateCcw className="h-3 w-3" aria-hidden /> Praticar de novo
-              </span>
+              {updated ? (
+                <span className="rounded-full bg-gold-soft px-2 py-0.5 font-bold text-gold" data-updated>
+                  Nova versão
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  <RotateCcw className="h-3 w-3" aria-hidden /> Praticar de novo
+                </span>
+              )}
             </span>
           )}
         </span>

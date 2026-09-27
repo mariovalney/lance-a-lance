@@ -100,8 +100,8 @@ export function attemptJson(row: AttemptRow): PuzzleAttempt {
 export async function readProgress(db: Db, userId: string): Promise<ProgressView> {
   const stats = await statsOf(db, userId);
   const [lessons, records, recent, current] = await Promise.all([
-    db.query<{ lesson_id: string; best_stars: number; best_pct: number; completions: number; last_mistakes: string[] }>(
-      "SELECT lesson_id, best_stars, best_pct, completions, last_mistakes FROM lesson_progress WHERE user_id = $1",
+    db.query<{ lesson_id: string; best_stars: number; best_pct: number; completions: number; version: number; last_mistakes: string[] }>(
+      "SELECT lesson_id, best_stars, best_pct, completions, version, last_mistakes FROM lesson_progress WHERE user_id = $1",
       [userId],
     ),
     db.query<{ key: string; value: number }>("SELECT key, value FROM drill_records WHERE user_id = $1", [userId]),
@@ -122,7 +122,7 @@ export async function readProgress(db: Db, userId: string): Promise<ProgressView
     lessons: Object.fromEntries(
       lessons.rows.map((l): [string, LessonStats] => [
         l.lesson_id,
-        { bestStars: l.best_stars as Stars, bestPct: l.best_pct, completions: l.completions, lastMistakes: l.last_mistakes },
+        { bestStars: l.best_stars as Stars, bestPct: l.best_pct, completions: l.completions, version: l.version, lastMistakes: l.last_mistakes },
       ]),
     ),
     records: Object.fromEntries(records.rows.map((r) => [r.key, r.value])),
@@ -154,10 +154,11 @@ export async function readAccount(db: Db, userId: string): Promise<AccountData> 
       best_stars: number;
       best_pct: number;
       completions: number;
+      version: number;
       last_mistakes: string[];
       first_completed_at: Date | null;
       last_played_at: Date | null;
-    }>("SELECT lesson_id, best_stars, best_pct, completions, last_mistakes, first_completed_at, last_played_at FROM lesson_progress WHERE user_id = $1 ORDER BY lesson_id", [
+    }>("SELECT lesson_id, best_stars, best_pct, completions, version, last_mistakes, first_completed_at, last_played_at FROM lesson_progress WHERE user_id = $1 ORDER BY lesson_id", [
       userId,
     ]),
     db.query<{ lesson_id: string; pct: number; stars: number; xp: number; mistakes: number; played_at: Date }>(
@@ -186,6 +187,7 @@ export async function readAccount(db: Db, userId: string): Promise<AccountData> 
       bestStars: l.best_stars as Stars,
       bestPct: l.best_pct,
       completions: l.completions,
+      version: l.version,
       lastMistakes: l.last_mistakes,
       firstCompletedAt: l.first_completed_at?.toISOString() ?? null,
       lastPlayedAt: l.last_played_at?.toISOString() ?? null,
@@ -238,9 +240,9 @@ export async function writeAccount(db: Db, userId: string, data: AccountData): P
   );
   for (const l of data.lessons) {
     await db.query(
-      `INSERT INTO lesson_progress (user_id, lesson_id, best_stars, best_pct, completions, last_mistakes, first_completed_at, last_played_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [userId, l.lessonId, l.bestStars, l.bestPct, l.completions, l.lastMistakes, l.firstCompletedAt, l.lastPlayedAt],
+      `INSERT INTO lesson_progress (user_id, lesson_id, best_stars, best_pct, completions, version, last_mistakes, first_completed_at, last_played_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [userId, l.lessonId, l.bestStars, l.bestPct, l.completions, l.version ?? 1, l.lastMistakes, l.firstCompletedAt, l.lastPlayedAt],
     );
   }
   if (data.lessonRuns.length) {

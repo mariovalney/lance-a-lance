@@ -8,6 +8,7 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
+import { useXpFor } from "@/components/lesson/xp";
 import { DEFAULT_ILLEGAL } from "@/components/lesson/steps/moveText";
 
 function pathPoints(moves: number, par: number): number {
@@ -16,6 +17,7 @@ function pathPoints(moves: number, par: number): number {
 }
 
 export const PathStep: FC<{ screen: PathScreen; onDone: StepDone }> = ({ screen, onDone }) => {
+  const xp = useXpFor();
   const startFen = screen.board.fen;
   const player = turnOf(startFen);
   const solution = useMemo(() => {
@@ -62,7 +64,7 @@ export const PathStep: FC<{ screen: PathScreen; onDone: StepDone }> = ({ screen,
     footer = (
       <FeedbackBar
         tone={moves <= par ? "correct" : "partial"}
-        title={`${moves <= par ? "Perfeito!" : "Conseguiu."} +${points} XP`}
+        title={`${moves <= par ? "Perfeito!" : "Conseguiu."} +${xp(points)} XP`}
         message={`${moves} ${moves === 1 ? "lance" : "lances"} (o mínimo é ${par}). ${screen.success}`}
         actionLabel="Continuar"
         onAction={() => onDone({ key: screen.key, points, max: 10, firstTry: moves <= par, mistakeNote: moves > par ? screen.mistakeNote : undefined })}
@@ -77,7 +79,7 @@ export const PathStep: FC<{ screen: PathScreen; onDone: StepDone }> = ({ screen,
         message={`Alvos: ${collected.length} de ${screen.targets.length} · lances: ${moves} (dá para fazer em ${par})`}
         extra={
           moves > 0 ? (
-            <button type="button" onClick={reset} className="self-start text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">
+            <button type="button" onClick={reset} data-restart className="self-start text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">
               Recomeçar
             </button>
           ) : undefined

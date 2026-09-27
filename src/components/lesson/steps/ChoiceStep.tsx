@@ -7,9 +7,11 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
+import { useXpFor } from "@/components/lesson/xp";
 import { cn } from "@/lib/utils";
 
 export const ChoiceStep: FC<{ screen: ChoiceScreen; onDone: StepDone }> = ({ screen, onDone }) => {
+  const xp = useXpFor();
   const [chosen, setChosen] = useState<string | null>(null);
   const answered = chosen !== null;
   const correct = chosen === screen.correct;
@@ -28,7 +30,7 @@ export const ChoiceStep: FC<{ screen: ChoiceScreen; onDone: StepDone }> = ({ scr
   const footer = answered ? (
     <FeedbackBar
       tone={correct ? "correct" : "wrong"}
-      title={correct ? "Certo! +10 XP" : "Não foi dessa vez"}
+      title={correct ? `Certo! +${xp(10)} XP` : "Não foi dessa vez"}
       message={screen.explain}
       actionLabel="Continuar"
       onAction={finish}

@@ -87,6 +87,7 @@ function parseAccountData(v: unknown): AccountData | null {
       isStars(l.bestStars) &&
       isInt(l.bestPct, 0, 100) &&
       nat(l.completions) &&
+      (l.version === undefined || isInt(l.version, 1, 1000)) &&
       Array.isArray(l.lastMistakes) &&
       l.lastMistakes.every((m) => isText(m, 300)) &&
       isDateOrNull(l.firstCompletedAt) &&

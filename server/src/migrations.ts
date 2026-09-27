@@ -242,4 +242,11 @@ export const MIGRATIONS: Migration[] = [
     name: "007_game_analysis",
     sql: "ALTER TABLE games ADD COLUMN analysis jsonb;",
   },
+  {
+    // The content version a lesson was last completed on (shared/lessons.ts):
+    // a lesson reworked since earns full XP once more. Everything already
+    // completed was on version 1.
+    name: "008_lesson_versions",
+    sql: "ALTER TABLE lesson_progress ADD COLUMN version smallint NOT NULL DEFAULT 1;",
+  },
 ];

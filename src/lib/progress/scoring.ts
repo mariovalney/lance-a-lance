@@ -3,7 +3,7 @@
  * run. Everything that turns facts into XP, stars, streaks and ratings is in
  * `shared/scoring.ts`, applied by the server; the app uses it to show levels.
  */
-export { PROVISIONAL_GAMES, START_RATING, levelProgress, pctOf, starsFor } from "@shared/scoring";
+export { PROVISIONAL_GAMES, START_RATING, levelProgress, pctOf, starsFor, xpFor } from "@shared/scoring";
 
 /** Points for a single-square exercise by attempt number (1-based). */
 export function pointsForAttempt(attempt: number): number {

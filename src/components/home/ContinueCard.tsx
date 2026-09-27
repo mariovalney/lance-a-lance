@@ -4,7 +4,7 @@ import { lessonCode, type LessonRef } from "@/content/curriculum";
 import { Button } from "@/components/ui/button";
 import { MiniBoard } from "@/components/common/MiniBoard";
 import { useProgress } from "@/lib/progress/useProgress";
-import { nextLesson, weakestLesson } from "@/lib/progress/availability";
+import { nextLesson, outdatedLesson, weakestLesson } from "@/lib/progress/availability";
 
 interface ContinueCardProps {
   onStart: (ref: LessonRef) => void;
@@ -13,12 +13,14 @@ interface ContinueCardProps {
 export const ContinueCard: FC<ContinueCardProps> = ({ onStart }) => {
   const { state } = useProgress();
   const next = nextLesson(state);
-  const practice = next ? null : weakestLesson(state);
-  const target = next ?? practice;
+  // With nothing left undone, a lesson that changed since it was completed comes before the weakest one.
+  const updated = next ? null : outdatedLesson(state);
+  const practice = next || updated ? null : weakestLesson(state);
+  const target = next ?? updated ?? practice;
   if (!target) return null;
 
   const isFirst = Object.keys(state.lessons).length === 0;
-  const eyebrow = next ? (isFirst ? "Comece por aqui" : "Próxima lição") : "Para revisar";
+  const eyebrow = next ? (isFirst ? "Comece por aqui" : "Próxima lição") : updated ? "Nova versão" : "Para revisar";
 
   return (
     <section
@@ -51,7 +53,7 @@ export const ContinueCard: FC<ContinueCardProps> = ({ onStart }) => {
             </>
           ) : (
             <>
-              <RotateCcw className="!h-4 !w-4" /> Praticar
+              <RotateCcw className="!h-4 !w-4" /> {updated ? "Refazer" : "Praticar"}
             </>
           )}
         </Button>

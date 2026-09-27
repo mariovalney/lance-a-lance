@@ -35,7 +35,7 @@ export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, run, xp
 
   return (
     <div className="flex h-full flex-col">
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      <main className="min-h-0 flex-1 overflow-y-auto" data-result>
         <div className="mx-auto flex w-full max-w-[30rem] flex-col gap-5 px-4 pb-6 pt-8">
           <div className="flex flex-col items-center gap-3 text-center">
             <StarRating value={stars} size="lg" animate />
@@ -48,10 +48,15 @@ export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, run, xp
           </div>
 
           <dl className="grid grid-cols-3 gap-2">
-            <Stat label="XP ganho" value={`+${result.points}`} tone="gold" />
+            <Stat label="XP ganho" value={`+${run.xp}`} tone="gold" xpGained={run.xp} />
             <Stat label="Aproveitamento" value={`${pct}%`} />
             <Stat label="De primeira" value={`${result.firstTry}/${result.exercises}`} />
           </dl>
+          {run.repeat && (
+            <p className="-mt-3 text-center text-xs text-muted-foreground" data-repeat>
+              Revisão: esta lição já estava concluída, então vale metade do XP.
+            </p>
+          )}
 
           <div className="flex flex-col gap-2 rounded-xl border bg-card px-3.5 py-3">
             <div className="flex items-baseline justify-between gap-2 text-sm">
@@ -132,8 +137,8 @@ export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, run, xp
   );
 };
 
-const Stat: FC<{ label: string; value: string; tone?: "gold" }> = ({ label, value, tone }) => (
-  <div className="flex flex-col items-center gap-0.5 rounded-xl border bg-card px-2 py-3 text-center">
+const Stat: FC<{ label: string; value: string; tone?: "gold"; xpGained?: number }> = ({ label, value, tone, xpGained }) => (
+  <div className="flex flex-col items-center gap-0.5 rounded-xl border bg-card px-2 py-3 text-center" data-xp-gained={xpGained}>
     <dd className={tone === "gold" ? "font-mono text-xl font-bold tabular text-gold" : "font-mono text-xl font-bold tabular"}>{value}</dd>
     <dt className="text-[11px] leading-tight text-muted-foreground">{label}</dt>
   </div>

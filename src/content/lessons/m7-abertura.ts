@@ -2,7 +2,7 @@ import { countText } from "@/content/lib/text";
 import type { LessonDef, Screen } from "@/content/types";
 import { hangingPieces } from "@/content/lib/analysis";
 import { afterMove, boardFor } from "@/content/lib/positions";
-import { legalMoves, load, uciOf } from "@/lib/chess/game";
+import { legalMoves, load, pieceDestinations, playLine, uciOf } from "@/lib/chess/game";
 import { readMove } from "@/lib/chess/notation";
 import { START_FEN, type Square } from "@/lib/chess/squares";
 import { pick, pickDistinct, shuffle } from "@/lib/random";
@@ -45,21 +45,47 @@ function centerRounds(n: number): Screen[] {
   });
 }
 
-function centerChoice(): Screen {
-  const fen = START_FEN;
-  const moves = legalMoves(fen);
-  const options = shuffle(["e4", pick(["a4", "h4"]), pick(["Na3", "Nh3"]), pick(["g3", "b3", "a3", "h3"])]);
+/** FEN after UCI moves from the start. */
+function fenAfter(line: string[]): string {
+  if (!line.length) return START_FEN;
+  const res = playLine(START_FEN, line);
+  if (!res) throw new Error(`bad line ${line.join(" ")}`);
+  return res.fens[res.fens.length - 1];
+}
+
+/** Choice options as SAN, each checked to be a legal move of the position. */
+function sanOptions(fen: string, sans: string[]) {
+  const legal = new Set(legalMoves(fen).map((m) => m.san));
+  for (const san of sans) if (!legal.has(san)) throw new Error(`${san} is not legal in ${fen}`);
+  return shuffle(sans).map((san) => ({ id: san, label: san, mono: true }));
+}
+
+function centerChoice(side: "w" | "b"): Screen {
+  const fen = side === "w" ? START_FEN : fenAfter(["e2e4"]);
+  const best = side === "w" ? "e4" : "e5";
+  const others = side === "w" ? [pick(["a4", "h4"]), pick(["Na3", "Nh3"]), pick(["g3", "b3", "a3", "h3"])] : [pick(["a5", "h5"]), pick(["Na6", "Nh6"]), pick(["a6", "h6", "b6"])];
+  const options = sanOptions(fen, [best, ...others]);
+  const control = centerControl(afterMove(fen, legalMoves(fen).find((m) => m.san === best)!)!.fen(), side);
   return {
     kind: "choice",
-    key: `centro-escolha:${options.join(",")}`,
-    prompt: "Qual destes lances controla mais o centro?",
-    board: { fen, marks: { d4: "soft", e4: "soft", d5: "soft", e5: "soft" } },
-    options: options.map((san) => ({ id: san, label: san, mono: true })),
-    correct: "e4",
-    explain: `\`e4\` ocupa \`e4\` e ataca \`d5\`. Depois dele, as brancas controlam ${centerControl(afterMove(fen, moves.find((m) => m.san === "e4")!)!.fen(), "w")} das 4 casas centrais.`,
+    key: `centro-escolha:${side}:${options.map((o) => o.id).join(",")}`,
+    prompt: side === "w" ? "Qual destes lances controla mais o centro?" : "Você joga de pretas. Qual destes lances disputa o centro?",
+    board: { fen, orientation: side === "w" ? "white" : "black", marks: { d4: "soft", e4: "soft", d5: "soft", e5: "soft" } },
+    options,
+    correct: best,
+    explain:
+      side === "w"
+        ? `\`e4\` ocupa \`e4\` e ataca \`d5\`. Depois dele, as brancas controlam ${control} das 4 casas do centro. Os outros lances nem chegam perto.`
+        : `\`e5\` ocupa uma casa do centro e segura o peão de \`e4\` no lugar. Depois dele, as pretas controlam ${control} das 4 casas do centro.`,
     mistakeNote: "Qual lance controla o centro",
   };
 }
+
+/** The knight's squares from the corner and from the center, for the explanation. */
+const KNIGHT_REACH = {
+  corner: pieceDestinations("N", "a1", () => undefined),
+  center: pieceDestinations("N", "d4", () => undefined),
+};
 
 /* ---------- desenvolvimento ---------- */
 
@@ -159,18 +185,58 @@ function castleSafetyRounds(n: number): Screen[] {
   });
 }
 
-function weakKingChoice(): Screen {
-  const fen = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
-  const options = ["f3", "Nf3", "Nc3", "Bc4"];
-  return {
-    kind: "choice",
-    key: "enfraquece-rei",
-    prompt: "Qual destes lances enfraquece o próprio rei?",
-    board: { fen, marks: { e1: "focus" } },
-    options: shuffle(options).map((san) => ({ id: san, label: san, mono: true })),
+const WEAK_KING = [
+  {
+    line: ["e2e4", "e7e5"],
+    options: ["f3", "Nf3", "Nc3", "Bc4"],
     correct: "f3",
-    explain: "`f3` abre a diagonal `e1`-`h4`, rouba a melhor casa do cavalo e expõe o rei. Os outros desenvolvem peças.",
-    mistakeNote: "Lance que enfraquece o rei",
+    king: "e1",
+    explain: "`f3` abre a diagonal `e1`-`h4` até o seu rei e ainda tira a melhor casa do cavalo. Os outros tiram peças de casa.",
+  },
+  {
+    line: ["e2e4"],
+    options: ["f6", "e5", "Nc6", "Nf6"],
+    correct: "f6",
+    king: "e8",
+    explain: "`f6` abre a diagonal `h5`-`e8` até o seu rei e tira a casa do cavalo. Os outros brigam pelo centro ou desenvolvem.",
+  },
+  {
+    line: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5", "e1g1", "g8f6"],
+    options: ["g4", "d3", "c3", "Nc3"],
+    correct: "g4",
+    king: "g1",
+    explain: "`g4` abre buracos na frente do rei que acabou de rocar. Os outros firmam o centro ou desenvolvem.",
+  },
+];
+
+function weakKingChoices(n: number): Screen[] {
+  return pickDistinct(WEAK_KING, n).map((w) => {
+    const fen = fenAfter(w.line);
+    const black = fen.split(" ")[1] === "b";
+    return {
+      kind: "choice",
+      key: `enfraquece-rei:${w.correct}`,
+      prompt: "Qual destes lances enfraquece o próprio rei?",
+      board: { fen, orientation: black ? "black" : "white", marks: { [w.king]: "focus" } },
+      options: sanOptions(fen, w.options),
+      correct: w.correct,
+      explain: w.explain,
+      mistakeNote: "Lance que enfraquece o rei",
+    } satisfies Screen;
+  });
+}
+
+function shieldTap(): Screen {
+  const fen = fenAfter(["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5", "e1g1", "g8f6", "d2d3", "d7d6"]);
+  return {
+    kind: "tapAll",
+    key: "escudo-do-rei",
+    prompt: "Toque nos três peões que protegem o seu rei depois do roque.",
+    board: { fen, marks: { g1: "focus" } },
+    targets: ["f2", "g2", "h2"],
+    wrong: (sq) => `O peão de \`${sq}\` não fica na frente do rei. Olhe as três casas logo acima de \`g1\`.`,
+    success: "Enquanto esses três ficam em casa, o rei tem um escudo. Cada um que avança abre uma porta.",
+    mistakeNote: "O escudo do rei",
   };
 }
 
@@ -214,6 +280,55 @@ function earlyQueen(): Screen {
   };
 }
 
+const BROKEN_PRINCIPLE = [
+  {
+    line: ["e2e4", "e7e5", "g1f3", "b8c6"],
+    options: ["h4", "Bc4", "Bb5", "Nc3"],
+    correct: "h4",
+    explain: "`h4` não desenvolve nada nem briga pelo centro. Os outros tiram uma peça de casa.",
+  },
+  {
+    line: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"],
+    options: ["Ke2", "O-O", "c3", "d3"],
+    correct: "Ke2",
+    explain: "`Ke2` deixa o rei no meio e perde o direito de rocar. Com o bispo e o cavalo fora, a hora é de rocar.",
+  },
+  {
+    line: ["e2e4", "e7e5"],
+    options: ["Qh5", "Nf3", "Nc3", "Bc4"],
+    correct: "Qh5",
+    explain: "Dama cedo vira alvo: as pretas desenvolvem atacando ela, e cada fuga é um lance perdido.",
+  },
+  {
+    line: ["e2e4", "e7e5", "g1f3"],
+    options: ["Qf6", "Nc6", "d6", "Nf6"],
+    correct: "Qf6",
+    explain: "`Qf6` coloca a dama na frente cedo e ainda rouba a melhor casa do cavalo de `g8`.",
+  },
+  {
+    line: ["d2d4", "d7d5", "c2c4"],
+    options: ["h5", "e6", "c6", "Nf6"],
+    correct: "h5",
+    explain: "`h5` não ajuda no centro nem desenvolve. Os outros defendem `d5` ou tiram uma peça.",
+  },
+];
+
+function brokenPrinciple(n: number): Screen[] {
+  return pickDistinct(BROKEN_PRINCIPLE, n).map((b) => {
+    const fen = fenAfter(b.line);
+    return {
+      kind: "choice",
+      key: `principio-quebrado:${b.correct}`,
+      prompt: "Qual destes lances vai contra as ideias da abertura?",
+      board: { fen, orientation: fen.split(" ")[1] === "b" ? "black" : "white", lastMove: [b.line.at(-1)!.slice(0, 2), b.line.at(-1)!.slice(2, 4)] as [Square, Square] },
+      options: sanOptions(fen, b.options),
+      correct: b.correct,
+      explain: b.explain,
+      mistakeNote: "Princípios de abertura",
+    } satisfies Screen;
+  });
+}
+
 function principleQuiz(n: number): Screen[] {
   const items = [
     {
@@ -254,12 +369,22 @@ export const lessonCentro: LessonDef = {
   id: "m7-l1",
   title: "Controle o centro",
   summary: "As quatro casas do meio valem ouro no começo da partida.",
-  minutes: 3,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "O centro",
-      text: "As casas `d4`, `e4`, `d5` e `e5` são o **centro**. Peças no centro alcançam mais casas e chegam rápido aos dois lados do tabuleiro.",
+      text: `As casas \`d4\`, \`e4\`, \`d5\` e \`e5\` são o **centro**. Do meio, uma peça alcança mais casas: o cavalo no canto só tem ${KNIGHT_REACH.corner.length}; no centro, ${KNIGHT_REACH.center.length}.`,
+      board: {
+        fen: "8/8/8/8/3N4/8/8/N7 w - - 0 1",
+        marks: Object.fromEntries([...KNIGHT_REACH.corner, ...KNIGHT_REACH.center].map((sq) => [sq, "soft"])),
+      },
+    },
+    {
+      kind: "explain",
+      title: "Como brigar pelo centro",
+      text: "No começo, todo lance deve ajudar no centro de algum jeito.",
+      steps: ["Ocupe com peões: `e4` e `d4` (ou `e5` e `d5`, de pretas).", "Traga peças que olham para ele, como os cavalos em `f3` e `c3`.", "Não deixe o adversário ficar com o centro sozinho."],
       board: { marks: { d4: "focus", e4: "focus", d5: "focus", e5: "focus" } },
     },
     {
@@ -272,8 +397,9 @@ export const lessonCentro: LessonDef = {
       success: "`d4`, `e4`, `d5` e `e5`.",
       mistakeNote: "Casas centrais",
     },
-    centerChoice(),
-    ...centerRounds(2),
+    centerChoice("w"),
+    centerChoice("b"),
+    ...centerRounds(3),
   ],
 };
 
@@ -281,18 +407,24 @@ export const lessonDesenvolvimento: LessonDef = {
   id: "m7-l2",
   title: "Desenvolva as peças",
   summary: "Tire cavalos e bispos de casa antes de mexer dama e torres.",
-  minutes: 3,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "Desenvolver",
-      text: "**Desenvolver** é tirar as peças da fileira de trás para casas ativas. Primeiro cavalos e bispos, mirando o centro. Dama e torres entram depois.",
+      text: "**Desenvolver** é tirar as peças da fileira de trás e colocar para jogar. Peça parada em casa não ajuda em nada.",
+      steps: [
+        "Tire os cavalos e os bispos, olhando para o centro.",
+        "Mexa cada peça uma vez, até todas saírem.",
+        "Faça o roque.",
+        "Quando as duas torres se enxergam, o desenvolvimento acabou.",
+      ],
       board: { fen: "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4", marks: { f3: "good", c4: "good" } },
-      tip: "Evite mexer a mesma peça duas vezes antes de desenvolver as outras.",
+      tip: "A dama e as torres entram depois. Se saírem cedo, viram alvo das peças menores dele.",
     },
     undevelopedRound(),
-    ...developRounds(3),
-    ...principleQuiz(1),
+    ...developRounds(4),
+    ...principleQuiz(2),
   ],
 };
 
@@ -300,17 +432,23 @@ export const lessonReiSeguro: LessonDef = {
   id: "m7-l3",
   title: "Rei seguro com o roque",
   summary: "Role cedo e não enfraqueça os peões na frente do rei.",
-  minutes: 3,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "Tire o rei do meio",
-      text: "No centro o rei fica exposto quando as colunas abrem. Com cavalo e bispo fora, faça o **roque**. E evite mexer os peões na frente do rei, principalmente o de `f`.",
+      text: "No meio, o rei fica exposto assim que as colunas se abrem. O **roque** leva o rei para o canto e a torre para o jogo, num lance só.",
+      steps: [
+        "Tire o cavalo e o bispo do lado do rei.",
+        "Faça o roque. Do lado do rei é o mais rápido.",
+        "Deixe quietos os três peões na frente do rei: eles são o escudo.",
+      ],
       board: { fen: "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 w - - 6 5", marks: { g1: "good", g8: "good" } },
+      tip: "O peão de `f` é o mais perigoso de mexer no começo: ele abre a diagonal até o rei.",
     },
-    ...castleSafetyRounds(2),
-    weakKingChoice(),
-    ...castleSafetyRounds(1),
+    ...castleSafetyRounds(3),
+    shieldTap(),
+    ...weakKingChoices(2),
   ],
 };
 
@@ -318,16 +456,22 @@ export const lessonErrosAbertura: LessonDef = {
   id: "m7-l4",
   title: "Erros comuns e armadilhas",
   summary: "Mate do louco, dama cedo e outros erros de abertura.",
-  minutes: 4,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "Aprender com os erros",
-      text: "Os erros mais comuns da abertura: mexer peões na frente do rei, trazer a dama cedo e esquecer o desenvolvimento. Veja como punir cada um.",
+      text: "Três erros aparecem toda hora no começo da partida. Cada um tem um castigo:",
+      steps: [
+        "Peões na frente do rei: abrem caminho até ele. Ataque direto.",
+        "Dama cedo: desenvolva atacando ela. Cada fuga é um lance perdido.",
+        "Pegar peão e esquecer as peças: você fica para trás. Desenvolva e abra o jogo.",
+      ],
       board: { fen: "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3", marks: { e1: "bad" }, arrows: [{ from: "h4", to: "e1" }] },
     },
     foolsMate(),
     earlyQueen(),
+    ...brokenPrinciple(2),
     ...principleQuiz(2),
   ],
 };

@@ -11,6 +11,15 @@ export function pctOf(points: number, maxPoints: number): number {
   return Math.round((points / maxPoints) * 100);
 }
 
+/**
+ * The XP a lesson run earns. Played again after it was completed, a lesson
+ * earns half, so a level says how far someone came rather than how often the
+ * easiest lesson was replayed. Stars and percentages still use the full points.
+ */
+export function xpFor(points: number, repeat: boolean): number {
+  return repeat ? Math.round(points / 2) : points;
+}
+
 export function starsFor(pct: number): Stars {
   if (pct >= 90) return 3;
   if (pct >= 70) return 2;

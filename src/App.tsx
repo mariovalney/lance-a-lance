@@ -9,7 +9,7 @@ import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { useAuth } from "@/lib/auth/useAuth";
 import { ProgressProvider } from "@/lib/progress/ProgressContext";
 import { useProgress } from "@/lib/progress/useProgress";
-import { followingLesson } from "@/lib/progress/availability";
+import { followingLesson, isRepeat } from "@/lib/progress/availability";
 import { HomeScreen } from "@/components/home/HomeScreen";
 import { LessonPlayer } from "@/components/lesson/LessonPlayer";
 import { ResultScreen } from "@/components/result/ResultScreen";
@@ -103,6 +103,7 @@ const Shell: FC = () => {
           key={run}
           lesson={ref.meta.lesson}
           code={lessonCode(ref)}
+          repeat={isRepeat(state, ref.meta.id)}
           onExit={goHome}
           onFinish={(result) => void save(ref.meta.id, result)}
         />

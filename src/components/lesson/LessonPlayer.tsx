@@ -1,7 +1,8 @@
 import { useMemo, useState, type FC } from "react";
-import { X } from "lucide-react";
-import type { LessonDef, Screen } from "@/content/types";
+import { Lightbulb, X } from "lucide-react";
+import type { ExplainScreen, LessonDef, Screen } from "@/content/types";
 import { isExercise } from "@/content/types";
+import { buildLesson } from "@/content/curriculum";
 import type { LessonRunResult } from "@/lib/progress/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ExplainBody } from "@/components/lesson/ExplainBody";
 import { ExplainStep } from "@/components/lesson/steps/ExplainStep";
 import { TapStep } from "@/components/lesson/steps/TapStep";
 import { TapAllStep } from "@/components/lesson/steps/TapAllStep";
@@ -22,10 +24,14 @@ import { PathStep } from "@/components/lesson/steps/PathStep";
 import { SequenceStep } from "@/components/lesson/steps/SequenceStep";
 import { PlayStep } from "@/components/lesson/steps/PlayStep";
 import type { ExerciseResult } from "@/components/lesson/types";
+import { RepeatContext } from "@/components/lesson/xp";
+import { xpFor } from "@/lib/progress/scoring";
 
 interface LessonPlayerProps {
   lesson: LessonDef;
   code: string;
+  /** Completed before: this run earns half the XP. */
+  repeat?: boolean;
   onExit: () => void;
   onFinish: (result: LessonRunResult) => void;
 }
@@ -53,15 +59,20 @@ function renderStep(screen: Screen, onDone: (r: ExerciseResult | null) => void) 
   }
 }
 
-export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFinish }) => {
+export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, repeat = false, onExit, onFinish }) => {
   // A fresh set of examples every time the lesson is opened.
-  const screens = useMemo(() => lesson.build(), [lesson]);
+  const screens = useMemo(() => buildLesson(lesson), [lesson]);
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<ExerciseResult[]>([]);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  // The explanations already shown: the hint opens them again, from any exercise after them.
+  const explained = useMemo(() => screens.slice(0, index).filter((s): s is ExplainScreen => s.kind === "explain"), [screens, index]);
+  const canHint = explained.length > 0 && isExercise(screens[index]);
 
   const exerciseCount = screens.filter(isExercise).length;
-  const points = results.reduce((s, r) => s + r.points, 0);
+  // What the header shows: XP, so halved on a repeat, exactly as each screen said.
+  const xp = results.reduce((s, r) => s + xpFor(r.points, repeat), 0);
   const progressPct = Math.round((index / screens.length) * 100);
 
   const handleDone = (result: ExerciseResult | null) => {
@@ -99,6 +110,7 @@ export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFi
             <span className="truncate font-semibold text-muted-foreground">
               <span className="font-mono">{code}</span> · {lesson.title}
             </span>
+            {repeat && <span className="shrink-0 font-semibold text-gold">Revisão, metade do XP</span>}
           </div>
           <div
             className="h-2.5 w-full overflow-hidden rounded-full bg-secondary"
@@ -111,14 +123,46 @@ export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFi
             <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
-        <div className="shrink-0 rounded-full bg-gold-soft px-2.5 py-1 font-mono text-sm font-bold tabular text-gold" aria-label={`${points} XP nesta lição`}>
-          {points} XP
+        {canHint && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-full text-gold hover:text-gold"
+            onClick={() => setShowHint(true)}
+            aria-label="Rever a explicação"
+            data-hint
+          >
+            <Lightbulb className="!h-5 !w-5" />
+          </Button>
+        )}
+        <div className="shrink-0 rounded-full bg-gold-soft px-2.5 py-1 font-mono text-sm font-bold tabular text-gold" aria-label={`${xp} XP nesta lição`}>
+          {xp} XP
         </div>
       </header>
 
       <div key={index} className="flex min-h-0 flex-1 flex-col">
-        {renderStep(screens[index], handleDone)}
+        <RepeatContext.Provider value={repeat}>{renderStep(screens[index], handleDone)}</RepeatContext.Provider>
       </div>
+
+      <Dialog open={showHint && canHint} onOpenChange={setShowHint}>
+        <DialogContent className="max-h-[85dvh] max-w-[26rem] overflow-y-auto rounded-2xl" data-hint-dialog>
+          <DialogHeader className="text-left">
+            <DialogTitle className="font-display text-xl">{explained[0]?.title}</DialogTitle>
+            <DialogDescription className="sr-only">A explicação desta lição, para rever antes de responder.</DialogDescription>
+          </DialogHeader>
+          {explained.map((screen, i) => (
+            <div key={i} className="flex flex-col gap-3">
+              {i > 0 && <h3 className="font-display text-lg font-bold">{screen.title}</h3>}
+              <ExplainBody screen={screen} />
+            </div>
+          ))}
+          <DialogFooter>
+            <Button className="h-11 w-full rounded-xl font-bold" onClick={() => setShowHint(false)}>
+              Voltar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmExit} onOpenChange={setConfirmExit}>
         <DialogContent className="max-w-[22rem] rounded-2xl">

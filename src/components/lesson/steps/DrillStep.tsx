@@ -11,6 +11,7 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
+import { useXpFor } from "@/components/lesson/xp";
 
 type Phase = "ready" | "running" | "over";
 
@@ -21,6 +22,7 @@ function nextTarget(prev?: Square): Square {
 }
 
 export const DrillStep: FC<{ screen: DrillScreen; onDone: StepDone }> = ({ screen, onDone }) => {
+  const xp = useXpFor();
   const { state } = useProgress();
   const previousRecord = state.records?.[screen.key] ?? 0;
   const [phase, setPhase] = useState<Phase>("ready");
@@ -86,7 +88,7 @@ export const DrillStep: FC<{ screen: DrillScreen; onDone: StepDone }> = ({ scree
     footer = (
       <FeedbackBar
         tone={hits >= screen.target ? "correct" : "partial"}
-        title={`${hits} ${hits === 1 ? "casa" : "casas"}! +${points} XP`}
+        title={`${hits} ${hits === 1 ? "casa" : "casas"}! +${xp(points)} XP`}
         message={
           isRecord
             ? `Novo recorde ${screen.recordLabel}. O anterior era ${previousRecord}.`
