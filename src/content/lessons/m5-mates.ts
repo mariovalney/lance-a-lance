@@ -6,6 +6,7 @@ import { boxSize, boxSquares, judgeApproach, judgeShrink, kingsApart, threatened
 import { legalMoves, load, uciOf } from "@/lib/chess/game";
 import { ALL_SQUARES, type Square } from "@/lib/chess/squares";
 import { pick, pickDistinct, shuffle } from "@/lib/random";
+import { puzzleRounds } from "@/content/lib/puzzles";
 
 type Pool = keyof typeof MATES;
 
@@ -153,22 +154,34 @@ export const lessonMateEm1: LessonDef = {
   id: "m5-l1",
   title: "Mate em 1",
   summary: "Ache o lance que termina a partida.",
-  minutes: 4,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "Como achar o mate",
-      text: "Olhe primeiro os lances que dão **xeque**. Para cada um, pergunte: o rei foge? alguém bloqueia? alguém captura quem ataca? Se as três respostas forem não, é mate.",
+      text: "Todo mate começa com um **xeque**. Então olhe os xeques, um por um.",
+      steps: [
+        "Ache todos os lances que dão xeque.",
+        "Para cada um, pergunte: o rei tem para onde fugir? Dá para colocar uma peça na frente? Dá para capturar quem deu o xeque?",
+        "Três vezes não: é mate.",
+      ],
       board: { fen: "6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1", arrows: [{ from: "e1", to: "e8" }] },
+      tip: "Comece pelos xeques das peças que chegam mais perto do rei.",
     },
     ...mateInOne(MATE_IN_ONE_POOL.filter((p) => p.transform !== false).map((p) => p.fen), 3, "m1-padrao"),
     {
       kind: "explain",
       title: "O rei ajuda",
-      text: "No fim da partida, a dama ou a torre sozinhas não dão mate: o seu rei precisa ficar perto e tirar as casas de fuga.",
+      text: "No fim da partida, a dama ou a torre sozinha não dá mate. O seu rei chega perto e tira as casas de fuga do outro.",
       board: { fen: "4k3/4Q3/4K3/8/8/8/8/8 b - - 0 1", marks: { e8: "bad", d8: "soft", f8: "soft", d7: "soft", f7: "soft" } },
     },
     ...mateInOne([...MATES.kq1, ...MATES.kr1, ...MATES.krr1], 3, "m1-final"),
+    ...puzzleRounds("mateIn1", 2, {
+      lookFor: "o mate desta partida de verdade",
+      hint: "Olhe os xeques, um por um.",
+      success: "Xeque-mate!",
+      note: "Mate em 1",
+    }),
   ],
 };
 
@@ -213,25 +226,59 @@ function defenseRounds(n: number): Screen[] {
     });
 }
 
+/** The window a pawn opened: the square on the second rank the king can step to. */
+const LUFT = ["6k1/5ppp/8/8/8/7P/5PP1/6K1 w - - 0 1", "6k1/5ppp/8/8/8/6P1/5P1P/6K1 w - - 0 1", "1k6/ppp5/8/8/8/P7/1PP5/1K6 w - - 0 1", "6k1/5ppp/8/8/8/5P2/6PP/6K1 w - - 0 1"];
+
+function luftRound(): Screen {
+  const fen = randomVariant(pick(LUFT));
+  const king = legalMoves(fen).filter((m) => m.piece === "k");
+  const home = king[0].from;
+  const second = home[1] === "1" ? "2" : "7";
+  const targets = [...new Set(king.filter((m) => m.to[1] === second).map((m) => m.to as Square))];
+  return {
+    kind: "tapAll",
+    key: `janela:${fen}`,
+    prompt: `Um peão já abriu a janela. Toque na casa para onde o rei pode fugir de um xeque na última fileira. ${targets.length > 1 ? `São ${targets.length}.` : ""}`.trim(),
+    board: boardFor(fen),
+    targets,
+    wrong: () => "Procure ao lado do rei, na fileira da frente, a casa que o peão deixou livre.",
+    success: "Com essa casa livre, a torre na última fileira dá só um xeque, não um mate.",
+    mistakeNote: "A janela do rei",
+  };
+}
+
 export const lessonCorredor: LessonDef = {
   id: "m5-l2",
   title: "Mate do corredor",
   summary: "O rei preso pelos próprios peões na última fileira.",
-  minutes: 3,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "O corredor",
-      text: "Quando o rei está na última fileira com os peões na frente, uma torre ou dama que chega nessa fileira dá mate. Os peões dele viram a prisão.",
+      text: "O rei ficou na última fileira, preso atrás dos próprios peões. Uma torre ou dama que chega ali dá mate.",
+      steps: [
+        "O rei dele está na última fileira?",
+        "Os peões da frente dele ainda não andaram?",
+        "Ninguém defende essa fileira? Então leve a torre ou a dama para lá.",
+      ],
       board: { fen: "3R2k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1", marks: { g8: "bad", f7: "soft", g7: "soft", h7: "soft" } },
     },
     ...mateInOne(BACK_RANK, 3, "corredor"),
+    ...puzzleRounds("backRankMate", 2, {
+      lookFor: "o mate do corredor desta partida de verdade",
+      hint: "Qual peça chega na última fileira?",
+      success: "Mate do corredor!",
+      note: "Mate do corredor",
+    }),
     {
       kind: "explain",
       title: "A janela",
-      text: "Para não levar esse mate, dê ao rei uma casa de fuga: avance um peão da frente dele (como `h3`) quando tiver tempo.",
+      text: "Para não levar esse mate, abra uma **janela**: avance um peão da frente do rei, como `h3`. Faça isso num lance calmo, antes de o perigo aparecer.",
       board: { fen: "6k1/5pp1/7p/8/8/7P/5PP1/6K1 w - - 0 1", marks: { h2: "good", h7: "good" } },
+      tip: "Outra defesa: deixe uma torre na última fileira, cuidando dela.",
     },
+    luftRound(),
     ...defenseRounds(2),
   ],
 };
@@ -347,12 +394,12 @@ export const lessonPastor: LessonDef = {
   id: "m5-l6",
   title: "Mate pastor e como se defender",
   summary: "O mate mais famoso dos iniciantes, e a defesa simples.",
-  minutes: 4,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "O ponto fraco",
-      text: "No começo, o peão de `f7` só é defendido pelo rei. O **mate pastor** junta dama e bispo contra ele.",
+      text: "No começo, o peão de `f7` só tem um defensor: o rei. O **mate pastor** junta a dama e o bispo contra ele.",
       board: { fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", marks: { f7: "focus", f2: "soft" } },
     },
     {
@@ -365,6 +412,17 @@ export const lessonPastor: LessonDef = {
       success: "`f7` (e `f2`, do lado das brancas) é o alvo favorito dos ataques rápidos.",
       reveal: { f7: "hint" },
       mistakeNote: "Casa fraca f7",
+    },
+    {
+      kind: "tap",
+      key: "defensor-f7",
+      prompt: "Toque na única peça preta que defende `f7`.",
+      board: { fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", marks: { f7: "focus" } },
+      targets: ["e8"],
+      wrong: (t) => `A peça em \`${t}\` não alcança \`f7\`. Olhe quem está do lado dele.`,
+      success: "Só o rei. E o rei não pode capturar uma peça protegida, então dama mais bispo ganham a briga.",
+      reveal: { e8: "hint" },
+      mistakeNote: "Quem defende f7",
     },
     {
       kind: "sequence",
@@ -386,13 +444,19 @@ export const lessonPastor: LessonDef = {
           "Traga a dama para `h5` (`Qh5`), atacando `f7`.",
           "Capture em `f7` com a dama: `Qxf7#`.",
         ][i] ?? "Siga o plano: dama e bispo contra `f7`.",
-      success: "Esse mate só funciona se o adversário não defender. Agora veja como se defender.",
+      success: "Esse mate só funciona se o adversário esquece de defender `f7`.",
       mistakeNote: "Mate pastor",
     },
     {
       kind: "explain",
       title: "A defesa",
-      text: "Quando a dama e o bispo miram `f7`, proteja o peão ou bloqueie o caminho. Contra `Qh5`, `g6` ataca a dama. Contra `Qf3`, `Nf6` fecha a linha.",
+      text: "Não precisa ter medo desse ataque. Defenda `f7` e aproveite que a dama saiu cedo:",
+      steps: [
+        "Jogue `e5` e `Nc6`: centro e peça nova no jogo.",
+        "Contra `Qh5`, o peão em `g6` expulsa a dama.",
+        "Contra `Qf3`, o cavalo em `f6` fecha o caminho até `f7`.",
+        "Cada fuga da dama é um lance a mais para você desenvolver.",
+      ],
       board: { fen: "r1bqkbnr/pppp1p1p/2n3p1/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 4", arrows: [{ from: "g6", to: "h5", tone: "good" }] },
     },
     ...PASTOR_DEFENSE.map(({ fen, solution }) => ({
@@ -411,5 +475,22 @@ export const lessonPastor: LessonDef = {
       success: "Mate evitado. Agora é a dama das brancas que pode virar alvo.",
       mistakeNote: "Defender o mate pastor",
     })),
+    {
+      kind: "sequence",
+      key: "pastor-pretas",
+      prompt: "Agora você é as pretas e as brancas tentam o mate pastor. Defenda até o fim.",
+      board: { fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", orientation: "black", lastMove: ["e2", "e4"] },
+      line: ["e7e5", "f1c4", "b8c6", "d1h5", "g7g6", "h5f3", "g8f6"],
+      comments: ["Centro.", "Defende `e5` e entra no jogo.", "Expulsa a dama.", "A dama mira `f7` de novo, e o cavalo fecha o caminho. Sua posição é melhor."],
+      wrong: (_m, i) =>
+        [
+          "Comece pelo centro: `e5`.",
+          "O bispo mira `f7`, mas ainda não há ameaça. Desenvolva o cavalo em `c6`, que também defende `e5`.",
+          "Dama em `h5` e bispo em `c4` ameaçam mate em `f7`. Expulse a dama com `g6`.",
+          "A dama voltou para `f3`, mirando `f7` de novo. Coloque o cavalo em `f6`.",
+        ][i] ?? "Defenda `f7`.",
+      success: "Mate evitado, e as brancas gastaram três lances com a dama.",
+      mistakeNote: "Defender o mate pastor",
+    },
   ],
 };
