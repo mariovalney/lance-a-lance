@@ -6,6 +6,7 @@ import { afterMove, boardFor, mateMoves, randomVariant, withRandomKings } from "
 import { legalMoves, load, pieceDestinations, uciOf } from "@/lib/chess/game";
 import { ALL_SQUARES, fileIndex, rankOf, toSquare, type Square } from "@/lib/chess/squares";
 import { pick, pickDistinct, shuffle } from "@/lib/random";
+import { puzzleRounds } from "@/content/lib/puzzles";
 
 type Pieces = Partial<Record<Square, string>>;
 const INNER = ALL_SQUARES.filter((s) => rankOf(s) >= 2 && rankOf(s) <= 7);
@@ -210,6 +211,48 @@ function freePieceRound(key: string, prompt: string): Screen | null {
   return null;
 }
 
+/**
+ * A quiet threat: no capture and no check, and after it a black piece can be
+ * won while none of yours can. Nothing hangs before the move.
+ */
+function threatRound(key: string, prompt: string): Screen | null {
+  for (let guard = 0; guard < 400; guard++) {
+    const pieces: Pieces = {};
+    if (!scatter(pieces, pickDistinct(["Q", "R", "B", "N", "R", "B", "N"], 3))) continue;
+    if (!scatter(pieces, pickDistinct(["r", "b", "n", "q", "p", "p"], 3))) continue;
+    const fen = withRandomKings(pieces, "w", (f) => !load(f).isCheck() && !hangingPieces(f, "b").length && !hangingPieces(f, "w").length);
+    if (!fen) continue;
+    const quiet = legalMoves(fen).filter((m) => !m.captured && !afterMove(fen, m)!.isCheck());
+    const threatens = (m: Parameters<typeof afterMove>[1]) => {
+      const after = afterMove(fen, m)!.fen();
+      return hangingPieces(after, "b").length > 0 && hangingPieces(after, "w").length === 0;
+    };
+    const good = quiet.filter(threatens);
+    if (!good.length || good.length > 4) continue;
+    return {
+      kind: "move",
+      key: `${key}:${fen}`,
+      prompt,
+      board: { fen },
+      accept: (m) => !m.captured && !afterMove(fen, m)!.isCheck() && threatens(m),
+      solution: uciOf(good[0]),
+      wrong: (m) => {
+        if (m.captured) return "Essa captura não ganha nada. Procure um lance que ataque uma peça dele.";
+        if (afterMove(fen, m)!.isCheck()) return "Esse xeque não ganha nada. Procure um lance que ataque uma peça.";
+        const mine = hangingPieces(afterMove(fen, m)!.fen(), "w");
+        if (mine.length) return `Depois de \`${m.san}\`, quem fica em perigo é ${ARTICLE[mine[0].type]} sua ${NAME[mine[0].type]} em \`${mine[0].sq}\`.`;
+        return `\`${m.san}\` não ataca nenhuma peça que ele precise salvar.`;
+      },
+      success: (m) => {
+        const hit = hangingPieces(afterMove(fen, m)!.fen(), "b")[0];
+        return `Agora ${ARTICLE[hit.type]} ${NAME[hit.type]} em \`${hit.sq}\` está em perigo, e ele gasta o próximo lance para salvar.`;
+      },
+      mistakeNote: "Achar uma ameaça",
+    };
+  }
+  return null;
+}
+
 /* ---------- loose pieces ---------- */
 
 function looseRound(color: "w" | "b"): Screen | null {
@@ -237,6 +280,42 @@ function looseRound(color: "w" | "b"): Screen | null {
       },
       success: color === "w" ? "Peças soltas são o alvo favorito do adversário. Proteja-as." : "Peças soltas do adversário são alvos para você.",
       mistakeNote: color === "w" ? "Ver suas peças soltas" : "Ver peças soltas do adversário",
+    };
+  }
+  return null;
+}
+
+/** One of your pieces is loose (not yet attacked): protect it without loosening another. */
+function protectLooseRound(): Screen | null {
+  for (let guard = 0; guard < 400; guard++) {
+    const pieces: Pieces = {};
+    if (!scatter(pieces, pickDistinct(["Q", "R", "B", "N", "P", "P", "R"], 4))) continue;
+    if (!scatter(pieces, pickDistinct(["r", "b", "n", "p"], 2))) continue;
+    const fen = withRandomKings(pieces, "w", (f) => !load(f).isCheck() && loosePieces(f, "w").length === 1 && !hangingPieces(f, "w").length);
+    if (!fen) continue;
+    const loose = loosePieces(fen, "w")[0];
+    const ok = (m: Parameters<typeof afterMove>[1]) => {
+      const after = afterMove(fen, m)!.fen();
+      return loosePieces(after, "w").length === 0 && hangingPieces(after, "w").length === 0;
+    };
+    const moves = legalMoves(fen);
+    const good = moves.filter(ok);
+    if (!good.length || good.length === moves.length) continue;
+    return {
+      kind: "move",
+      key: `proteger-solta:${fen}`,
+      prompt: "Uma peça sua está solta. Deixe todas protegidas.",
+      board: { fen },
+      accept: (m) => ok(m),
+      solution: uciOf(good[0]),
+      wrong: (m) => {
+        const left = loosePieces(afterMove(fen, m)!.fen(), "w")[0];
+        return left
+          ? `Depois de \`${m.san}\`, ${ARTICLE[left.type]} ${NAME[left.type]} em \`${left.sq}\` continua sem proteção.`
+          : `Depois de \`${m.san}\`, uma peça sua pode ser capturada com lucro.`;
+      },
+      success: `${cap(ARTICLE[loose.type])} ${NAME[loose.type]} de \`${loose.sq}\` não está mais sozinh${ARTICLE[loose.type]}.`,
+      mistakeNote: "Proteger a peça solta",
     };
   }
   return null;
@@ -281,6 +360,11 @@ function checklistPuzzles(): Screen[] {
   // 4) save your piece
   const tp = threatPair();
   if (tp[1]) out.push({ ...tp[1], prompt: "Use o checklist. O adversário acabou de jogar: qual é o melhor lance?" } as Screen);
+  // 5) another free piece, 6) a threat when nothing can be taken
+  const fp2 = freePieceRound("checklist-peca-solta", "Use o checklist. Qual é o melhor lance aqui?");
+  if (fp2) out.push(fp2);
+  const th = threatRound("checklist-ameaca", "Use o checklist. Nada para capturar: qual lance cria uma ameaça?");
+  if (th) out.push(th);
   return shuffle(out);
 }
 
@@ -290,15 +374,17 @@ export const lessonAmeaca: LessonDef = {
   id: "m6-l1",
   title: "O que o adversário ameaça?",
   summary: "Antes de pensar no seu plano, veja o que o último lance dele quer.",
-  minutes: 3,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "A primeira pergunta",
-      text: "A maioria das peças perdidas por iniciantes vem de não olhar o último lance do adversário. Antes de jogar, pergunte: **o que esse lance ameaça?**",
+      text: "Muita peça se perde porque ninguém olhou o último lance do adversário. Antes de jogar, pergunte:",
+      steps: ["Para onde a peça dele foi?", "O que ela ataca agora?", "O que ela deixou de defender?", "Ele ameaça mate?"],
       board: { fen: "6k1/5ppp/8/8/3N4/2b5/5PPP/6K1 w - - 0 1", lastMove: ["a5", "c3"], arrows: [{ from: "c3", to: "d4" }], marks: { d4: "focus" } },
-      tip: "Olhe para onde a peça foi e tudo o que ela passou a atacar dali.",
+      tip: "Achou a ameaça? Defenda sem deixar outra peça sua sozinha.",
     },
+    ...threatPair(),
     ...threatPair(),
     ...threatPair(),
   ],
@@ -308,16 +394,23 @@ export const lessonCCT: LessonDef = {
   id: "m6-l2",
   title: "Xeques, capturas e ameaças",
   summary: "Procure seus lances fortes nessa ordem: xeques, capturas, ameaças.",
-  minutes: 3,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "Os lances forçados",
-      text: "Na sua vez, olhe primeiro os lances que obrigam o adversário a responder: **xeques**, depois **capturas**, depois **ameaças**. É onde moram os golpes.",
-      steps: ["Xeques: quais peças minhas atacam o rei?", "Capturas: o que eu posso capturar, e com lucro?", "Ameaças: que lance ataca algo valioso?"],
+      text: "Na sua vez, comece pelos lances que obrigam o adversário a responder. Eles deixam pouca escolha para ele, e é neles que aparecem os golpes.",
+      steps: ["Xeques: quais peças suas podem dar xeque?", "Capturas: o que dá para capturar, saindo no lucro?", "Ameaças: que lance ataca uma peça dele?"],
     },
-    ...([checkersRound(), capturesRound(), freePieceRound("cct-ganho", "Uma captura ganha material de graça. Encontre-a.")].filter(Boolean) as Screen[]),
-    ...([checkersRound()].filter(Boolean) as Screen[]),
+    ...([checkersRound(), capturesRound(), freePieceRound("cct-ganho", "Uma captura ganha material de graça. Encontre-a."), capturesRound()].filter(Boolean) as Screen[]),
+    {
+      kind: "explain",
+      title: "Ameaças",
+      text: "Sem xeque e sem captura boa, procure uma **ameaça**: um lance que ataca uma peça que ele não pode deixar cair. Ou ela está sem defesa, ou vale mais que a peça que ataca.",
+      board: { fen: "6k1/5ppp/2n5/8/8/8/5PPP/5BK1 w - - 0 1", arrows: [{ from: "f1", to: "b5", tone: "good" }, { from: "b5", to: "c6" }], marks: { c6: "focus" } },
+      tip: "Uma boa ameaça não deixa nenhuma peça sua sozinha.",
+    },
+    ...([threatRound("cct-ameaca", "Nada para capturar. Faça um lance que ameace ganhar uma peça."), threatRound("cct-ameaca", "Faça um lance que ameace ganhar uma peça.")].filter(Boolean) as Screen[]),
   ],
 };
 
@@ -325,18 +418,30 @@ export const lessonSoltas: LessonDef = {
   id: "m6-l3",
   title: "Peças soltas",
   summary: "Peça sem proteção é o alvo número um das táticas.",
-  minutes: 3,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "Peças soltas",
-      text: "Uma peça **solta** não tem nenhuma outra peça protegendo. Ela ainda não está perdida, mas basta um ataque para virar problema.",
+      text: "Uma peça **solta** não tem nenhuma outra protegendo. Ainda não está perdida, mas basta um ataque. O grande mestre John Nunn resumiu assim: peça solta cai.",
       board: { fen: "6k1/5ppp/2n5/8/8/2B5/5PPP/6K1 w - - 0 1", marks: { c6: "focus", c3: "focus" } },
       tip: "Aqui o cavalo preto e o bispo branco estão soltos.",
     },
     ...([looseRound("b"), looseRound("w")].filter(Boolean) as Screen[]),
     ...([freePieceRound("solta-captura", "Capture uma peça solta que você ataca.")].filter(Boolean) as Screen[]),
-    ...([looseRound("w")].filter(Boolean) as Screen[]),
+    ...puzzleRounds("hangingPiece", 1, {
+      lookFor: "a peça solta desta partida de verdade",
+      hint: "Qual peça dele ninguém protege?",
+      success: "Peça solta, peça ganha.",
+      note: "Capturar a peça solta",
+    }),
+    {
+      kind: "explain",
+      title: "Como consertar",
+      text: "Achou uma peça sua solta? Três jeitos de resolver:",
+      steps: ["Proteja com outra peça.", "Leve a peça para uma casa protegida.", "Troque-a por uma peça dele."],
+    },
+    ...([protectLooseRound(), protectLooseRound(), looseRound("b")].filter(Boolean) as Screen[]),
   ],
 };
 
@@ -344,12 +449,13 @@ export const lessonChecklist: LessonDef = {
   id: "m6-l4",
   title: "O checklist completo",
   summary: "Quatro perguntas antes de cada lance.",
-  minutes: 4,
+  minutes: 5,
   build: () => [
     {
       kind: "explain",
       title: "O checklist",
       text: "Faça estas perguntas antes de cada lance. Com o tempo, vira hábito e fica rápido.",
+      tip: "A ordem importa: primeiro se defender, depois atacar.",
       steps: [
         "O que o último lance do adversário ameaça?",
         "Tenho xeques, capturas ou ameaças fortes?",
