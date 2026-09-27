@@ -20,8 +20,8 @@ export const env = {
   databaseUrl: required("DATABASE_URL"),
   /** Easypanel terminates TLS in front of this, so the cookie is Secure there. */
   cookieSecure: flag("COOKIE_SECURE", production),
-  /** The built PWA. */
-  staticDir: path.resolve(process.env.STATIC_DIR ?? path.join(import.meta.dirname, "../../dist")),
+  /** The built PWA; by default `dist/` in the directory the server starts from (the repository root, or /app in the image). */
+  staticDir: path.resolve(process.env.STATIC_DIR ?? "dist"),
 
   /**
    * Where the app is reachable from outside, used to build the link in a

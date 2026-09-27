@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:server": "tsc -p server/tsconfig.json",
-    "start": "node server/dist/index.js",
+    "start": "node server/dist/server/src/index.js",
     "dev:server": "tsx watch server/src/index.ts",
     "gen:icons": "node scripts/gen-icons.mjs",
     "lint": "oxlint",

@@ -1,54 +1,62 @@
-// Shared paths and the little web server the Playwright scripts run against.
-// Run `pnpm e2e:prepare` first to produce dist/.
-const path = require("node:path");
+// Shared setup for the Playwright scripts. Every script drives a running
+// server (the database is the only place progress lives), so start one first:
+//
+//   DATABASE_URL=... COOKIE_SECURE=false PORT=3111 pnpm start
+//
+// and point the scripts at it with URL (default http://127.0.0.1:3111).
 const fs = require("node:fs");
-const http = require("node:http");
+const path = require("node:path");
+const { ensureAdmin } = require("./accounts.cjs");
 
-const ROOT = path.resolve(__dirname, "../..");
+const ROOT = path.join(__dirname, "../..");
 const OUT = path.join(__dirname, ".out");
 const DIST = path.join(ROOT, "dist");
 fs.mkdirSync(OUT, { recursive: true });
 
-const TYPES = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".webmanifest": "application/manifest+json; charset=utf-8",
-  ".woff2": "font/woff2",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".wasm": "application/wasm",
-};
+const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true };
 
-/**
- * Serves dist/ over http, because the app needs a real origin: a service
- * worker, localStorage per origin and fetch all refuse to work from file://.
- *
- * Resolves to the base URL. The server is unref'd, so a finished script exits
- * without closing it. Set URL to point a script at a running server instead.
- */
-function serveDist() {
-  if (!fs.existsSync(path.join(DIST, "index.html"))) {
-    throw new Error(`no build at ${DIST}: run pnpm e2e:prepare first`);
-  }
-  return new Promise((resolve) => {
-    const server = http.createServer((req, res) => {
-      const url = new URL(req.url, "http://localhost");
-      let file = path.join(DIST, decodeURIComponent(url.pathname));
-      if (!file.startsWith(DIST)) return res.writeHead(403).end();
-      // Anything that is not a file is a client route: hand back the app shell.
-      if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, "index.html");
-      res.writeHead(200, { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream" });
-      fs.createReadStream(file).pipe(res);
-    });
-    server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`));
-    server.unref();
-  });
+/** The server to drive; fails early with the command to start one. */
+async function siteUrl() {
+  const base = process.env.URL ?? "http://127.0.0.1:3111";
+  const health = await fetch(`${base}/api/health`).catch(() => null);
+  if (!health?.ok) throw new Error(`no server at ${base}: start one (DATABASE_URL=... COOKIE_SECURE=false PORT=3111 pnpm start) or set URL`);
+  return base;
 }
 
-/** The address a script should open: a server it was pointed at, or its own. */
-const siteUrl = async () => process.env.URL ?? (await serveDist());
+/**
+ * A phone-sized browser context signed in as the test account, with its
+ * progress wiped, so every script starts from nothing. `ctx.request` shares the
+ * session with the pages, and is what the seeding helpers below use.
+ */
+async function signedIn(browser, options = {}) {
+  const base = await siteUrl();
+  const ctx = await browser.newContext({ ...PHONE, ...options });
+  await ensureAdmin(ctx.request, base);
+  const reset = await ctx.request.post(`${base}/api/progress/reset`);
+  if (!reset.ok()) throw new Error(`could not reset the test account: ${reset.status()}`);
+  return { base, ctx };
+}
 
-module.exports = { ROOT, OUT, DIST, serveDist, siteUrl };
+async function postOk(request, url, data) {
+  const response = await request.post(url, { data });
+  if (!response.ok()) throw new Error(`POST ${url} -> ${response.status()} ${await response.text()}`);
+  return response.json();
+}
+
+/** Marks lessons done the way playing them does: a perfect run each. */
+async function completeLessons(request, base, ids) {
+  for (const lessonId of ids) await postOk(request, `${base}/api/lessons/runs`, { lessonId, points: 100, maxPoints: 100, mistakes: [], records: [] });
+}
+
+/** The trainer's puzzle ids, from its data file. */
+function puzzleIds(n) {
+  const data = JSON.parse(fs.readFileSync(path.join(ROOT, "src/content/data/trainer.json"), "utf8"));
+  return data.puzzles.slice(0, n).map((p) => p.i);
+}
+
+/** Rated puzzle attempts, through the same endpoint the trainer uses. */
+async function attemptPuzzles(request, base, attempts) {
+  for (const { id, status } of attempts) await postOk(request, `${base}/api/puzzles/attempts`, { puzzleId: id, status });
+}
+
+module.exports = { ROOT, OUT, DIST, PHONE, siteUrl, signedIn, postOk, completeLessons, puzzleIds, attemptPuzzles };

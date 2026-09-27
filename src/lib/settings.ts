@@ -9,6 +9,7 @@ export interface Settings {
   /** Last computer level and side picked for a game. */
   gameLevel?: number;
   gameSide?: "w" | "b" | "random";
+  gameAssisted?: boolean;
 }
 
 const KEY = "lance-a-lance:settings:v1";

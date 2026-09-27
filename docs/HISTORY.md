@@ -21,6 +21,7 @@ Lesson titles, interface copy and the chess vocabulary stay in Portuguese throug
 13. [Signing in with Google](#13-signing-in-with-google)
 14. [The admin, and only the addresses the app answers](#14-the-admin-and-only-the-addresses-the-app-answers)
 15. [Games against the computer, and the links on Android](#15-games-against-the-computer-and-the-links-on-android)
+16. [Leaving the Artifact's data shape](#16-leaving-the-artifacts-data-shape)
 
 ## 1. Summary
 
@@ -204,6 +205,8 @@ The day streak is still computed in the state (`streak`), but no longer appears 
 - **Picking the next puzzle:** close to the current rating, with a window growing 75 points at a time until there are options. It avoids recently seen ones and respects the theme or opening filter.
 
 ### 5.5 Persistence
+
+Superseded: progress is rows in Postgres, scored by the server (section 16). What follows is how it worked until then.
 
 - **State (`ProgressState`, `version: 1`):** XP, lessons, run history, records, trainer statistics and `updatedAt`.
 - **Inside claude.ai** (historical, see section 11):
@@ -486,5 +489,35 @@ Two ways were on the table: real rated games on Lichess through the Board API, w
 - **Levels:** 400 to 2400 in steps of 200 (`src/lib/engine/levels.ts`). From 1400 up the strength is Stockfish's own `UCI_Elo`, which accepts 1320 to 3190 ([Stockfish UCI options](https://github.com/official-stockfish/Stockfish/wiki/UCI-&-Commands)). Below that it cannot be asked to play weaker, so those levels search shallow at `Skill Level 0` and play a random legal move now and then, more often the lower the level. Those five ratings are estimates. The setup screen said so at first; Mário found the note tiresome and it went.
 - **Rating:** its own, apart from the puzzles, because solving a tactic and playing a whole game are different skills, and both Lichess and chess.com keep them apart. He chose to start it at 800 rather than at the puzzle rating. Same Elo as the trainer (K 40 for the first 10 games, then 20, floor 100), with a draw worth half. `eloScoreDelta` is the shared formula.
 - **What counts:** a game is rated once both sides have moved, as on Lichess. Abandoning after that asks first and counts as a loss. There is no clock and no take-back. XP: 10 for a win, 5 for a draw, 2 for a loss.
-- **Data:** `ProgressState.games` (`rating`, `played`, `wins`, `draws`, `losses`), optional, so older rows and backups load unchanged. There is no game log yet.
+- **Data:** at first a `games` field on the progress document. It became a table the same day (section 16).
+
+### What came after, the same day
+
+- **A game survives a reload**, and a reload keeps the screen: the moves are saved after each one (`PUT /api/games/:id/moves`), the screen rebuilds the board from them, and the current screen is kept per tab in `sessionStorage`. The back arrow leaves a game saved; the home card then says "Continuar".
+- **Move list** under the board, and **assisted games**: a second, full-strength engine shows the best move as an arrow and in words ("Melhor lance: `Nf3` (cavalo para f3)."). An assisted game is never rated, like a game on Lichess with help. Engine searches run one at a time: Stockfish.js takes a `position` sent during a search at once, and that crashed the WASM ("unreachable").
+- **History and review**, like the trainer's: every finished game, paged, and a read-only replay with first, previous, next and last.
+- **No "Início" link** after a game, and no "Abaixo de 1400 o nível é aproximado" note: both were noise.
+- **The board balanced** in the game screen: with the coordinates outside, the rank numbers push the board right. `Board` takes `balanceCoords`, which mirrors that column on the right and lets both reach half into the page margin.
+
+## 16. Leaving the Artifact's data shape
+
+The games brought it to a head. Progress was still what the claude.ai Artifact's key-value store had allowed: one JSON document per person, the puzzle history in JSON chunks of 100, a copy in localStorage for a page with no API, and every number computed in the browser and sent whole, last write wins. A game did not fit: saving one meant re-sending the whole document on every move, and its history had to be capped. Mário asked to review the whole data structure to work with the database, with no workarounds, and made three calls:
+
+- **No more page without an API.** The database is the only store. The static-host mode existed only so the browser checks could serve `dist/` on its own; they now drive the real server, which CI already had.
+- **The server scores.** The app reports facts and shows what the server answers. The rules sit in `shared/`, compiled into both halves, so they are written once.
+- **Convert and drop the old tables** in one migration, with his exported backup as the net and the importer still reading that format.
+
+### The shape
+
+- **Tables** (migration `005_relational`): `player_stats` (the running totals: XP, day streak, puzzle and game ratings and counts), `lesson_progress` (best stars and score, completions, last mistakes), `lesson_runs` (every run), `drill_records`, `puzzle_attempts` (every rated attempt; the "recently seen" list the trainer avoids is now a query) and `games` (one row per game, one open game per person by a partial unique index). The rating stays a running total rather than a sum of deltas, because an Elo depends on the order of what happened.
+- **One transaction per fact.** A lesson run updates the totals, the lesson, the run log and the records together. A finished game is replayed with chess.js; the result is read off the final position, and a resignation is the only thing taken on trust. A puzzle's rating comes from `trainer.json`, not from the request.
+- **The player's day** for the streak comes from the app (a server in UTC would cut the day in the wrong place for Brazil), bounded to a day either side of the server's.
+- **The conversion** is TypeScript, not SQL: `server/src/legacy.ts` turns a version 1 document and its chunks into rows, forgiving the fields older versions left out. Migrations can now `run` code after their SQL, in the same transaction; 005 converts every account, checks the puzzle attempts all landed, and drops `progress` and `puzzle_log`. The backup importer uses the same function for a version 1 file.
+- **The backup** is version 2: the rows, built by the server (`GET /api/backup`) and restored by it (`POST /api/backup`), which replaces everything in one transaction.
+- **The app** is a thin client: `ProgressProvider` loads the read model and every write answers with the new one. The lesson result waits for the server (with a retry if it cannot be reached); the trainer shows the rating change the server computed.
+- **The tests** sign in as a test admin whose progress each script wipes, and seed through the real endpoints (`tests/e2e/env.cjs`). The account test restores a version 1 file and checks every part of it arrived.
+
+### Checked before shipping
+
+An old-schema database was built with the previous server, filled with a document shaped like his (993 XP, ten lessons, a 1017 rating, a puzzle log with lost slots, drill records), and then booted with the new one: every number and every attempt came across, and the old tables were gone. A version 2 backup exported, reset and restored gave back an identical read model.
 

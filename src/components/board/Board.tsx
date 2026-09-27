@@ -45,9 +45,16 @@ export interface BoardProps {
   interaction?: BoardInteraction;
   className?: string;
   ariaLabel?: string;
+  /**
+   * With the coordinates outside, the rank numbers take a column left of the
+   * board, which pushes the board right. This mirrors that column on the right
+   * and lets both reach half into the page margin, so the board itself sits in
+   * the middle with the same space on each side.
+   */
+  balanceCoords?: boolean;
 }
 
-const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, className, ariaLabel }) => {
+const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, className, ariaLabel, balanceCoords = false }) => {
   // Kept in state rather than a ref so it can be read during render. Not
   // `useId`, because React ids contain colons and this one reaches the DOM.
   const [boardId] = useState(() => `board${++boardCounter}`);
@@ -175,7 +182,8 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
   const files = orientation === "white" ? FILES : [...FILES].reverse();
   const ranks = orientation === "white" ? [...RANKS].reverse() : RANKS;
 
-  return (
+  const balanced = outside && balanceCoords;
+  const board = (
     <div
       className={cn("mx-auto w-full select-none", className)}
       style={{ maxWidth: "min(100%, 30rem, calc(100dvh - 330px))", minWidth: "min(100%, 240px)" }}
@@ -183,7 +191,7 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
       aria-label={ariaLabel ?? "Tabuleiro"}
     >
       {outside ? (
-        <div className="grid grid-cols-[14px_1fr] grid-rows-[1fr_16px] gap-x-1">
+        <div className={cn("grid grid-rows-[1fr_16px] gap-x-1", balanced ? "grid-cols-[14px_1fr_14px]" : "grid-cols-[14px_1fr]")}>
           <div className="flex flex-col" aria-hidden>
             {ranks.map((r) => (
               <span key={r} className="flex flex-1 items-center justify-center font-mono text-[11px] font-bold text-muted-foreground">
@@ -192,6 +200,7 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
             ))}
           </div>
           <Chessboard options={options} />
+          {balanced && <div />}
           <div />
           <div className="flex" aria-hidden>
             {files.map((f) => (
@@ -206,6 +215,7 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
       )}
     </div>
   );
+  return balanced ? <div className="-mx-2">{board}</div> : board;
 };
 
 export const Board = memo(BoardImpl);

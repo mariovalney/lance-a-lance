@@ -1,70 +1,87 @@
 import { Hono } from "hono";
-import { query } from "../db.js";
+import type { LessonRunInput, LessonRunOutcome } from "../../../shared/types.js";
+import { nextStreak, pctOf, starsFor } from "../../../shared/scoring.js";
+import { clearAccount, readProgress, statsOf } from "../account.js";
+import { pool, transaction } from "../db.js";
 import { requireUser, type Vars } from "./auth.js";
+import { isInt, playerDay } from "./util.js";
 
+/**
+ * A person's progress. The app reads it whole and reports what happened; the
+ * scoring happens here, in one transaction per fact.
+ */
 export const progressRoutes = new Hono<Vars>();
 progressRoutes.use("*", requireUser);
 
-/**
- * The whole ProgressState, stored as one document per user, exactly like the
- * artifact database does. Writes are last-one-wins; the client reconciles on
- * load by keeping whichever copy has the newer `updatedAt`.
- */
-function isProgress(value: unknown): value is { version: 1; xp: number; updatedAt?: number } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { version?: unknown }).version === 1 &&
-    typeof (value as { xp?: unknown }).xp === "number"
-  );
+progressRoutes.get("/", async (c) => c.json({ progress: await readProgress(pool, c.get("user").id) }));
+
+/** Everything back to zero: stats, lessons, records, puzzles and games. */
+progressRoutes.post("/reset", async (c) => {
+  const userId = c.get("user").id;
+  await transaction((client) => clearAccount(client, userId));
+  return c.json({ progress: await readProgress(pool, userId) });
+});
+
+const LESSON_ID = /^m\d{1,2}-l\d{1,2}$/;
+const isText = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
+
+function parseRun(body: unknown): LessonRunInput | null {
+  const b = body as Partial<LessonRunInput> | null;
+  if (!b || typeof b.lessonId !== "string" || !LESSON_ID.test(b.lessonId)) return null;
+  if (!isInt(b.maxPoints, 0, 1000) || !isInt(b.points, 0, b.maxPoints)) return null;
+  if (!Array.isArray(b.mistakes) || b.mistakes.length > 100 || !b.mistakes.every((m) => isText(m, 300))) return null;
+  const records = b.records ?? [];
+  if (!Array.isArray(records) || records.length > 20 || !records.every((r) => isText(r?.key, 80) && isInt(r?.value, 0, 100_000))) return null;
+  return { lessonId: b.lessonId, points: b.points, maxPoints: b.maxPoints, mistakes: b.mistakes, records, day: playerDay(b.day) };
 }
 
-progressRoutes.get("/", async (c) => {
-  const { rows } = await query<{ state: unknown }>("SELECT state FROM progress WHERE user_id = $1", [c.get("user").id]);
-  return c.json({ state: rows[0]?.state ?? null });
-});
+/** A finished lesson run: XP, the lesson's best, the streak and the drill records. */
+export const lessonRoutes = new Hono<Vars>();
+lessonRoutes.use("*", requireUser);
 
-progressRoutes.put("/", async (c) => {
-  const state = await c.req.json().catch(() => null);
-  if (!isProgress(state)) return c.json({ error: "invalid_state" }, 400);
-  await query(
-    `INSERT INTO progress (user_id, state, updated_at) VALUES ($1, $2, $3)
-     ON CONFLICT (user_id) DO UPDATE SET state = EXCLUDED.state, updated_at = EXCLUDED.updated_at, saved_at = now()`,
-    [c.get("user").id, state, Number(state.updatedAt ?? 0)],
-  );
-  return c.json({ ok: true });
-});
+lessonRoutes.post("/runs", async (c) => {
+  const run = parseRun(await c.req.json().catch(() => null));
+  if (!run) return c.json({ error: "invalid_run" }, 400);
+  const userId = c.get("user").id;
+  const pct = pctOf(run.points, run.maxPoints);
+  const outcome: LessonRunOutcome = { xp: run.points, pct, stars: starsFor(pct) };
 
-/** The puzzle history, in the same chunks of 100 the client pages through. */
-export const puzzleLogRoutes = new Hono<Vars>();
-puzzleLogRoutes.use("*", requireUser);
-
-function chunkOf(raw: string): number | null {
-  const chunk = Number(raw);
-  return Number.isInteger(chunk) && chunk >= 0 && chunk < 100_000 ? chunk : null;
-}
-
-puzzleLogRoutes.get("/:chunk", async (c) => {
-  const chunk = chunkOf(c.req.param("chunk"));
-  if (chunk === null) return c.json({ error: "invalid_chunk" }, 400);
-  const { rows } = await query<{ entries: unknown }>("SELECT entries FROM puzzle_log WHERE user_id = $1 AND chunk = $2", [
-    c.get("user").id,
-    chunk,
-  ]);
-  return c.json({ entries: rows[0]?.entries ?? null });
-});
-
-puzzleLogRoutes.put("/:chunk", async (c) => {
-  const chunk = chunkOf(c.req.param("chunk"));
-  if (chunk === null) return c.json({ error: "invalid_chunk" }, 400);
-  const body = await c.req.json().catch(() => null);
-  const entries = body?.entries;
-  // 100 per chunk, and the client pads unfilled slots with null.
-  if (!Array.isArray(entries) || entries.length > 100) return c.json({ error: "invalid_entries" }, 400);
-  await query(
-    `INSERT INTO puzzle_log (user_id, chunk, entries) VALUES ($1, $2, $3)
-     ON CONFLICT (user_id, chunk) DO UPDATE SET entries = EXCLUDED.entries, saved_at = now()`,
-    [c.get("user").id, chunk, JSON.stringify(entries)],
-  );
-  return c.json({ ok: true });
+  await transaction(async (client) => {
+    const stats = await statsOf(client, userId, true);
+    const streak = nextStreak({ current: stats.streak_current, best: stats.streak_best, lastDay: stats.streak_last_day }, run.day);
+    await client.query(
+      `UPDATE player_stats SET xp = xp + $2, streak_current = $3, streak_best = $4, streak_last_day = $5, updated_at = now()
+        WHERE user_id = $1`,
+      [userId, outcome.xp, streak.current, streak.best, streak.lastDay],
+    );
+    await client.query(
+      `INSERT INTO lesson_progress (user_id, lesson_id, best_stars, best_pct, completions, last_mistakes, first_completed_at, last_played_at)
+       VALUES ($1, $2, $3, $4, 1, $5, now(), now())
+       ON CONFLICT (user_id, lesson_id) DO UPDATE SET
+         best_stars = GREATEST(lesson_progress.best_stars, EXCLUDED.best_stars),
+         best_pct = GREATEST(lesson_progress.best_pct, EXCLUDED.best_pct),
+         completions = lesson_progress.completions + 1,
+         last_mistakes = EXCLUDED.last_mistakes,
+         first_completed_at = COALESCE(lesson_progress.first_completed_at, EXCLUDED.first_completed_at),
+         last_played_at = now()`,
+      [userId, run.lessonId, outcome.stars, outcome.pct, run.mistakes.slice(0, 20)],
+    );
+    await client.query("INSERT INTO lesson_runs (user_id, lesson_id, pct, stars, xp, mistakes) VALUES ($1, $2, $3, $4, $5, $6)", [
+      userId,
+      run.lessonId,
+      outcome.pct,
+      outcome.stars,
+      outcome.xp,
+      run.mistakes.length,
+    ]);
+    for (const r of run.records) {
+      await client.query(
+        `INSERT INTO drill_records (user_id, key, value) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, key) DO UPDATE SET value = GREATEST(drill_records.value, EXCLUDED.value),
+           updated_at = CASE WHEN EXCLUDED.value > drill_records.value THEN now() ELSE drill_records.updated_at END`,
+        [userId, r.key, r.value],
+      );
+    }
+  });
+  return c.json({ progress: await readProgress(pool, userId), run: outcome });
 });

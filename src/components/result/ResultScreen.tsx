@@ -3,7 +3,8 @@ import { playSound } from "@/lib/sound";
 import { Home, RotateCcw, Sparkles } from "lucide-react";
 import { lessonCode, type LessonRef } from "@/content/curriculum";
 import type { LessonRunResult } from "@/lib/progress/types";
-import { levelProgress, pctOf, starsFor } from "@/lib/progress/scoring";
+import type { LessonRunOutcome } from "@shared/types";
+import { levelProgress } from "@/lib/progress/scoring";
 import { Button } from "@/components/ui/button";
 import { StarRating } from "@/components/common/StarRating";
 import { RichText } from "@/components/common/RichText";
@@ -12,6 +13,7 @@ import { NextLessonButton } from "@/components/result/NextLessonButton";
 interface ResultScreenProps {
   lessonRef: LessonRef;
   result: LessonRunResult;
+  run: LessonRunOutcome;
   xpBefore: number;
   xpAfter: number;
   prevRecords: Record<string, number>;
@@ -21,9 +23,8 @@ interface ResultScreenProps {
   onHome: () => void;
 }
 
-export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, xpBefore, xpAfter, prevRecords, next, onNext, onRetry, onHome }) => {
-  const pct = pctOf(result);
-  const stars = starsFor(pct);
+export const ResultScreen: FC<ResultScreenProps> = ({ lessonRef, result, run, xpBefore, xpAfter, prevRecords, next, onNext, onRetry, onHome }) => {
+  const { pct, stars } = run;
   const before = levelProgress(xpBefore);
   const after = levelProgress(xpAfter);
   const leveledUp = after.level > before.level;

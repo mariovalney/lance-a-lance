@@ -2,17 +2,8 @@
  * Talks to the API in server/. Same origin as the page, so the session cookie
  * rides along on its own and there is nothing to store in the browser.
  *
- * Every call has to survive there being no API at all: on a plain static host
- * `/api/...` answers with the app's own HTML or a 404. `ApiUnavailable` is how
- * that case is told apart from a real failure, so the interface can hide the
- * account section instead of showing an error the reader cannot act on.
- *
- * A dead fetch means one of two very different things, and the app treats them
- * in opposite ways: on a static host there is no API to reach and progress
- * stays in the browser, while on the real site it means the phone is offline,
- * and there the browser keeps no progress to fall back on. So the first JSON
- * answer from this origin is remembered, and after that a dead fetch is
- * `ApiOffline`.
+ * The database behind the API is the only place progress lives, so a server
+ * that cannot be reached is `ApiOffline`, and the app shows the offline screen.
  */
 export interface Account {
   id: string;
@@ -21,33 +12,7 @@ export interface Account {
   isAdmin: boolean;
 }
 
-const API_SEEN = "lance-a-lance:api:v1";
-
-function rememberApi(): void {
-  try {
-    if (localStorage.getItem(API_SEEN) !== "1") localStorage.setItem(API_SEEN, "1");
-  } catch {
-    /* a browser that keeps nothing reads as a static host while it is offline */
-  }
-}
-
-function apiSeen(): boolean {
-  try {
-    return localStorage.getItem(API_SEEN) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/** There is no API behind this page at all. */
-export class ApiUnavailable extends Error {
-  constructor() {
-    super("no API behind this page");
-    this.name = "ApiUnavailable";
-  }
-}
-
-/** There is an API, and it cannot be reached right now. */
+/** The API cannot be reached right now. */
 export class ApiOffline extends Error {
   constructor() {
     super("Sem conexão com o servidor. Tente de novo.");
@@ -69,6 +34,11 @@ const MESSAGES: Record<string, string> = {
   not_found: "Essa conta não existe mais.",
   reset_unavailable: "Este site não está configurado para enviar e-mail.",
   server_error: "O servidor não respondeu direito. Tente de novo.",
+  unauthorized: "A sessão expirou. Entre de novo.",
+  backup_version: "Este arquivo é de uma versão que o app não conhece.",
+  backup_corrupt: "O progresso dentro do arquivo está corrompido.",
+  not_a_backup: "Esse arquivo não é um backup do Lance a Lance.",
+  backup_too_big: "Esse arquivo é grande demais para ser um backup.",
 };
 
 export class ApiError extends Error {
@@ -80,7 +50,11 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * One request to the API. A 401 comes back as its body for the calls that ask
+ * who is signed in (`allowUnauthorized`); anywhere else it is an error.
+ */
+export async function call<T>(path: string, init?: RequestInit & { allowUnauthorized?: boolean }): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
@@ -89,26 +63,18 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
       credentials: "same-origin",
     });
   } catch {
-    // Nothing listening, or nothing to listen through.
-    throw apiSeen() ? new ApiOffline() : new ApiUnavailable();
+    throw new ApiOffline();
   }
-
-  // A static host answers a missing route with the app shell, not with JSON.
-  // A proxy in front of a server that is down answers with an error page, which
-  // is not JSON either, but does say so in the status.
-  if (!response.headers.get("content-type")?.includes("application/json")) {
-    throw response.ok && !apiSeen() ? new ApiUnavailable() : new ApiOffline();
-  }
-
-  rememberApi();
+  // A proxy in front of a server that is down answers with an error page, not JSON.
+  if (!response.headers.get("content-type")?.includes("application/json")) throw new ApiOffline();
   const body = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
   if (response.ok) return body as T;
-  if (response.status === 401) return body as T;
+  if (response.status === 401 && init?.allowUnauthorized) return body as T;
   throw new ApiError(body?.error ?? "server_error");
 }
 
 export async function fetchAccount(): Promise<Account | null> {
-  const body = await call<{ user: Account | null }>("/auth/me");
+  const body = await call<{ user: Account | null }>("/auth/me", { allowUnauthorized: true });
   return body?.user ?? null;
 }
 

@@ -1,250 +1,118 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
+import { ApiOffline } from "@/lib/auth/api";
+import { progressApi } from "@/lib/progress/api";
+import { ProgressContext, type ProgressContextValue } from "@/lib/progress/context";
+import type { ProgressState } from "@/lib/progress/types";
 import { OfflineScreen } from "@/components/home/OfflineScreen";
-import { storageIdentity } from "@/lib/auth/context";
-import { useAuth } from "@/lib/auth/useAuth";
-import { BACKUP_VERSION, type Backup } from "@/lib/progress/backup";
-import { ProgressContext } from "@/lib/progress/context";
-import { START_RATING, applyGame, applyPuzzle, applyRun } from "@/lib/progress/scoring";
-import { LOG_CHUNK, connectRemote, loadLocal, loadLocalLog, saveLocal, saveLocalLog, type RemoteStore } from "@/lib/progress/storage";
-import { emptyProgress, type GameResult, type LessonRunResult, type ProgressState, type PuzzleLogEntry, type PuzzleResult } from "@/lib/progress/types";
 
-/** Merge two copies of a log chunk, keeping every filled slot. */
-function mergeChunk(a: (PuzzleLogEntry | null)[] | null, b: (PuzzleLogEntry | null)[] | null): (PuzzleLogEntry | null)[] {
-  const len = Math.max(a?.length ?? 0, b?.length ?? 0);
-  return Array.from({ length: len }, (_, i) => a?.[i] ?? b?.[i] ?? null);
-}
-
+/**
+ * The signed-in person's progress, as the server keeps it. The app reports what
+ * happened and shows the numbers the server answers with; nothing is kept in
+ * the browser. This part loads it; `ProgressStore` holds it once it is here.
+ */
 export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const auth = useAuth();
-  const identity = storageIdentity(auth.state);
-  /**
-   * Only a page with no API behind it keeps progress in the browser. Behind an
-   * account the account is the only copy, and what would be the browser's is
-   * held in memory for this visit and thrown away with the tab.
-   */
-  const inBrowser = identity === "no-api";
-  const [state, setState] = useState<ProgressState>(() => (inBrowser ? (loadLocal() ?? emptyProgress()) : emptyProgress()));
-  // Nothing to wait for when this browser is the store; with an account the
-  // course would flash empty before the first load answers.
-  const [phase, setPhase] = useState<"loading" | "ready" | "unreachable">(inBrowser ? "ready" : "loading");
-  const remoteRef = useRef<RemoteStore | null>(null);
-  // Mirrors `state` synchronously: the recorders need the value they just wrote
-  // before React re-renders. Every `setState` below updates this ref too.
-  const stateRef = useRef(state);
-  // The puzzle log of a visit with an account, in place of the browser's copy.
-  const memoryLog = useRef(new Map<number, (PuzzleLogEntry | null)[]>());
-
-  const readLog = useCallback(
-    (chunk: number): (PuzzleLogEntry | null)[] | null => (inBrowser ? loadLocalLog(chunk) : (memoryLog.current.get(chunk) ?? null)),
-    [inBrowser],
-  );
-
-  const writeLog = useCallback(
-    (chunk: number, entries: (PuzzleLogEntry | null)[]) => {
-      if (inBrowser) saveLocalLog(chunk, entries as PuzzleLogEntry[]);
-      else memoryLog.current.set(chunk, entries);
-    },
-    [inBrowser],
-  );
-
-  const keep = useCallback(
-    (next: ProgressState) => {
-      stateRef.current = next;
-      setState(next);
-      if (inBrowser) saveLocal(next);
-    },
-    [inBrowser],
-  );
-
-  const push = useCallback((next: ProgressState) => {
-    // A failed write is caught by the next one, or by the load on the next boot.
-    remoteRef.current?.save(next).catch(() => undefined);
-  }, []);
+  const [loaded, setLoaded] = useState<ProgressState | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
 
   useEffect(() => {
-    // Nobody to load for: the gate keeps this out of the tree until there is.
-    if (identity === null) return;
     let cancelled = false;
-    remoteRef.current = null;
-
-    (async () => {
-      try {
-        const remote = await connectRemote(!inBrowser);
+    progressApi
+      .load()
+      .then(({ progress }) => !cancelled && setLoaded(progress))
+      .catch((error) => {
         if (cancelled) return;
-        if (!remote) {
-          setPhase("ready");
-          return;
-        }
-        remoteRef.current = remote;
-        const cloud = await remote.load();
-        if (cancelled) return;
-        if (cloud) keep(cloud);
-        setPhase("ready");
-
-        // The puzzle history lives in its own documents, which the progress
-        // document above does not carry. In the background: there can be one
-        // document per 100 puzzles.
-        void (async () => {
-          const played = stateRef.current.puzzles?.played ?? 0;
-          for (let chunk = 0; chunk * LOG_CHUNK < played; chunk++) {
-            if (cancelled) return;
-            const there = await remote.loadLog(chunk).catch(() => null);
-            const merged = mergeChunk(readLog(chunk), there);
-            if (!merged.some(Boolean)) continue;
-            writeLog(chunk, merged);
-            // Only write back when the merge actually adds something.
-            if (JSON.stringify(merged) !== JSON.stringify(there)) {
-              await remote.saveLog(chunk, merged as PuzzleLogEntry[]).catch(() => undefined);
-            }
-          }
-        })();
-      } catch {
-        // Progress is the account's, so there is nothing to show without it.
-        if (!cancelled) setPhase("unreachable");
-      }
-    })();
+        if (error instanceof ApiOffline) setUnreachable(true);
+        else throw error;
+      });
     return () => {
       cancelled = true;
     };
-  }, [identity, inBrowser, keep, readLog, writeLog]);
+  }, []);
 
-  const recordRun = useCallback(
-    (run: LessonRunResult) => {
-      const next = applyRun(stateRef.current, run);
-      keep(next);
-      push(next);
-      return next;
-    },
-    [keep, push],
-  );
-
-  const recordGame = useCallback(
-    (r: GameResult) => {
-      const next = applyGame(stateRef.current, r);
-      keep(next);
-      push(next);
-      return next;
-    },
-    [keep, push],
-  );
-
-  const chunkOf = useCallback(
-    async (chunk: number, fetchRemote: boolean) => {
-      const here = readLog(chunk);
-      const there = fetchRemote && remoteRef.current ? await remoteRef.current.loadLog(chunk).catch(() => null) : null;
-      const merged = mergeChunk(here, there as (PuzzleLogEntry | null)[] | null);
-      if (there) writeLog(chunk, merged);
-      return merged;
-    },
-    [readLog, writeLog],
-  );
-
-  const recordPuzzle = useCallback(
-    (r: PuzzleResult) => {
-      const before = stateRef.current;
-      const next = applyPuzzle(before, r);
-      keep(next);
-      push(next);
-      const index = before.puzzles?.played ?? 0;
-      const entry: PuzzleLogEntry = {
-        i: r.id,
-        s: r.status,
-        d: 0,
-        r: next.puzzles?.rating ?? 0,
-        p: r.puzzleRating,
-        t: Date.now(),
-      };
-      entry.d = next.puzzles!.rating - (before.puzzles?.rating ?? START_RATING);
-      const chunk = Math.floor(index / LOG_CHUNK);
-      // Write this side right away so the history sheet sees it immediately.
-      const here = readLog(chunk) ?? [];
-      here[index % LOG_CHUNK] = entry;
-      writeLog(chunk, here);
-      void (async () => {
-        const entries = await chunkOf(chunk, true);
-        entries[index % LOG_CHUNK] = entry;
-        writeLog(chunk, entries);
-        remoteRef.current?.saveLog(chunk, entries as PuzzleLogEntry[]).catch(() => undefined);
-      })();
-      return next;
-    },
-    [keep, push, chunkOf, readLog, writeLog],
-  );
-
-  const loadPuzzlePage = useCallback(
-    async (page: number, size: number) => {
-      const total = stateRef.current.puzzles?.played ?? 0;
-      const hi = total - 1 - page * size;
-      const lo = Math.max(0, hi - size + 1);
-      if (hi < 0) return [];
-      const out: PuzzleLogEntry[] = [];
-      const cache = new Map<number, (PuzzleLogEntry | null)[]>();
-      for (let i = hi; i >= lo; i--) {
-        const chunk = Math.floor(i / LOG_CHUNK);
-        if (!cache.has(chunk)) {
-          let entries = await chunkOf(chunk, false);
-          const needs = Array.from({ length: Math.min(hi, (chunk + 1) * LOG_CHUNK - 1) - Math.max(lo, chunk * LOG_CHUNK) + 1 }, (_, k) => Math.max(lo, chunk * LOG_CHUNK) + k);
-          if (needs.some((n) => !entries[n % LOG_CHUNK])) entries = await chunkOf(chunk, true);
-          cache.set(chunk, entries);
-        }
-        const e = cache.get(chunk)![i % LOG_CHUNK];
-        if (e) out.push(e);
-      }
-      return out;
-    },
-    [chunkOf],
-  );
-
-  const reset = useCallback(() => {
-    const next = { ...emptyProgress(), updatedAt: Date.now() };
-    memoryLog.current.clear();
-    keep(next);
-    push(next);
-  }, [keep, push]);
-
-  const exportBackup = useCallback(async (): Promise<Backup> => {
-    const progress = stateRef.current;
-    const played = progress.puzzles?.played ?? 0;
-    const puzzleLog: Backup["puzzleLog"] = {};
-    for (let chunk = 0; chunk * LOG_CHUNK < played; chunk++) {
-      const entries = await chunkOf(chunk, true);
-      if (entries.some(Boolean)) puzzleLog[String(chunk)] = entries;
-    }
-    return { app: "lance-a-lance", kind: "backup", version: BACKUP_VERSION, exportedAt: new Date().toISOString(), progress, puzzleLog };
-  }, [chunkOf]);
-
-  const importBackup = useCallback(
-    async (backup: Backup) => {
-      // Stamped as of now, so that this copy wins against whatever the cloud
-      // and the other devices hold.
-      const next = { ...backup.progress, updatedAt: Date.now() };
-      keep(next);
-
-      for (const [key, entries] of Object.entries(backup.puzzleLog)) {
-        const chunk = Number(key);
-        const merged = mergeChunk(entries, readLog(chunk));
-        writeLog(chunk, merged);
-        await remoteRef.current?.saveLog(chunk, merged as PuzzleLogEntry[]).catch(() => undefined);
-      }
-
-      push(next);
-    },
-    [keep, push, readLog, writeLog],
-  );
-
-  const value = useMemo(
-    () => ({ state, recordRun, recordPuzzle, recordGame, loadPuzzlePage, reset, exportBackup, importBackup }),
-    [state, recordRun, recordPuzzle, recordGame, loadPuzzlePage, reset, exportBackup, importBackup],
-  );
-
-  if (phase === "unreachable") return <OfflineScreen />;
-  if (phase === "loading") {
+  if (unreachable) return <OfflineScreen />;
+  if (!loaded) {
     return (
       <div className="grid h-full place-items-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Carregando" />
       </div>
     );
   }
+  return <ProgressStore initial={loaded}>{children}</ProgressStore>;
+};
+
+const ProgressStore: FC<{ initial: ProgressState; children: ReactNode }> = ({ initial, children }) => {
+  const [state, setState] = useState(initial);
+  // Moves are saved one request at a time, in order.
+  const moveChain = useRef<Promise<unknown>>(Promise.resolve());
+
+  const recordRun = useCallback<ProgressContextValue["recordRun"]>(async (run) => {
+    const answer = await progressApi.recordRun({
+      lessonId: run.lessonId,
+      points: run.points,
+      maxPoints: run.maxPoints,
+      mistakes: run.mistakes,
+      records: (run.records ?? []).map((r) => ({ key: r.key, value: r.value })),
+    });
+    setState(answer.progress);
+    return answer.run;
+  }, []);
+
+  const recordPuzzle = useCallback<ProgressContextValue["recordPuzzle"]>(async (puzzleId, status) => {
+    const answer = await progressApi.recordPuzzle(puzzleId, status);
+    setState(answer.progress);
+    return answer.attempt;
+  }, []);
+
+  const startGame = useCallback<ProgressContextValue["games"]["start"]>(async (input) => {
+    const answer = await progressApi.startGame(input);
+    setState(answer.progress);
+    return answer.game;
+  }, []);
+
+  const saveMoves = useCallback<ProgressContextValue["games"]["saveMoves"]>((id, moves) => {
+    // A failed save is caught by the next one, which carries every move.
+    moveChain.current = moveChain.current.then(() => progressApi.saveMoves(id, moves)).catch(() => undefined);
+  }, []);
+
+  const finishGame = useCallback<ProgressContextValue["games"]["finish"]>(async (id, moves, resigned) => {
+    await moveChain.current;
+    const answer = await progressApi.finishGame(id, moves, resigned);
+    setState(answer.progress);
+    return answer.game;
+  }, []);
+
+  const callOffGame = useCallback<ProgressContextValue["games"]["callOff"]>(async (id) => {
+    await moveChain.current;
+    setState((await progressApi.callOffGame(id)).progress);
+  }, []);
+
+  const reset = useCallback(async () => {
+    setState((await progressApi.reset()).progress);
+  }, []);
+
+  const importBackup = useCallback(async (file: unknown) => {
+    setState((await progressApi.importBackup(file)).progress);
+  }, []);
+
+  const games = useMemo<ProgressContextValue["games"]>(
+    () => ({ start: startGame, saveMoves, finish: finishGame, callOff: callOffGame, page: progressApi.gamePage }),
+    [startGame, saveMoves, finishGame, callOffGame],
+  );
+
+  const value = useMemo<ProgressContextValue>(
+    () => ({
+      state,
+      recordRun,
+      recordPuzzle,
+      loadPuzzlePage: progressApi.puzzlePage,
+      games,
+      reset,
+      exportBackup: progressApi.exportBackup,
+      importBackup,
+    }),
+    [state, recordRun, recordPuzzle, games, reset, importBackup],
+  );
+
   return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>;
 };

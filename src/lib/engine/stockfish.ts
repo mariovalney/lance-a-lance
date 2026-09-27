@@ -14,11 +14,18 @@ export const ENGINE_URL = "/engine/stockfish-19-lite-single.js";
 /** Time the limited-strength levels think per move. */
 const MOVE_TIME_MS = 700;
 
+/** Time the full-strength engine gets for the assisted game's hint. */
+const HINT_TIME_MS = 800;
+
 /** One Stockfish in a Web Worker, spoken to over UCI. */
 export class Engine {
   private worker: Worker;
   private waiters: { match: (line: string) => boolean; resolve: (line: string) => void; reject: (e: Error) => void }[] = [];
   private failed: Error | null = null;
+  // Searches run one at a time: Stockfish.js takes a `position` sent during a
+  // search at once, and that corrupts the running one ("unreachable").
+  private chain: Promise<unknown> = Promise.resolve();
+  private searching = false;
 
   constructor(url = ENGINE_URL) {
     this.worker = new Worker(url);
@@ -42,12 +49,14 @@ export class Engine {
     return new Promise((resolve, reject) => this.waiters.push({ match, resolve, reject }));
   }
 
-  /** Loads the engine and sets its strength for a new game. */
-  async start(level: BotLevel): Promise<void> {
+  /** Loads the engine and sets its strength for a new game; null is full strength. */
+  async start(level: BotLevel | null): Promise<void> {
     const uciok = this.waitFor((l) => l === "uciok");
     this.send("uci");
     await uciok;
-    if (level.elo) {
+    if (!level) {
+      // Full strength is the default.
+    } else if (level.elo) {
       this.send("setoption name UCI_LimitStrength value true");
       this.send(`setoption name UCI_Elo value ${level.elo}`);
     } else {
@@ -64,11 +73,24 @@ export class Engine {
    * (`e2e4`, `e7e8q`). The whole line goes over, not just the position, so the
    * engine sees repetitions too.
    */
-  async bestMove(moves: string[], level: BotLevel): Promise<string> {
-    const done = this.waitFor((l) => l.startsWith("bestmove"));
-    this.send(moves.length ? `position startpos moves ${moves.join(" ")}` : "position startpos");
-    this.send(level.elo ? `go movetime ${MOVE_TIME_MS}` : `go depth ${level.depth ?? 1}`);
-    return (await done).split(" ")[1];
+  bestMove(moves: string[], level: BotLevel | null): Promise<string> {
+    // A newer question makes the one still being searched moot: cut it short.
+    if (this.searching) this.send("stop");
+    const run = this.chain.then(() => this.search(moves, level));
+    this.chain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async search(moves: string[], level: BotLevel | null): Promise<string> {
+    this.searching = true;
+    try {
+      const done = this.waitFor((l) => l.startsWith("bestmove"));
+      this.send(moves.length ? `position startpos moves ${moves.join(" ")}` : "position startpos");
+      this.send(!level ? `go movetime ${HINT_TIME_MS}` : level.elo ? `go movetime ${MOVE_TIME_MS}` : `go depth ${level.depth ?? 1}`);
+      return (await done).split(" ")[1];
+    } finally {
+      this.searching = false;
+    }
   }
 
   dispose(): void {

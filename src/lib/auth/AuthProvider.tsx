@@ -1,16 +1,26 @@
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from "react";
-import { ApiOffline, ApiUnavailable, CLOSED_CONFIG, fetchAccount, fetchConfig, login, logout, signup } from "@/lib/auth/api";
+import { ApiOffline, CLOSED_CONFIG, fetchAccount, fetchConfig, login, logout, signup } from "@/lib/auth/api";
 import { AuthContext, type AuthState } from "@/lib/auth/context";
-import { clearLocal } from "@/lib/progress/storage";
 
 /**
- * True when there cannot be an API to ask: a page opened from the file system,
- * where fetch has nowhere to go.
+ * Keys older versions of the app kept in the browser: the progress copy, the
+ * puzzle history chunks, and the flag that told a static host from an offline
+ * phone. Progress lives only in the account now, so they go on the first visit.
  */
-const noApiPossible = () => typeof window === "undefined" || !/^https?:$/.test(window.location.protocol);
+function forgetOldBrowserCopies(): void {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key === "lance-a-lance:progress:v1" || key === "lance-a-lance:api:v1" || key.startsWith("lance-a-lance:puzzlelog:")) localStorage.removeItem(key);
+    }
+  } catch {
+    /* nothing to clear */
+  }
+}
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<AuthState>(() => (noApiPossible() ? { kind: "unavailable" } : { kind: "loading" }));
+  const [state, setState] = useState<AuthState>({ kind: "loading" });
+
+  useEffect(() => forgetOldBrowserCopies(), []);
 
   useEffect(() => {
     if (state.kind !== "loading") return;
@@ -27,13 +37,9 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         if (!cancelled) setState({ kind: "anonymous", ...config });
       } catch (error) {
         if (cancelled) return;
-        // Nothing listening on /api and nothing ever was, so there are no
-        // accounts to offer and the app runs on this browser's copy. An API
-        // that answered before and does not now is the phone being offline,
-        // and progress is not here to show. Anything else means the server is
-        // there but unhappy, so still offer to sign in.
-        if (error instanceof ApiUnavailable) setState({ kind: "unavailable" });
-        else if (error instanceof ApiOffline) setState({ kind: "offline" });
+        // The server cannot be reached: there is nothing to show without it.
+        // Anything else means it is there but unhappy, so still offer to sign in.
+        if (error instanceof ApiOffline) setState({ kind: "offline" });
         else setState({ kind: "anonymous", ...CLOSED_CONFIG });
       }
     })();
@@ -52,10 +58,6 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const signOut = useCallback(async () => {
     await logout().catch(() => undefined);
-    // Nothing of the account is written here while it is open, but a browser
-    // that played before there were accounts may still hold an old copy. This
-    // is where it goes, so that leaving the app leaves nothing behind.
-    clearLocal();
     const config = await fetchConfig().catch(() => CLOSED_CONFIG);
     setState({ kind: "anonymous", ...config });
   }, []);

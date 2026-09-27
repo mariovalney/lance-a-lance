@@ -90,20 +90,6 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      # These serve dist themselves and need nothing else running.
-      - name: Home, trainer, history, auto-advance and PWA
-        run: |
-          pnpm e2e:home
-          pnpm e2e:trainer
-          pnpm e2e:history
-          pnpm e2e:auto
-          pnpm e2e:pwa
-          pnpm e2e:game
-
-      # The walkthrough plays all 59 lessons and takes about twelve minutes,
-      # so it is not here: run the Walkthrough workflow by hand for a change
-      # big enough to deserve it.
-
       - name: Build the server
         run: pnpm build:server
 
@@ -120,7 +106,7 @@ jobs:
           GOOGLE_AUTH_URL=http://127.0.0.1:2626/authorize \
           GOOGLE_TOKEN_URL=http://127.0.0.1:2626/token \
           GOOGLE_USERINFO_URL=http://127.0.0.1:2626/userinfo \
-          node server/dist/index.js &
+          node server/dist/server/src/index.js &
           # Wait for the migrations to run and the port to answer.
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:3111/api/health && break
@@ -145,6 +131,23 @@ jobs:
 
       - name: Managing the accounts, and the addresses the app answers
         run: URL=http://127.0.0.1:3111 SINK=/tmp/sink.json pnpm e2e:admin
+
+      # The database is the only store, so these drive the same server, each
+      # starting from a wiped test account.
+      - name: Home, trainer, history, auto-advance, PWA and games
+        env:
+          URL: http://127.0.0.1:3111
+        run: |
+          pnpm e2e:home
+          pnpm e2e:trainer
+          pnpm e2e:history
+          pnpm e2e:auto
+          pnpm e2e:pwa
+          pnpm e2e:game
+
+      # The walkthrough plays all 59 lessons and takes about twelve minutes,
+      # so it is not here: run the Walkthrough workflow by hand for a change
+      # big enough to deserve it.
 
       # Screenshots and logs, to look at when something above goes red.
       - uses: actions/upload-artifact@v4

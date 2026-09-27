@@ -1,91 +1,25 @@
-export type Stars = 0 | 1 | 2 | 3;
+/**
+ * Progress as the app sees it. The shapes the server answers with live in
+ * `shared/types.ts`; this file adds what only the app needs: the result of a
+ * lesson run before it is reported.
+ */
+export type {
+  Game,
+  GameEndReason,
+  GameOutcome,
+  GameStats,
+  LessonStats,
+  Page,
+  PuzzleAttempt,
+  PuzzleStats,
+  PuzzleStatus,
+  Stars,
+  Streak,
+} from "@shared/types";
+import type { ProgressView } from "@shared/types";
 
-export interface LessonProgress {
-  bestStars: Stars;
-  bestPct: number;
-  completions: number;
-  firstCompletedAt?: string;
-  lastPlayedAt?: string;
-  /** Mistakes from the most recent run (plain text, for review). */
-  lastMistakes?: string[];
-}
-
-export interface HistoryEntry {
-  lessonId: string;
-  at: string;
-  pct: number;
-  stars: Stars;
-  xp: number;
-  mistakes: number;
-}
-
-export interface ProgressState {
-  version: 1;
-  xp: number;
-  lessons: Record<string, LessonProgress>;
-  streak: { current: number; best: number; lastDay: string | null };
-  history: HistoryEntry[];
-  /** Personal records for timed drills, by drill key. */
-  records?: Record<string, number>;
-  /** Puzzle trainer stats and rating. */
-  puzzles?: PuzzleStats;
-  /** Games against the computer: a rating of their own, apart from the puzzles. */
-  games?: GameStats;
-  updatedAt: number;
-}
-
-export interface PuzzleStats {
-  rating: number;
-  played: number;
-  solved: number;
-  streak: number;
-  bestStreak: number;
-  /** Recently seen puzzle ids (newest first), to avoid repeats. */
-  recent: string[];
-  /** Legacy: the full history now lives in the puzzle log (chunked documents). */
-  history?: unknown[];
-}
-
-export interface GameStats {
-  rating: number;
-  played: number;
-  wins: number;
-  draws: number;
-  losses: number;
-}
-
-export type GameOutcome = "win" | "draw" | "loss";
-
-export interface GameResult {
-  outcome: GameOutcome;
-  /** Nominal rating of the computer level played. */
-  botRating: number;
-}
-
-/** ok = solved clean, erro = solved after a mistake, solucao = asked for the solution. */
-export type PuzzleStatus = "ok" | "erro" | "solucao";
-
-export interface PuzzleResult {
-  id: string;
-  status: PuzzleStatus;
-  puzzleRating: number;
-  points: number;
-}
-
-/** One line of the puzzle history. */
-export interface PuzzleLogEntry {
-  /** Lichess puzzle id */
-  i: string;
-  s: PuzzleStatus;
-  /** Rating change */
-  d: number;
-  /** Rating after */
-  r: number;
-  /** Puzzle rating */
-  p: number;
-  /** Timestamp (ms) */
-  t: number;
-}
+/** Everything the app shows about the signed-in person's progress. */
+export type ProgressState = ProgressView;
 
 export interface RecordEntry {
   key: string;
@@ -102,15 +36,4 @@ export interface LessonRunResult {
   firstTry: number;
   mistakes: string[];
   records?: RecordEntry[];
-}
-
-export function emptyProgress(): ProgressState {
-  return {
-    version: 1,
-    xp: 0,
-    lessons: {},
-    streak: { current: 0, best: 0, lastDay: null },
-    history: [],
-    updatedAt: 0,
-  };
 }

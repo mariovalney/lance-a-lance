@@ -42,11 +42,11 @@ adminRoutes.get("/users", async (c) => {
             u.created_at                           AS "createdAt",
             u.password IS NOT NULL                 AS "hasPassword",
             COALESCE(i.providers, '{}')            AS providers,
-            COALESCE((p.state ->> 'xp')::int, 0)   AS xp,
-            COALESCE(jsonb_array_length(jsonb_path_query_array(p.state -> 'lessons', '$.keyvalue()')), 0) AS lessons,
+            COALESCE(p.xp, 0)                      AS xp,
+            (SELECT count(*)::int FROM lesson_progress l WHERE l.user_id = u.id AND l.completions > 0) AS lessons,
             s.last_seen                            AS "lastSeen"
        FROM users u
-       LEFT JOIN progress p ON p.user_id = u.id
+       LEFT JOIN player_stats p ON p.user_id = u.id
        LEFT JOIN LATERAL (
          SELECT array_agg(provider ORDER BY provider) AS providers
            FROM user_identities WHERE user_id = u.id

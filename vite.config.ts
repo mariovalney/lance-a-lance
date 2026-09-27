@@ -22,8 +22,11 @@ export default defineConfig({
   plugins: [react(), ...pwaPlugin()],
   define: { __APP_VERSION__: JSON.stringify(version()) },
   resolve: {
-    alias: { "@": path.resolve(import.meta.dirname, "./src") },
+    alias: { "@": path.resolve(import.meta.dirname, "./src"), "@shared": path.resolve(import.meta.dirname, "./shared") },
   },
+  // In development the API is the server in watch mode (`pnpm dev:server`); the
+  // app has no store of its own to fall back on.
+  server: { proxy: { "/api": process.env.API_URL ?? "http://127.0.0.1:3000" } },
   build: {
     target: "es2020",
     // Real files, so the service worker can cache them and skip the unchanged.

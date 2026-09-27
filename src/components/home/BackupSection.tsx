@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { BackupError, countLoggedPuzzles, downloadBackup, parseBackup } from "@/lib/progress/backup";
+import { ApiError } from "@/lib/auth/api";
+import { downloadBackup } from "@/lib/progress/backupFile";
 import { useProgress } from "@/lib/progress/useProgress";
 
 type Note = { tone: "ok" | "bad"; text: string } | null;
@@ -34,8 +35,10 @@ export const BackupSection: FC = () => {
     try {
       const backup = await exportBackup();
       downloadBackup(backup);
-      const puzzles = countLoggedPuzzles(backup);
-      setNote({ tone: "ok", text: `Arquivo salvo com ${backup.progress.xp} XP e ${puzzles} ${puzzles === 1 ? "puzzle" : "puzzles"}.` });
+      const { xp } = backup.data.stats;
+      const puzzles = backup.data.puzzleAttempts.length;
+      const games = backup.data.games.length;
+      setNote({ tone: "ok", text: `Arquivo salvo com ${xp} XP, ${puzzles} ${puzzles === 1 ? "puzzle" : "puzzles"} e ${games} ${games === 1 ? "partida" : "partidas"}.` });
     } catch {
       setNote({ tone: "bad", text: "Não deu para montar o arquivo." });
     } finally {
@@ -47,13 +50,11 @@ export const BackupSection: FC = () => {
     setBusy("import");
     setNote(null);
     try {
-      const backup = parseBackup(JSON.parse(await file.text()));
-      const puzzles = countLoggedPuzzles(backup);
-      await importBackup(backup);
-      setNote({ tone: "ok", text: `Importado: ${backup.progress.xp} XP e ${puzzles} ${puzzles === 1 ? "puzzle" : "puzzles"}.` });
+      await importBackup(JSON.parse(await file.text()));
+      setNote({ tone: "ok", text: "Progresso importado." });
     } catch (failure) {
       const text =
-        failure instanceof BackupError ? failure.message : failure instanceof SyntaxError ? "Esse arquivo não é um JSON válido." : "Não deu para importar.";
+        failure instanceof ApiError ? failure.message : failure instanceof SyntaxError ? "Esse arquivo não é um JSON válido." : "Não deu para importar.";
       setNote({ tone: "bad", text });
     } finally {
       setBusy(null);
@@ -67,7 +68,7 @@ export const BackupSection: FC = () => {
       <div className="flex flex-col gap-2">
         <Label className="text-[15px]">Cópia do progresso</Label>
         <p className="text-xs text-muted-foreground">
-          Um arquivo com o seu XP, as lições, os recordes e o histórico de puzzles. Importar substitui o que está aqui.
+          Um arquivo com o seu XP, as lições, os recordes e os históricos de puzzles e partidas. Importar substitui o que está aqui.
         </p>
         <div className="grid grid-cols-2 gap-2">
           <Button variant="outline" className="gap-2" disabled={busy !== null} onClick={doExport}>
@@ -108,7 +109,7 @@ export const BackupSection: FC = () => {
         <DialogContent className="max-w-[22rem] rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-display">Zerar todo o progresso?</DialogTitle>
-            <DialogDescription>XP, estrelas, sequência de dias e lições concluídas voltam a zero. Não dá para desfazer.</DialogDescription>
+            <DialogDescription>XP, estrelas, lições, puzzles e partidas voltam a zero. Não dá para desfazer.</DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
             <Button variant="ghost" className="h-11 w-full rounded-xl" onClick={() => setConfirmReset(false)}>
@@ -117,8 +118,8 @@ export const BackupSection: FC = () => {
             <Button
               className="h-11 w-full rounded-xl bg-danger font-bold text-destructive-foreground hover:bg-danger/90"
               onClick={() => {
-                reset();
                 setConfirmReset(false);
+                reset().catch(() => setNote({ tone: "bad", text: "Não deu para zerar. Confira a conexão." }));
               }}
             >
               Zerar progresso

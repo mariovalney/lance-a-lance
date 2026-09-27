@@ -7,7 +7,10 @@ import { migrate, pool, query, waitForDatabase } from "./db.js";
 import { env } from "./env.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes, type Vars } from "./routes/auth.js";
-import { progressRoutes, puzzleLogRoutes } from "./routes/progress.js";
+import { backupRoutes } from "./routes/backup.js";
+import { gameRoutes } from "./routes/games.js";
+import { lessonRoutes, progressRoutes } from "./routes/progress.js";
+import { puzzleRoutes } from "./routes/puzzles.js";
 
 const app = new Hono<Vars>();
 
@@ -27,7 +30,10 @@ api.get("/health", async (c) => {
 api.route("/auth", authRoutes);
 api.route("/admin", adminRoutes);
 api.route("/progress", progressRoutes);
-api.route("/puzzlelog", puzzleLogRoutes);
+api.route("/lessons", lessonRoutes);
+api.route("/puzzles", puzzleRoutes);
+api.route("/games", gameRoutes);
+api.route("/backup", backupRoutes);
 api.all("*", (c) => c.json({ error: "not_found" }, 404));
 
 app.route("/api", api);

@@ -1,9 +1,9 @@
 const { chromium } = require("playwright");
 (async () => {
-  const { OUT: S, siteUrl } = require("./env.cjs");
-  const SITE = await siteUrl();
+  const { OUT: S, signedIn } = require("./env.cjs");
   const b = await chromium.launch();
-  const p = await (await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true })).newPage();
+  const { base: SITE, ctx } = await signedIn(b);
+  const p = await ctx.newPage();
   const errors = [];
   p.on("pageerror", (e) => errors.push(e.message));
   await p.goto(SITE, { waitUntil: "networkidle" });

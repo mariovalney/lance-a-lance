@@ -36,6 +36,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
+    # Progress lives in the database, so the lessons are played against the
+    # real server.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lanceal
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,12 +68,24 @@ jobs:
       - name: Typecheck, validate and build
         run: pnpm e2e:prepare
 
+      - name: Start the server
+        run: |
+          pnpm build:server
+          DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/lanceal \
+          PORT=3111 COOKIE_SECURE=false \
+          node server/dist/server/src/index.js &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3111/api/health && break
+            sleep 1
+          done
+
       - name: Play
         env:
           DONE: ${{ inputs.done }}
           MAX_LESSONS: ${{ inputs.max_lessons }}
           SCHEME: ${{ inputs.scheme }}
           SHOTS: "1"
+          URL: http://127.0.0.1:3111
         run: pnpm e2e:walkthrough
 
       # The per-kind screenshots, to review the look without a phone in hand.

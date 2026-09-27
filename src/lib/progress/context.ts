@@ -1,19 +1,29 @@
 import { createContext } from "react";
-import type { Backup } from "@/lib/progress/backup";
-import type { GameResult, LessonRunResult, ProgressState, PuzzleLogEntry, PuzzleResult } from "@/lib/progress/types";
+import type { BackupV2, GameStartInput, LessonRunOutcome } from "@shared/types";
+import type { Game, LessonRunResult, Page, ProgressState, PuzzleAttempt, PuzzleStatus } from "@/lib/progress/types";
 
 export interface ProgressContextValue {
   state: ProgressState;
-  recordRun: (run: LessonRunResult) => ProgressState;
-  recordPuzzle: (r: PuzzleResult) => ProgressState;
-  recordGame: (r: GameResult) => ProgressState;
-  /** Newest first; page 0 is the most recent. */
-  loadPuzzlePage: (page: number, size: number) => Promise<PuzzleLogEntry[]>;
-  reset: () => void;
-  /** The progress document plus every chunk of the puzzle history. */
-  exportBackup: () => Promise<Backup>;
-  /** Replaces everything with the file's contents, here and in the cloud. */
-  importBackup: (backup: Backup) => Promise<void>;
+  /** Reports a finished lesson run; answers with what the server scored. */
+  recordRun: (run: LessonRunResult) => Promise<LessonRunOutcome>;
+  /** Reports a rated puzzle attempt. */
+  recordPuzzle: (puzzleId: string, status: PuzzleStatus) => Promise<PuzzleAttempt>;
+  /** Newest first. */
+  loadPuzzlePage: (page: number, size: number) => Promise<Page<PuzzleAttempt>>;
+  games: {
+    start: (input: GameStartInput) => Promise<Game>;
+    /** Saves the moves so far; the latest call wins. */
+    saveMoves: (id: string, moves: string[]) => void;
+    /** The server reads the result off the final position; `resigned` is the only thing it takes as given. */
+    finish: (id: string, moves: string[], resigned: boolean) => Promise<Game>;
+    /** Only before both sides moved. */
+    callOff: (id: string) => Promise<void>;
+    page: (page: number, size: number) => Promise<Page<Game>>;
+  };
+  reset: () => Promise<void>;
+  exportBackup: () => Promise<BackupV2>;
+  /** Replaces the whole account with a backup file (version 1 or 2). */
+  importBackup: (file: unknown) => Promise<void>;
 }
 
 /** Provided by `ProgressProvider`; read it with `useProgress`. */

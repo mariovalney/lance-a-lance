@@ -1,7 +1,10 @@
 import { useState, type FC } from "react";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { findLesson, lessonCode, type LessonRef } from "@/content/curriculum";
 import type { LessonRunResult } from "@/lib/progress/types";
+import type { LessonRunOutcome } from "@shared/types";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { useAuth } from "@/lib/auth/useAuth";
 import { ProgressProvider } from "@/lib/progress/ProgressContext";
@@ -26,6 +29,8 @@ type Route =
       name: "result";
       lessonId: string;
       result: LessonRunResult;
+      /** What the server scored. */
+      run: LessonRunOutcome;
       xpBefore: number;
       xpAfter: number;
       prevRecords: Record<string, number>;
@@ -50,10 +55,43 @@ function goToRoot(): void {
   if (typeof window !== "undefined" && pathname() !== "/") window.history.replaceState(null, "", "/");
 }
 
+/**
+ * The screen to come back to after a reload, kept for the tab only. A lesson
+ * starts over, since its examples are drawn anew on every run, and a result
+ * screen goes home: what it showed is gone.
+ */
+const ROUTE_KEY = "lance-a-lance:route:v1";
+
+type SavedRoute = { name: "home" | "trainer" | "game" } | { name: "lesson"; lessonId: string };
+
+function rememberRoute(route: Route): void {
+  const saved: SavedRoute = route.name === "lesson" ? { name: "lesson", lessonId: route.lessonId } : { name: route.name === "result" ? "home" : route.name };
+  try {
+    sessionStorage.setItem(ROUTE_KEY, JSON.stringify(saved));
+  } catch {
+    /* a reload goes home */
+  }
+}
+
+function initialRoute(): Route {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(ROUTE_KEY) ?? "null") as SavedRoute | null;
+    if (saved?.name === "trainer" || saved?.name === "game") return { name: saved.name };
+    if (saved?.name === "lesson" && findLesson(saved.lessonId)?.meta.lesson) return { name: "lesson", lessonId: saved.lessonId, run: 1 };
+  } catch {
+    /* nothing kept */
+  }
+  return { name: "home" };
+}
+
 const Shell: FC = () => {
   const { state, recordRun } = useProgress();
-  const [route, setRoute] = useState<Route>({ name: "home" });
-  const [runCounter, setRunCounter] = useState(0);
+  const [route, setRouteState] = useState<Route>(initialRoute);
+  const [runCounter, setRunCounter] = useState(() => (route.name === "lesson" ? route.run : 0));
+  const setRoute = (next: Route) => {
+    rememberRoute(next);
+    setRouteState(next);
+  };
 
   const start = (ref: LessonRef) => {
     if (!ref.meta.lesson) return;
@@ -67,6 +105,24 @@ const Shell: FC = () => {
     window.scrollTo(0, 0);
   };
 
+  // A finished run is reported before its result shows: the server scores it.
+  const [unsaved, setUnsaved] = useState<{ lessonId: string; result: LessonRunResult } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const save = async (lessonId: string, result: LessonRunResult) => {
+    const xpBefore = state.xp;
+    const prevRecords = state.records;
+    setSaving(true);
+    try {
+      const run = await recordRun(result);
+      setUnsaved(null);
+      setRoute({ name: "result", lessonId, result, run, xpBefore, xpAfter: xpBefore + run.xp, prevRecords });
+    } catch {
+      setUnsaved({ lessonId, result });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (route.name === "lesson") {
     const ref = findLesson(route.lessonId);
     if (!ref?.meta.lesson) return null;
@@ -77,13 +133,24 @@ const Shell: FC = () => {
           lesson={ref.meta.lesson}
           code={lessonCode(ref)}
           onExit={goHome}
-          onFinish={(result) => {
-            const xpBefore = state.xp;
-            const prevRecords = state.records ?? {};
-            const next = recordRun(result);
-            setRoute({ name: "result", lessonId: ref.meta.id, result, xpBefore, xpAfter: next.xp, prevRecords });
-          }}
+          onFinish={(result) => void save(ref.meta.id, result)}
         />
+        <Dialog open={unsaved !== null} onOpenChange={(open) => !open && !saving && (setUnsaved(null), goHome())}>
+          <DialogContent className="max-w-[22rem] rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="font-display">A lição não foi salva</DialogTitle>
+              <DialogDescription>Sem conexão com o servidor.</DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+              <Button className="h-11 w-full rounded-xl font-bold" disabled={saving} onClick={() => unsaved && void save(unsaved.lessonId, unsaved.result)}>
+                Tentar de novo
+              </Button>
+              <Button variant="ghost" className="h-11 w-full rounded-xl text-danger hover:text-danger" disabled={saving} onClick={() => (setUnsaved(null), goHome())}>
+                Sair sem salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -95,6 +162,7 @@ const Shell: FC = () => {
         <ResultScreen
           lessonRef={ref}
           result={route.result}
+          run={route.run}
           xpBefore={route.xpBefore}
           xpAfter={route.xpAfter}
           prevRecords={route.prevRecords}
@@ -199,7 +267,7 @@ const Gate: FC = () => {
   }
 
   return (
-    <ProgressProvider>
+    <ProgressProvider key={state.account.id}>
       <Shell />
     </ProgressProvider>
   );

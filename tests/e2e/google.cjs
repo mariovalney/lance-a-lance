@@ -8,7 +8,7 @@
 //     GOOGLE_AUTH_URL=http://127.0.0.1:2626/authorize \
 //     GOOGLE_TOKEN_URL=http://127.0.0.1:2626/token \
 //     GOOGLE_USERINFO_URL=http://127.0.0.1:2626/userinfo \
-//     node server/dist/index.js &
+//     node server/dist/server/src/index.js &
 //
 //   URL=http://127.0.0.1:3111 GOOGLE=http://127.0.0.1:2626 pnpm e2e:google
 //
@@ -34,6 +34,14 @@ const check = (ok, label) => {
 };
 
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
+
+/** Gives an account some progress by restoring an old (version 1) backup, which the server converts to rows. */
+async function giveProgress(request, xp) {
+  const response = await request.post(BASE + "/api/backup", {
+    data: { app: "lance-a-lance", kind: "backup", version: 1, exportedAt: new Date().toISOString(), progress: progressFor(xp), puzzleLog: {} },
+  });
+  if (!response.ok()) throw new Error(`could not give progress: ${response.status()}`);
+}
 
 function progressFor(xp) {
   return {
@@ -84,7 +92,7 @@ async function accountOnScreen(page) {
 
 /** A server of our own with no GOOGLE_CLIENT_ID, to see the feature off. */
 function serverWithoutGoogle(port) {
-  const child = spawn("node", [path.join(ROOT, "server/dist/index.js")], {
+  const child = spawn("node", [path.join(ROOT, "server/dist/server/src/index.js")], {
     env: {
       ...process.env,
       PORT: String(port),
@@ -135,7 +143,7 @@ const waitForHealth = async (base) => {
   await first.screenshot({ path: OUT + "/google-signed-in.png" });
 
   // Something to recognise the account by on the way back.
-  await first.request.put(BASE + "/api/progress", { data: progressFor(XP) });
+  await giveProgress(first.request, XP);
 
   /* ---------- the same identity lands on the same account ---------- */
   const again = await open(browser);
@@ -146,7 +154,7 @@ const waitForHealth = async (base) => {
   /* ---------- a verified email links to the account with a password ------- */
   // The admin's own account is the one with both a password and progress, so
   // it is what proves that linking keeps everything where it was.
-  await admin.request.put(BASE + "/api/progress", { data: progressFor(XP) });
+  await giveProgress(admin.request, XP);
 
   const linking = await open(browser);
   await nextIdentity(linking, { sub: `sub-${STAMP}-b`, email: ADMIN_EMAIL, email_verified: true });

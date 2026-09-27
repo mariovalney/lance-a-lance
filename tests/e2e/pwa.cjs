@@ -2,19 +2,20 @@
 // a valid manifest, the icons, the service worker, and the app still working
 // after the network is cut.
 //
-//   pnpm e2e:prepare && pnpm e2e:pwa
+//   pnpm e2e:prepare && URL=http://127.0.0.1:3111 pnpm e2e:pwa
 //
-// Serves dist/ itself, so it needs no running server. Set URL to point it at
-// one instead (for example the Docker image).
+// Drives a running server serving the build (see env.cjs). Nobody signs in:
+// the sign in screen is enough to check the shell, and offline the app has to
+// say it has no connection rather than show a blank page.
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
-const { DIST, OUT, serveDist } = require("./env.cjs");
+const { DIST, OUT, siteUrl } = require("./env.cjs");
 
 (async () => {
   if (!fs.existsSync(path.join(DIST, "sw.js"))) throw new Error("dist/sw.js missing: run pnpm e2e:prepare first");
 
-  const base = process.env.URL ?? (await serveDist());
+  const base = await siteUrl();
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
@@ -84,7 +85,7 @@ const { DIST, OUT, serveDist } = require("./env.cjs");
   await page.waitForTimeout(1200);
   const offlineText = (await page.locator("body").textContent()).replace(/\s+/g, " ").trim();
   console.log("offline reload:", offlineText.slice(0, 70) || "(blank page)");
-  if (offlineText.length < 40) problems.push("app did not render offline");
+  if (!offlineText.includes("Sem conexão")) problems.push("offline, the app did not say it has no connection");
   await page.screenshot({ path: OUT + "/pwa-offline.png" });
   await ctx.setOffline(false);
 

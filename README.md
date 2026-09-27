@@ -4,17 +4,18 @@ A chess course from scratch, in Brazilian Portuguese, built for the phone. Eleve
 
 It is an **installable PWA**, served by the Node app in `server/`. It opens full screen and keeps your progress in Postgres, the same on every device you sign in on.
 
-The whole app sits behind an account: with no session, the first screen is the sign in screen. Behind an account the account is the only copy of the progress, and the browser keeps none: what would be the local copy is held in memory for the visit and thrown away with the tab. A server that cannot be reached therefore has nothing to show, and the app says "Sem conexão" instead of opening an empty course. The exception is a page with no API behind it, a static host with no Node server, where there is no account to sign in to and progress does stay in that browser. That is how the browser checks serve the build.
+The whole app sits behind an account: with no session, the first screen is the sign in screen. Progress lives in Postgres as rows, and the server scores it: the app reports what happened (a lesson run, a puzzle attempt, a game) and shows the numbers the server answers with. The browser keeps none of it, so a server that cannot be reached has nothing to show, and the app says "Sem conexão" instead of opening an empty course.
 
 ## Running it locally
 
-Just the app, no server and no accounts:
+The app needs the server and a Postgres, since progress lives only there. In development, the server in watch mode and Vite, which forwards `/api` to it (`API_URL`, default `http://127.0.0.1:3000`):
 
 ```bash
-pnpm install && pnpm dev
+pnpm install && DATABASE_URL=postgres://... COOKIE_SECURE=false pnpm dev:server
+pnpm dev
 ```
 
-With the server and the database, which is how it runs in production:
+Built, which is how it runs in production:
 
 ```bash
 pnpm build && pnpm build:server && DATABASE_URL=postgres://... pnpm start
@@ -31,13 +32,14 @@ The first account needs no configuration: while there are no users, signup stays
 | `pnpm lint` | oxlint. Passes with no warnings at all |
 | `pnpm validate` | Checks all the lesson content and the puzzles (see below) |
 | `pnpm build` | Produces `dist/`: the app with its manifest, icons and service worker |
-| `pnpm build:server` | Compiles `server/` into `server/dist` |
+| `pnpm build:server` | Compiles `server/` and `shared/` into `server/dist` |
 | `pnpm start` | Runs the compiled server, which serves `dist/` and the API |
 | `pnpm dev:server` | The server in watch mode |
 | `pnpm gen:icons` | Regenerates the PNGs in `public/` from the SVGs in `assets/` |
-| `pnpm e2e:prepare` | Typecheck, validate and build. The tests serve `dist/` themselves |
+| `pnpm e2e:prepare` | Typecheck, validate and build. The tests then drive a running server |
 | `pnpm e2e:walkthrough` | Plays the lessons end to end in Chromium, at phone size |
 | `pnpm e2e:trainer` / `e2e:history` / `e2e:auto` / `e2e:home` | Focused checks of the trainer, the history, the auto-advance and the home |
+| `pnpm e2e:game` | A game against the computer: saving, resuming, rating, assisted mode, history and review |
 | `pnpm e2e:pwa` | Manifest, icons, service worker, local fonts and offline mode |
 | `pnpm e2e:account` | Sign in, sync, sign out, export and import, against a real server |
 | `pnpm e2e:reset` | Ask for the link, open the mail, change the password and sign in with it |
@@ -48,7 +50,7 @@ Scoped validation: `ONLY=m4-l RUNS=200 pnpm validate` checks only the lessons wh
 
 The E2E scripts use Playwright. The first time, run `npx playwright install chromium`.
 
-`e2e:pwa` serves `dist/` itself, like the rest. `e2e:account` needs a running server that still accepts signups: `URL=http://127.0.0.1:3111 pnpm e2e:account`.
+Every script drives a running server: `pnpm e2e:prepare && pnpm build:server`, start a Postgres and `DATABASE_URL=... COOKIE_SECURE=false PORT=3111 pnpm start`, then `URL=http://127.0.0.1:3111 pnpm e2e:<name>`. They sign in as a test admin (`admin@exemplo.com`, created on an empty database) and wipe its progress first, so point them at a test database, never at real progress.
 
 `e2e:reset` needs a server whose SMTP points at the throwaway mail sink. Start the sink with `node tests/e2e/smtp-sink.cjs 2526 /tmp/sink.json`, then the server with `SMTP_HOST=127.0.0.1 SMTP_PORT=2526 APP_URL=http://127.0.0.1:3444`, and run `URL=http://127.0.0.1:3444 SINK=/tmp/sink.json pnpm e2e:reset`.
 
@@ -71,7 +73,7 @@ The `Dockerfile` puts the PWA and the server into a single image, which runs on 
 | `DATABASE_URL` | Required. The Postgres connection string |
 | `PORT` | Defaults to 3000 |
 | `COOKIE_SECURE` | Defaults to `true`, which is right behind Easypanel's TLS |
-| `STATIC_DIR` | Where the build is. Defaults to `dist/` next to the server |
+| `STATIC_DIR` | Where the build is. Defaults to `dist/` in the directory the server starts from |
 
 For the password reset email. Without `SMTP_HOST`, "Esqueci a senha" does not appear in the interface at all, rather than appearing and failing:
 
@@ -114,7 +116,7 @@ The app answers three addresses: `/`, `/redefinir` and `/admin`. Anything else i
 
 ## Copying your progress
 
-The settings hold **Exportar** and **Importar**. The JSON file carries the XP, the lessons, the records and the whole puzzle history. It is the safety net for a browser that clears site data, and the way to bring progress in from anywhere else: the importer accepts a file assembled by hand, as long as the envelope matches. **Zerar progresso** sits right under them, since the export is what makes throwing everything away safe.
+The settings hold **Exportar** and **Importar**. The server builds the JSON file (version 2): the totals, the lessons, every lesson run, the records, every puzzle attempt and every finished game. Importing replaces the whole account in one transaction, and still reads the version 1 files older versions exported. **Zerar progresso** sits right under them, since the export is what makes throwing everything away safe.
 
 ## Layout
 
@@ -127,9 +129,11 @@ src/
   components/       UI: board, exercise screens, home, result, trainer
   lib/auth/         accounts: session state and the API calls
   lib/chess/        rules and helpers over chess.js (mate search, notation)
-  lib/progress/     state, scoring, rating, persistence and export
+  lib/progress/     the progress read model, its API calls and the lesson points
+  lib/engine/       Stockfish in a Web Worker, the computer's levels
   styles/fonts.css  the fonts the app serves, so it works offline
-server/src/         Hono API: accounts, progress, history and the static files
+server/src/         Hono API: accounts, progress, puzzles, games, backup and the static files
+shared/             what the app and the server both use: scoring rules, games, types
 assets/             source SVGs for the icon
 public/             generated icons and favicon
 scripts/            validation, data and icon generation

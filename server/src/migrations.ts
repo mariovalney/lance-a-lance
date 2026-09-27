@@ -1,14 +1,20 @@
+import type pg from "pg";
+import { readLegacyAccount } from "./legacy.js";
+import { writeAccount } from "./account.js";
+
 /**
  * Schema, as an ordered list. Every migration runs once, inside a transaction,
  * and is recorded in `schema_migrations`. Never edit one that has shipped: add
  * the next one instead.
  *
  * The SQL lives here rather than in .sql files so that the compiled server is a
- * single directory of JavaScript with nothing to copy alongside it.
+ * single directory of JavaScript with nothing to copy alongside it. A migration
+ * that moves data can also `run` code, after its SQL, in the same transaction.
  */
 export interface Migration {
   name: string;
   sql: string;
+  run?: (client: pg.PoolClient) => Promise<void>;
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -100,5 +106,127 @@ export const MIGRATIONS: Migration[] = [
       UPDATE users SET is_admin = true
        WHERE id = (SELECT id FROM users ORDER BY created_at, id LIMIT 1);
     `,
+  },
+  {
+    name: "005_relational",
+    sql: `
+      -- Progress as rows. Until here it was one JSON document per person and
+      -- the puzzle history in JSON chunks, the shape the claude.ai Artifact's
+      -- key-value store imposed. The server now scores: the app reports what
+      -- happened and these tables are updated in one transaction.
+
+      -- The running totals, one row per person.
+      CREATE TABLE player_stats (
+        user_id             uuid PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+        xp                  integer NOT NULL DEFAULT 0 CHECK (xp >= 0),
+        streak_current      integer NOT NULL DEFAULT 0,
+        streak_best         integer NOT NULL DEFAULT 0,
+        streak_last_day     date,
+        puzzle_rating       integer NOT NULL DEFAULT 800,
+        puzzle_played       integer NOT NULL DEFAULT 0,
+        puzzle_solved       integer NOT NULL DEFAULT 0,
+        puzzle_streak       integer NOT NULL DEFAULT 0,
+        puzzle_best_streak  integer NOT NULL DEFAULT 0,
+        game_rating         integer NOT NULL DEFAULT 800,
+        game_played         integer NOT NULL DEFAULT 0,
+        game_wins           integer NOT NULL DEFAULT 0,
+        game_draws          integer NOT NULL DEFAULT 0,
+        game_losses         integer NOT NULL DEFAULT 0,
+        updated_at          timestamptz NOT NULL DEFAULT now()
+      );
+
+      -- The best of each lesson, and what went wrong the last time.
+      CREATE TABLE lesson_progress (
+        user_id             uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        lesson_id           text NOT NULL,
+        best_stars          smallint NOT NULL CHECK (best_stars BETWEEN 0 AND 3),
+        best_pct            smallint NOT NULL CHECK (best_pct BETWEEN 0 AND 100),
+        completions         integer NOT NULL CHECK (completions >= 0),
+        last_mistakes       text[] NOT NULL DEFAULT '{}',
+        first_completed_at  timestamptz,
+        last_played_at      timestamptz,
+        PRIMARY KEY (user_id, lesson_id)
+      );
+
+      -- Every finished lesson run.
+      CREATE TABLE lesson_runs (
+        id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        user_id    uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        lesson_id  text NOT NULL,
+        pct        smallint NOT NULL CHECK (pct BETWEEN 0 AND 100),
+        stars      smallint NOT NULL CHECK (stars BETWEEN 0 AND 3),
+        xp         integer NOT NULL CHECK (xp >= 0),
+        mistakes   integer NOT NULL CHECK (mistakes >= 0),
+        played_at  timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX lesson_runs_user_idx ON lesson_runs (user_id, played_at DESC);
+
+      -- Personal bests in the timed drills.
+      CREATE TABLE drill_records (
+        user_id     uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        key         text NOT NULL,
+        value       integer NOT NULL,
+        updated_at  timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (user_id, key)
+      );
+
+      -- Every rated puzzle attempt; the trainer's history and its "recently
+      -- seen" list are queries over it.
+      CREATE TABLE puzzle_attempts (
+        id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        user_id        uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        puzzle_id      text NOT NULL,
+        status         text NOT NULL CHECK (status IN ('ok', 'erro', 'solucao')),
+        puzzle_rating  integer NOT NULL,
+        rating_delta   integer NOT NULL,
+        rating_after   integer NOT NULL,
+        xp             integer NOT NULL CHECK (xp >= 0),
+        attempted_at   timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX puzzle_attempts_user_idx ON puzzle_attempts (user_id, attempted_at DESC, id DESC);
+
+      -- Games against the computer. A game is open while finished_at is null;
+      -- its moves are saved as it goes, so a reload or another device picks it
+      -- up. A finished row keeps what it did to the rating, for the history.
+      CREATE TABLE games (
+        id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id       uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        level         integer NOT NULL,
+        player        char(1) NOT NULL CHECK (player IN ('w', 'b')),
+        assisted      boolean NOT NULL DEFAULT false,
+        moves         text[] NOT NULL DEFAULT '{}',
+        outcome       text CHECK (outcome IN ('win', 'draw', 'loss')),
+        reason        text CHECK (reason IN ('checkmate', 'stalemate', 'insufficient', 'repetition', 'fifty', 'resigned')),
+        rating_delta  integer,
+        rating_after  integer,
+        xp            integer NOT NULL DEFAULT 0,
+        started_at    timestamptz NOT NULL DEFAULT now(),
+        updated_at    timestamptz NOT NULL DEFAULT now(),
+        finished_at   timestamptz,
+        CHECK ((finished_at IS NULL) = (outcome IS NULL) AND (outcome IS NULL) = (reason IS NULL))
+      );
+      -- One open game per person.
+      CREATE UNIQUE INDEX games_one_open_idx ON games (user_id) WHERE finished_at IS NULL;
+      -- The history, newest first.
+      CREATE INDEX games_history_idx ON games (user_id, finished_at DESC) WHERE finished_at IS NOT NULL;
+    `,
+    // Every progress document and its puzzle chunks become rows, through the
+    // same conversion the backup importer uses for a version 1 file; then the
+    // old tables go. One transaction: it all lands, or nothing changes.
+    async run(client) {
+      const { rows } = await client.query<{ user_id: string; state: unknown }>("SELECT user_id, state FROM progress");
+      for (const row of rows) {
+        const chunks = await client.query<{ chunk: number; entries: unknown }>("SELECT chunk, entries FROM puzzle_log WHERE user_id = $1 ORDER BY chunk", [
+          row.user_id,
+        ]);
+        const log = Object.fromEntries(chunks.rows.map((c) => [String(c.chunk), c.entries]));
+        const data = readLegacyAccount(row.state, log);
+        await writeAccount(client, row.user_id, data);
+        const attempts = await client.query<{ n: string }>("SELECT count(*) AS n FROM puzzle_attempts WHERE user_id = $1", [row.user_id]);
+        if (Number(attempts.rows[0].n) !== data.puzzleAttempts.length) throw new Error(`puzzle attempts of ${row.user_id} did not all land`);
+      }
+      await client.query("DROP TABLE puzzle_log");
+      await client.query("DROP TABLE progress");
+    },
   },
 ];

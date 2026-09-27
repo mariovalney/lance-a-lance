@@ -36,20 +36,17 @@ fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: SCHEME, hasTouch: true, isMobile: true });
+  const { base, ctx } = await env.signedIn(browser, { colorScheme: SCHEME });
+  // Lessons already done are marked the way playing them does: a perfect run each.
+  await env.completeLessons(ctx.request, base, DONE);
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
   page.on("console", (m) => m.type() === "error" && errors.push("console: " + m.text()));
-  await page.addInitScript((done) => {
+  await page.addInitScript(() => {
     window.__FAST_DRILL = true;
-    if (done.length) {
-      const lessons = {};
-      for (const id of done) lessons[id] = { bestStars: 3, bestPct: 100, completions: 1 };
-      localStorage.setItem("lance-a-lance:progress:v1", JSON.stringify({ version: 1, xp: 0, lessons, streak: { current: 0, best: 0, lastDay: null }, history: [], updatedAt: 1 }));
-    }
-  }, DONE);
-  await page.goto(await env.siteUrl(), { waitUntil: "networkidle" });
+  });
+  await page.goto(base, { waitUntil: "networkidle" });
   await page.waitForTimeout(500);
   if (SHOTS) await page.screenshot({ path: `${OUT}/${SCHEME}-home.png` });
   await page.getByRole("button", { name: /^(Começar|Praticar)/ }).first().click();

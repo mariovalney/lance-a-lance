@@ -16,6 +16,25 @@ export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   return pool.query<T>(text, params);
 }
 
+/** Something to run queries on: the pool, or a client inside a transaction. */
+export type Db = Pick<pg.PoolClient, "query">;
+
+/** Runs `work` in one transaction on its own client. */
+export async function transaction<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await work(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** Applies every migration that has not run yet. Safe to call on each boot. */
 export async function migrate(): Promise<void> {
   const client = await pool.connect();
@@ -37,6 +56,7 @@ export async function migrate(): Promise<void> {
         const already = await client.query("SELECT 1 FROM schema_migrations WHERE name = $1", [migration.name]);
         if (already.rowCount === 0) {
           await client.query(migration.sql);
+          await migration.run?.(client);
           await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [migration.name]);
           console.log(`migration applied: ${migration.name}`);
         }

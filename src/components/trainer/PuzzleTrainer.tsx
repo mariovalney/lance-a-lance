@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from "react";
-import { ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Eye, History, RotateCcw, X } from "lucide-react";
+import { useCallback, useMemo, useState, type FC } from "react";
+import { ArrowLeft, Check, ChevronDown, ExternalLink, Eye, History, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { SequenceStep, type SequenceFinish } from "@/components/lesson/steps/SequenceStep";
 import { useProgress } from "@/lib/progress/useProgress";
-import { PROVISIONAL_GAMES, START_RATING, eloDelta } from "@/lib/progress/scoring";
-import type { PuzzleLogEntry, PuzzleStatus } from "@/lib/progress/types";
+import { PROVISIONAL_GAMES } from "@/lib/progress/scoring";
+import type { PuzzleAttempt, PuzzleStatus } from "@/lib/progress/types";
+import { HistorySheet } from "@/components/common/HistorySheet";
 import {
   OPENING_KEYS,
   THEME_GROUPS,
@@ -29,18 +30,20 @@ type Mode = "rated" | "practice";
 interface Outcome {
   ok: boolean;
   gaveUp: boolean;
+  /** Rating change once the server has scored it; null in practice or while saving. */
   delta: number | null;
+  saving: "saving" | "saved" | "failed" | "practice";
 }
 
 export const PuzzleTrainer: FC<{ onExit: () => void }> = ({ onExit }) => {
-  const { state, recordPuzzle } = useProgress();
+  const { state, recordPuzzle, loadPuzzlePage } = useProgress();
   const stats = state.puzzles;
-  const rating = stats?.rating ?? START_RATING;
-  const played = stats?.played ?? 0;
+  const rating = stats.rating;
+  const played = stats.played;
   const provisional = played < PROVISIONAL_GAMES;
 
   const [filter, setFilter] = useState<TrainerFilter>(() => getSettings().puzzleTheme ?? null);
-  const [puzzle, setPuzzle] = useState<TrainerPuzzle>(() => pickPuzzle(filter, rating, stats?.recent ?? []));
+  const [puzzle, setPuzzle] = useState<TrainerPuzzle>(() => pickPuzzle(filter, rating, stats.recent));
   const [mode, setMode] = useState<Mode>("rated");
   const [run, setRun] = useState(0);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -57,32 +60,41 @@ export const PuzzleTrainer: FC<{ onExit: () => void }> = ({ onExit }) => {
     setRun((r) => r + 1);
   };
 
-  const nextPuzzle = () => load(pickPuzzle(filter, stats?.rating ?? rating, stats?.recent ?? []), "rated");
+  const nextPuzzle = () => load(pickPuzzle(filter, stats.rating, stats.recent), "rated");
   const retry = () => load(puzzle, "practice");
+
+  /** Reports a rated attempt; the server scores it and answers with the rating change. */
+  const report = useCallback(
+    async (ok: boolean, gaveUp: boolean) => {
+      setOutcome({ ok, gaveUp, delta: null, saving: "saving" });
+      try {
+        const attempt = await recordPuzzle(puzzle.i, ok ? "ok" : gaveUp ? "solucao" : "erro");
+        setLastDelta(attempt.ratingDelta);
+        setOutcome({ ok, gaveUp, delta: attempt.ratingDelta, saving: "saved" });
+      } catch {
+        setOutcome({ ok, gaveUp, delta: null, saving: "failed" });
+      }
+    },
+    [puzzle, recordPuzzle],
+  );
 
   const onFinish = useCallback(
     ({ perfect, gaveUp }: SequenceFinish) => {
-      if (mode === "practice") {
-        setOutcome({ ok: perfect, gaveUp, delta: null });
-        return;
-      }
-      const delta = eloDelta(rating, puzzle.r, played, perfect);
-      recordPuzzle({ id: puzzle.i, status: perfect ? "ok" : gaveUp ? "solucao" : "erro", puzzleRating: puzzle.r, points: perfect ? 10 : gaveUp ? 0 : 3 });
-      setLastDelta(delta);
-      setOutcome({ ok: perfect, gaveUp, delta });
+      if (mode === "practice") setOutcome({ ok: perfect, gaveUp, delta: null, saving: "practice" });
+      else void report(perfect, gaveUp);
     },
-    [mode, rating, puzzle, played, recordPuzzle],
+    [mode, report],
   );
 
   const chooseFilter = (f: TrainerFilter) => {
     setFilter(f);
     updateSettings({ puzzleTheme: f });
     setFiltersOpen(false);
-    load(pickPuzzle(f, rating, stats?.recent ?? []), "rated");
+    load(pickPuzzle(f, rating, stats.recent), "rated");
   };
 
   const doneFooter = outcome ? (
-    <TrainerDone puzzle={puzzle} outcome={outcome} mode={mode} onNext={nextPuzzle} onRetry={retry} />
+    <TrainerDone puzzle={puzzle} outcome={outcome} onNext={nextPuzzle} onRetry={retry} onSave={() => void report(outcome.ok, outcome.gaveUp)} />
   ) : undefined;
 
   return (
@@ -173,11 +185,24 @@ export const PuzzleTrainer: FC<{ onExit: () => void }> = ({ onExit }) => {
       <HistorySheet
         open={historyOpen}
         onOpenChange={setHistoryOpen}
-        total={played}
-        onPick={(p) => {
-          setHistoryOpen(false);
-          load(p, "practice");
-        }}
+        description={
+          <>
+            {played} {played === 1 ? "puzzle" : "puzzles"} no total. Toque para refazer (não muda o rating).
+          </>
+        }
+        empty="Nenhum puzzle ainda."
+        version={played}
+        load={loadPuzzlePage}
+        keyOf={(a) => a.id}
+        render={(a) => (
+          <AttemptRow
+            attempt={a}
+            onPick={(p) => {
+              setHistoryOpen(false);
+              load(p, "practice");
+            }}
+          />
+        )}
       />
     </div>
   );
@@ -197,12 +222,12 @@ const FilterChip: FC<{ active: boolean; label: string; count: number; onClick: (
   </button>
 );
 
-const TrainerDone: FC<{ puzzle: TrainerPuzzle; outcome: Outcome; mode: Mode; onNext: () => void; onRetry: () => void }> = ({
+const TrainerDone: FC<{ puzzle: TrainerPuzzle; outcome: Outcome; onNext: () => void; onRetry: () => void; onSave: () => void }> = ({
   puzzle,
   outcome,
-  mode,
   onNext,
   onRetry,
+  onSave,
 }) => {
   const title = outcome.ok ? "Resolvido!" : outcome.gaveUp ? "Solução vista" : "Resolvido com erro";
   const tone = outcome.ok ? "bg-success-soft" : "bg-danger-soft";
@@ -214,7 +239,7 @@ const TrainerDone: FC<{ puzzle: TrainerPuzzle; outcome: Outcome; mode: Mode; onN
         <div className="flex items-baseline justify-between gap-2">
           <p className={cn("font-display text-lg font-bold", titleTone)}>
             {title}
-            {mode === "rated" && outcome.delta !== null && (
+            {outcome.delta !== null && (
               <span className="ml-2 font-mono text-base tabular">{outcome.delta >= 0 ? `+${outcome.delta}` : outcome.delta}</span>
             )}
           </p>
@@ -222,6 +247,14 @@ const TrainerDone: FC<{ puzzle: TrainerPuzzle; outcome: Outcome; mode: Mode; onN
             Puzzle <span className="font-mono">{puzzle.i}</span> · rating <span className="font-mono tabular">{puzzle.r}</span>
           </span>
         </div>
+        {outcome.saving === "failed" && (
+          <p className="text-sm">
+            O resultado não foi salvo.{" "}
+            <button type="button" onClick={onSave} className="font-semibold underline underline-offset-4">
+              Tentar de novo
+            </button>
+          </p>
+        )}
         <div className="flex flex-wrap gap-1">
           {themesOf(puzzle).map((t) => (
             <span key={t} className="rounded-full bg-background/70 px-2 py-0.5 text-xs font-medium">
@@ -242,7 +275,7 @@ const TrainerDone: FC<{ puzzle: TrainerPuzzle; outcome: Outcome; mode: Mode; onN
           <Button variant="outline" className="h-12 rounded-xl bg-background font-semibold" onClick={onRetry}>
             <RotateCcw className="!h-4 !w-4" /> Refazer
           </Button>
-          <Button className="h-12 rounded-xl text-base font-bold" onClick={onNext} autoFocus>
+          <Button className="h-12 rounded-xl text-base font-bold" onClick={onNext} disabled={outcome.saving === "saving"} autoFocus>
             Próximo puzzle
           </Button>
         </div>
@@ -251,97 +284,37 @@ const TrainerDone: FC<{ puzzle: TrainerPuzzle; outcome: Outcome; mode: Mode; onN
   );
 };
 
-const PAGE_SIZE = 20;
-
 const STATUS_LABEL: Record<PuzzleStatus, string> = { ok: "Resolvido", erro: "Com erro", solucao: "Solução vista" };
 
-const HistorySheet: FC<{ open: boolean; onOpenChange: (v: boolean) => void; total: number; onPick: (p: TrainerPuzzle) => void }> = ({
-  open,
-  onOpenChange,
-  total,
-  onPick,
-}) => {
-  const { loadPuzzlePage } = useProgress();
-  const [page, setPage] = useState(0);
-  const [loaded, setLoaded] = useState<{ page: number; total: number; entries: PuzzleLogEntry[] } | null>(null);
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  // Null while the page being shown has not arrived yet, which renders "Carregando...".
-  const entries = loaded && loaded.page === page && loaded.total === total ? loaded.entries : null;
-
-  // Always reopen on the newest page.
-  const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) setPage(0);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    let alive = true;
-    loadPuzzlePage(page, PAGE_SIZE).then((e) => alive && setLoaded({ page, total, entries: e }));
-    return () => {
-      alive = false;
-    };
-  }, [open, page, total, loadPuzzlePage]);
-
+/** One attempt in the history; tapping it opens the puzzle again, unrated. */
+const AttemptRow: FC<{ attempt: PuzzleAttempt; onPick: (p: TrainerPuzzle) => void }> = ({ attempt: h, onPick }) => {
+  const p = puzzleById(h.puzzleId);
+  if (!p) return null;
+  const Icon = h.status === "ok" ? Check : h.status === "erro" ? X : Eye;
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="flex max-h-[85dvh] flex-col rounded-t-2xl">
-        <SheetHeader>
-          <SheetTitle className="font-display">Histórico</SheetTitle>
-          <SheetDescription>
-            {total} {total === 1 ? "puzzle" : "puzzles"} no total. Toque para refazer (não muda o rating).
-          </SheetDescription>
-        </SheetHeader>
-        <ul className="-mx-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto py-2">
-          {total === 0 && <li className="px-2 text-sm text-muted-foreground">Nenhum puzzle ainda.</li>}
-          {total > 0 && entries === null && <li className="px-2 text-sm text-muted-foreground">Carregando...</li>}
-          {entries?.map((h, i) => {
-            const p = puzzleById(h.i);
-            if (!p) return null;
-            const Icon = h.s === "ok" ? Check : h.s === "erro" ? X : Eye;
-            return (
-              <li key={`${h.i}-${h.t}-${i}`}>
-                <button type="button" onClick={() => onPick(p)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-accent">
-                  <span
-                    className={cn(
-                      "grid h-7 w-7 shrink-0 place-items-center rounded-full",
-                      h.s === "ok" ? "bg-success-soft text-success" : h.s === "erro" ? "bg-danger-soft text-danger" : "bg-secondary text-muted-foreground",
-                    )}
-                    aria-label={STATUS_LABEL[h.s]}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-semibold">{themesOf(p).slice(0, 3).map(themeLabel).join(", ")}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {STATUS_LABEL[h.s]} · puzzle <span className="font-mono tabular">{h.p}</span> ·{" "}
-                      {new Date(h.t).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                    </span>
-                  </span>
-                  <span className="flex flex-col items-end">
-                    <span className={cn("font-mono text-sm font-bold tabular", h.d >= 0 ? "text-success" : "text-danger")}>{h.d >= 0 ? `+${h.d}` : h.d}</span>
-                    <span className="font-mono text-[11px] tabular text-muted-foreground">{h.r}</span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        {pages > 1 && (
-          <div className="flex items-center justify-between gap-2 border-t pt-3">
-            <Button variant="outline" size="sm" className="rounded-lg" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-              <ChevronLeft className="!h-4 !w-4" /> Mais novos
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              Página <span className="font-mono tabular">{page + 1}</span> de <span className="font-mono tabular">{pages}</span>
-            </span>
-            <Button variant="outline" size="sm" className="rounded-lg" disabled={page >= pages - 1} onClick={() => setPage((p) => p + 1)}>
-              Mais antigos <ChevronRight className="!h-4 !w-4" />
-            </Button>
-          </div>
+    <button type="button" onClick={() => onPick(p)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-accent">
+      <span
+        className={cn(
+          "grid h-7 w-7 shrink-0 place-items-center rounded-full",
+          h.status === "ok" ? "bg-success-soft text-success" : h.status === "erro" ? "bg-danger-soft text-danger" : "bg-secondary text-muted-foreground",
         )}
-      </SheetContent>
-    </Sheet>
+        aria-label={STATUS_LABEL[h.status]}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-sm font-semibold">{themesOf(p).slice(0, 3).map(themeLabel).join(", ")}</span>
+        <span className="text-xs text-muted-foreground">
+          {STATUS_LABEL[h.status]} · puzzle <span className="font-mono tabular">{h.puzzleRating}</span> ·{" "}
+          {new Date(h.at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+        </span>
+      </span>
+      <span className="flex flex-col items-end">
+        <span className={cn("font-mono text-sm font-bold tabular", h.ratingDelta >= 0 ? "text-success" : "text-danger")}>
+          {h.ratingDelta >= 0 ? `+${h.ratingDelta}` : h.ratingDelta}
+        </span>
+        <span className="font-mono text-[11px] tabular text-muted-foreground">{h.ratingAfter}</span>
+      </span>
+    </button>
   );
 };

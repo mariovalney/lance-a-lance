@@ -16,6 +16,8 @@ interface MoveBoardProps {
   stars?: Square[];
   overlay?: Partial<Record<Square, MarkKind>>;
   extraArrows?: BoardSpec["arrows"];
+  /** See `Board`. */
+  balanceCoords?: boolean;
   onMove: (move: MoveInput) => void;
   onIllegal: (from: Square, to: Square) => void;
 }
@@ -38,6 +40,7 @@ export const MoveBoard: FC<MoveBoardProps> = ({
   stars,
   overlay,
   extraArrows,
+  balanceCoords,
   onMove,
   onIllegal,
 }) => {
@@ -93,6 +96,7 @@ export const MoveBoard: FC<MoveBoardProps> = ({
     <div className="relative">
       <Board
         spec={boardSpec}
+        balanceCoords={balanceCoords}
         overlay={overlay}
         onSquareTap={handleTap}
         interaction={{

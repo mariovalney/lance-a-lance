@@ -4,11 +4,11 @@
 //
 // Bootstraps the admin: signs up when the database is empty, signs in as that
 // account when it is not. The app is behind the sign in screen, so every browser
-// here starts by getting in, and behind an account the browser keeps no copy
-// of the progress at all. Signs up with a copy already sitting in the browser
-// and checks the account ignores it, seeds the account through the API, checks
-// it shows and that nothing was written here, signs in from a second browser,
-// then exports the backup and imports it into a second account.
+// here starts by getting in, and the browser keeps no copy of the progress at
+// all. Signs in with a copy an older version left in the browser and checks it
+// is ignored and cleared, restores an old (version 1) backup through the API
+// and checks every part of it arrived, signs in from a second browser, then
+// exports the backup (version 2) and imports it into a second account.
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
@@ -37,7 +37,7 @@ const check = (ok, label) => {
 
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, acceptDownloads: true };
 
-/** Stands in for having played lessons and solved puzzles. */
+/** An old (version 1) progress document: what the app kept before the tables. */
 function progressFor(xp) {
   return {
     version: 1,
@@ -57,15 +57,18 @@ const PUZZLE_LOG = [
   { i: "ccc", s: "ok", d: 50, r: 861, p: 1000, t: Date.now() - 1000 },
 ];
 
-/** Writes an old copy straight into the browser, the way this used to work. */
+/** Writes an old copy straight into the browser, the way older versions did. */
 function seedBrowser(state) {
   localStorage.setItem("lance-a-lance:progress:v1", JSON.stringify(state));
 }
 
-/** Fills the account the way the app would, through the API. */
+/** Fills the account by restoring an old backup file, which the server converts to rows. */
 async function seedAccount(page, state) {
-  await page.request.put(BASE + "/api/progress", { data: state });
-  await page.request.put(BASE + "/api/puzzlelog/0", { data: { entries: PUZZLE_LOG } });
+  const response = await page.request.post(BASE + "/api/backup", {
+    data: { app: "lance-a-lance", kind: "backup", version: 1, exportedAt: new Date().toISOString(), progress: state, puzzleLog: { 0: PUZZLE_LOG } },
+  });
+  if (!response.ok()) throw new Error(`restoring the old backup failed: ${response.status()} ${await response.text()}`);
+  return (await response.json()).progress;
 }
 
 const browserCopy = (page) => page.evaluate(() => localStorage.getItem("lance-a-lance:progress:v1"));
@@ -123,15 +126,22 @@ async function xpOnScreen(page) {
   // account legitimately has progress of its own. What matters is that the
   // browser's copy is not it, and never goes up.
   check((await xpOnScreen(first)) !== STALE, `the account ignores the copy sitting in the browser (${await xpOnScreen(first)} XP)`);
-  const empty = await (await first.request.get(BASE + "/api/progress")).json();
-  check((empty.state?.xp ?? 0) !== STALE, `and nothing from it went up (${empty.state?.xp ?? 0} XP)`);
+  const empty = (await (await first.request.get(BASE + "/api/progress")).json()).progress;
+  check(empty.xp !== STALE, `and nothing from it went up (${empty.xp} XP)`);
+  check((await browserCopy(first)) === null, "and the old copy is cleared from the browser");
 
-  /* ---------- the account is the only copy ---------- */
-  await seedAccount(first, progressFor(XP));
+  /* ---------- an old backup restores into rows ---------- */
+  const restored = await seedAccount(first, progressFor(XP));
+  check(restored.xp === XP, `the old backup's XP arrived (${restored.xp})`);
+  check(restored.lessons["m1-l1"]?.bestStars === 3 && restored.lessons["m1-l2"]?.bestPct === 80, "its lessons arrived");
+  check(restored.records["coords-30s"] === 21, "its drill record arrived");
+  check(restored.puzzles.rating === 861 && restored.puzzles.played === 3 && restored.puzzles.solved === 2, "its puzzle rating and counts arrived");
+  const attempts = await (await first.request.get(BASE + "/api/puzzles/attempts?page=0&size=10")).json();
+  check(attempts.total === 3 && attempts.items[0].puzzleId === "ccc", `its puzzle history arrived, newest first (${attempts.total})`);
   await first.reload({ waitUntil: "networkidle" });
   await first.waitForTimeout(1200);
   check((await xpOnScreen(first)) === XP, `the account progress is what shows (${await xpOnScreen(first)} XP)`);
-  check(JSON.parse(await browserCopy(first))?.xp === STALE, "and the browser was not written to");
+  check((await browserCopy(first)) === null, "and the browser was not written to");
   await first.screenshot({ path: OUT + "/account-signed-in.png" });
 
   await openSettings(first);
@@ -151,9 +161,10 @@ async function xpOnScreen(page) {
   const file = path.join(OUT, "backup.json");
   await download.saveAs(file);
   const backup = JSON.parse(fs.readFileSync(file, "utf8"));
-  check(backup.app === "lance-a-lance" && backup.kind === "backup", "the exported file carries the app marker");
-  check(backup.progress?.xp === XP, `the exported file carries the XP (${backup.progress?.xp})`);
-  check(backup.puzzleLog?.["0"]?.filter(Boolean).length === 3, "the exported file carries the puzzle history");
+  check(backup.app === "lance-a-lance" && backup.kind === "backup" && backup.version === 2, "the exported file is a version 2 backup");
+  check(backup.data?.stats?.xp === XP, `the exported file carries the XP (${backup.data?.stats?.xp})`);
+  check(backup.data?.puzzleAttempts?.length === 3, "the exported file carries the puzzle history");
+  check(backup.data?.lessons?.length === 2, "the exported file carries the lessons");
 
   /* ---------- signing out goes back to the sign in screen, and empties it --- */
   await first.getByRole("button", { name: "Sair" }).click();
@@ -177,8 +188,8 @@ async function xpOnScreen(page) {
     await second.waitForTimeout(900);
     await getIn(second, OTHER);
     check((await xpOnScreen(second)) === 0, "another account on the same browser starts empty");
-    const untouched = await (await second.request.get(BASE + "/api/progress")).json();
-    check((untouched.state?.xp ?? 0) === 0, `and nothing was pushed into it (${untouched.state?.xp ?? 0} XP)`);
+    const untouched = (await (await second.request.get(BASE + "/api/progress")).json()).progress;
+    check(untouched.xp === 0, `and nothing was pushed into it (${untouched.xp} XP)`);
 
     /* ---------- import into that second, empty account ---------- */
     third = await open(browser);
@@ -187,7 +198,7 @@ async function xpOnScreen(page) {
     await openSettings(third);
     await third.locator('input[type="file"]').setInputFiles(file);
     await third.waitForTimeout(1500);
-    check(await third.getByText(/^Importado:/).isVisible(), "confirms the import");
+    check(await third.getByText("Progresso importado.").isVisible(), "confirms the import");
     await closeSettings(third);
     check((await xpOnScreen(third)) === XP, `the imported progress showed up (${await xpOnScreen(third)} XP)`);
   } else {
