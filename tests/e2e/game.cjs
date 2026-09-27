@@ -131,6 +131,11 @@ const { chromium } = require("playwright");
   await p.getByRole("button", { name: "Próximo lance" }).click();
   check((await game()).ply === 1, "and steps forward one move");
   await p.screenshot({ path: `${OUT}/game-review.png` });
+  await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await p.getByRole("button", { name: "Copiar PGN" }).click();
+  check(await waitFor("Copiado"), "the game is copied");
+  const pgn = await p.evaluate(() => navigator.clipboard.readText());
+  check(/\[Result "(1-0|0-1|1\/2-1\/2)"\]/.test(pgn) && /\n1\. \S+/.test(pgn) && /\[Site "Lance a Lance"\]/.test(pgn), `as PGN (${pgn.split("\n").slice(0, 2).join(" ")})`);
   await p.getByRole("button", { name: "Fechar" }).click();
 
   await p.getByRole("button", { name: "Voltar ao início" }).click();

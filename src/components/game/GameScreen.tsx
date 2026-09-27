@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { Chess } from "chess.js";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Flag, History, Loader2, Minus, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Flag, History, Loader2, Minus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +28,7 @@ import type { Square } from "@/lib/chess/squares";
 import { moveSound, playSound } from "@/lib/sound";
 import { getSettings, updateSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
+import { gamePgn, pgnFileName } from "@/lib/chess/pgn";
 
 type Side = "w" | "b" | "random";
 /** `saving` covers starting, finishing and calling off: the server has to answer first. */
@@ -124,12 +125,27 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
   const resigned = useRef(false);
   // Bumped on every new game, so a reply computed for an old one is dropped.
   const gameId = useRef(0);
-  const lastRow = useRef<HTMLSpanElement>(null);
+  const moveList = useRef<HTMLOListElement>(null);
 
   const shownSans = review ? boardAt(review.game.moves).sans : board.sans;
+  const highlighted = review ? review.ply : shownSans.length;
+  // Keeps the current move in view by scrolling the list alone, never the
+  // screen: the board stays where it is. Again when the list changes height,
+  // as it does when the footer grows at the end of a game.
   useEffect(() => {
-    lastRow.current?.scrollIntoView({ block: "nearest" });
-  }, [shownSans.length]);
+    const list = moveList.current;
+    if (!list) return;
+    const keepInView = () => {
+      const move = list.querySelector<HTMLElement>("[data-current]");
+      if (!move) return;
+      if (move.offsetTop < list.scrollTop) list.scrollTop = move.offsetTop - 8;
+      else if (move.offsetTop + move.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = move.offsetTop + move.offsetHeight - list.clientHeight + 8;
+    };
+    keepInView();
+    const resized = new ResizeObserver(keepInView);
+    resized.observe(list);
+    return () => resized.disconnect();
+  }, [highlighted, shownSans.length]);
 
   /** Hands the end to the server, which reads the result off the final position. */
   const finish = useCallback(
@@ -307,6 +323,32 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
     setPhase("review");
   };
 
+  // Copies the reviewed game as PGN; where the clipboard is out of reach
+  // (an old browser, a page not served over HTTPS), saves it as a file.
+  const [exported, setExported] = useState<"copied" | "saved" | null>(null);
+  const exportPgn = async (g: Game) => {
+    const pgn = gamePgn(g);
+    try {
+      await navigator.clipboard.writeText(pgn);
+      setExported("copied");
+    } catch {
+      const url = URL.createObjectURL(new Blob([pgn], { type: "application/x-chess-pgn" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = pgnFileName(g);
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setExported("saved");
+    }
+  };
+  useEffect(() => {
+    if (!exported) return;
+    const t = setTimeout(() => setExported(null), 2000);
+    return () => clearTimeout(t);
+  }, [exported]);
+
   const closeReview = () => {
     setReview(null);
     setPhase(current.current ? "playing" : "setup");
@@ -368,9 +410,15 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
               <ChevronsRight className="!h-5 !w-5" />
             </Button>
           </div>
-          <Button className="h-11 rounded-xl font-bold" onClick={closeReview}>
-            Fechar
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void exportPgn(review.game)}>
+              {exported ? <Check className="!h-4 !w-4" /> : <Copy className="!h-4 !w-4" />}
+              {exported === "copied" ? "Copiado" : exported === "saved" ? "Arquivo salvo" : "Copiar PGN"}
+            </Button>
+            <Button className="h-11 rounded-xl font-bold" onClick={closeReview}>
+              Fechar
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -396,7 +444,6 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
 
   // A review lists the whole game and marks where the board is.
   const sans = shownSans;
-  const highlighted = review ? review.ply : sans.length;
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -442,7 +489,7 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
       </header>
 
       <main
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
         data-game={JSON.stringify({
           phase,
           player,
@@ -454,7 +501,9 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
           ply: review?.ply ?? null,
         })}
       >
-        <div className="mx-auto flex w-full max-w-[30rem] flex-col gap-4 px-4 pb-6 pt-3">
+        {/* In a game the screen holds still: the board keeps its place and
+            only the move list scrolls, in whatever height is left. */}
+        <div className={cn("mx-auto flex w-full max-w-[30rem] flex-col gap-4 px-4 pt-3", phase === "setup" ? "pb-6" : "min-h-0 flex-1 pb-4")}>
           {phase === "setup" ? (
             <GameSetup level={level} onLevel={setLevel} side={side} onSide={setSide} assisted={assisted} onAssisted={setAssisted} />
           ) : (
@@ -471,18 +520,21 @@ export const GameScreen: FC<{ onExit: () => void }> = ({ onExit }) => {
                 onIllegal={() => setIllegal(true)}
               />
               {sans.length > 0 && (
-                <ol className="grid grid-cols-[2rem_4.5rem_1fr] gap-x-2 gap-y-1 rounded-xl border bg-card px-3.5 py-2.5 font-mono text-sm tabular" aria-label="Lances da partida">
+                <ol
+                  ref={moveList}
+                  className="relative grid min-h-[4.5rem] flex-1 grid-cols-[2rem_4.5rem_1fr] content-start gap-x-2 gap-y-1 overflow-y-auto rounded-xl border bg-card px-3.5 py-2.5 font-mono text-sm tabular"
+                  aria-label="Lances da partida"
+                >
                   {Array.from({ length: Math.ceil(sans.length / 2) }, (_, i) => (
                     <li key={i} className="contents">
-                      <span ref={i === Math.ceil(sans.length / 2) - 1 ? lastRow : undefined} className="text-muted-foreground">
-                        {i + 1}.
-                      </span>
+                      <span className="text-muted-foreground">{i + 1}.</span>
                       {[2 * i, 2 * i + 1].map((ply) =>
                         ply < sans.length ? (
                           <button
                             key={ply}
                             type="button"
                             disabled={!review}
+                            data-current={highlighted === ply + 1 || undefined}
                             onClick={() => review && setReview({ ...review, ply: ply + 1 })}
                             className={cn("justify-self-start rounded px-1 -mx-1 text-left disabled:cursor-default", highlighted === ply + 1 && "font-bold", review && "hover:bg-accent")}
                           >

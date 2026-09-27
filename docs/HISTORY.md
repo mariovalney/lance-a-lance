@@ -521,3 +521,15 @@ The games brought it to a head. Progress was still what the claude.ai Artifact's
 
 An old-schema database was built with the previous server, filled with a document shaped like his (993 XP, ten lessons, a 1017 rating, a puzzle log with lost slots, drill records), and then booted with the new one: every number and every attempt came across, and the old tables were gone. A version 2 backup exported, reset and restored gave back an identical read model.
 
+
+### Game totals come from the games
+
+After the deploy Mário's card said "1 partida" and the game history was empty. It was a draw from the first games version, which kept only totals in the document, so 005 brought the totals across with no game behind them. He chose to zero it: `006_game_stats_from_rows` recounts the game counters and sets the game rating to the last rated game's, or 800, from the rows in `games`, and every backup restore does the same (`recountGames` in `server/src/account.ts`). A version 1 file no longer carries game totals at all. The card can no longer count a game the history cannot show.
+
+### A game screen that holds still
+
+The move list under the board grew the page, and keeping the last move in view scrolled the whole screen, pushing the board up. Now the board keeps its place and only the list scrolls, in the height left above the footer, keeping the current move in view (the last one while playing, the one on the board in a review).
+
+### Copying a game as PGN
+
+Mário wanted to send a reviewed game out for analysis. The review has a "Copiar PGN" button: the game in PGN (Portable Game Notation, the text every analysis board imports, Lichess and chess.com included) goes to the clipboard, or, where the clipboard is out of reach, to a `.pgn` file. The seven required tags, the computer's level as its Elo, a Termination tag, and the moves in SAN (`src/lib/chess/pgn.ts`).
