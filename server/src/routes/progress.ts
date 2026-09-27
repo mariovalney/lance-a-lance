@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { LessonRunInput, LessonRunOutcome } from "../../../shared/types.js";
-import { nextStreak, pctOf, starsFor } from "../../../shared/scoring.js";
+import { nextStreak, pctOf, starsFor, xpFor } from "../../../shared/scoring.js";
 import { clearAccount, readProgress, statsOf } from "../account.js";
 import { pool, transaction } from "../db.js";
 import { requireUser, type Vars } from "./auth.js";
@@ -44,10 +44,17 @@ lessonRoutes.post("/runs", async (c) => {
   if (!run) return c.json({ error: "invalid_run" }, 400);
   const userId = c.get("user").id;
   const pct = pctOf(run.points, run.maxPoints);
-  const outcome: LessonRunOutcome = { xp: run.points, pct, stars: starsFor(pct) };
+  const outcome: LessonRunOutcome = { xp: run.points, repeat: false, pct, stars: starsFor(pct) };
 
   await transaction(async (client) => {
+    // Locks the player's row, so two runs of the same lesson cannot both count as the first.
     const stats = await statsOf(client, userId, true);
+    const done = await client.query<{ completions: number }>("SELECT completions FROM lesson_progress WHERE user_id = $1 AND lesson_id = $2", [
+      userId,
+      run.lessonId,
+    ]);
+    outcome.repeat = (done.rows[0]?.completions ?? 0) > 0;
+    outcome.xp = xpFor(run.points, outcome.repeat);
     const streak = nextStreak({ current: stats.streak_current, best: stats.streak_best, lastDay: stats.streak_last_day }, run.day);
     await client.query(
       `UPDATE player_stats SET xp = xp + $2, streak_current = $3, streak_best = $4, streak_last_day = $5, updated_at = now()

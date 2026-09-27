@@ -102,6 +102,8 @@ export interface LessonRunInput {
 
 export interface LessonRunOutcome {
   xp: number;
+  /** The lesson had been completed before this run, so it earned half the XP. */
+  repeat: boolean;
   pct: number;
   stars: Stars;
 }

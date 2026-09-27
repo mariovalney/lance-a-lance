@@ -10,6 +10,7 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
+import { useXpFor } from "@/components/lesson/xp";
 import { DEFAULT_ILLEGAL, moveLabel } from "@/components/lesson/steps/moveText";
 
 export interface SequenceFinish {
@@ -45,6 +46,7 @@ export const SequenceStep: FC<SequenceStepProps> = ({
   onFinish,
   doneFooter,
 }) => {
+  const xp = useXpFor();
   const startFen = screen.board.fen;
   const player = turnOf(startFen);
   const [fen, setFen] = useState(startFen);
@@ -191,7 +193,7 @@ export const SequenceStep: FC<SequenceStepProps> = ({
     footer = (
       <FeedbackBar
         tone={gaveUp ? "wrong" : wrong === 0 ? "correct" : "partial"}
-        title={gaveUp ? "Solução mostrada" : titleFor ? titleFor(wrong === 0) : `${wrong === 0 ? "Perfeito!" : "Conseguiu."} +${points} XP`}
+        title={gaveUp ? "Solução mostrada" : titleFor ? titleFor(wrong === 0) : `${wrong === 0 ? "Perfeito!" : "Conseguiu."} +${xp(points)} XP`}
         message={message?.tone === "neutral" ? `${message.text} ${screen.success}` : screen.success}
         actionLabel="Continuar"
         autoAdvance={autoAdvance}

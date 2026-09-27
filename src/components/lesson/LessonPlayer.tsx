@@ -24,10 +24,14 @@ import { PathStep } from "@/components/lesson/steps/PathStep";
 import { SequenceStep } from "@/components/lesson/steps/SequenceStep";
 import { PlayStep } from "@/components/lesson/steps/PlayStep";
 import type { ExerciseResult } from "@/components/lesson/types";
+import { RepeatContext } from "@/components/lesson/xp";
+import { xpFor } from "@/lib/progress/scoring";
 
 interface LessonPlayerProps {
   lesson: LessonDef;
   code: string;
+  /** Completed before: this run earns half the XP. */
+  repeat?: boolean;
   onExit: () => void;
   onFinish: (result: LessonRunResult) => void;
 }
@@ -55,7 +59,7 @@ function renderStep(screen: Screen, onDone: (r: ExerciseResult | null) => void) 
   }
 }
 
-export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFinish }) => {
+export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, repeat = false, onExit, onFinish }) => {
   // A fresh set of examples every time the lesson is opened.
   const screens = useMemo(() => buildLesson(lesson), [lesson]);
   const [index, setIndex] = useState(0);
@@ -67,7 +71,8 @@ export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFi
   const canHint = explained.length > 0 && isExercise(screens[index]);
 
   const exerciseCount = screens.filter(isExercise).length;
-  const points = results.reduce((s, r) => s + r.points, 0);
+  // What the header shows: XP, so halved on a repeat, exactly as each screen said.
+  const xp = results.reduce((s, r) => s + xpFor(r.points, repeat), 0);
   const progressPct = Math.round((index / screens.length) * 100);
 
   const handleDone = (result: ExerciseResult | null) => {
@@ -105,6 +110,7 @@ export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFi
             <span className="truncate font-semibold text-muted-foreground">
               <span className="font-mono">{code}</span> · {lesson.title}
             </span>
+            {repeat && <span className="shrink-0 font-semibold text-gold">Revisão, metade do XP</span>}
           </div>
           <div
             className="h-2.5 w-full overflow-hidden rounded-full bg-secondary"
@@ -129,13 +135,13 @@ export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFi
             <Lightbulb className="!h-5 !w-5" />
           </Button>
         )}
-        <div className="shrink-0 rounded-full bg-gold-soft px-2.5 py-1 font-mono text-sm font-bold tabular text-gold" aria-label={`${points} XP nesta lição`}>
-          {points} XP
+        <div className="shrink-0 rounded-full bg-gold-soft px-2.5 py-1 font-mono text-sm font-bold tabular text-gold" aria-label={`${xp} XP nesta lição`}>
+          {xp} XP
         </div>
       </header>
 
       <div key={index} className="flex min-h-0 flex-1 flex-col">
-        {renderStep(screens[index], handleDone)}
+        <RepeatContext.Provider value={repeat}>{renderStep(screens[index], handleDone)}</RepeatContext.Provider>
       </div>
 
       <Dialog open={showHint && canHint} onOpenChange={setShowHint}>

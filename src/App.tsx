@@ -103,6 +103,7 @@ const Shell: FC = () => {
           key={run}
           lesson={ref.meta.lesson}
           code={lessonCode(ref)}
+          repeat={(state.lessons[ref.meta.id]?.completions ?? 0) > 0}
           onExit={goHome}
           onFinish={(result) => void save(ref.meta.id, result)}
         />

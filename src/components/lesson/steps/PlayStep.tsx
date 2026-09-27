@@ -9,6 +9,7 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
+import { useXpFor } from "@/components/lesson/xp";
 import { DEFAULT_ILLEGAL } from "@/components/lesson/steps/moveText";
 
 type Status = "playing" | "won" | "failed";
@@ -16,6 +17,7 @@ const POINTS_BY_ATTEMPT = [10, 7, 5, 3];
 const linkClass = "text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50";
 
 export const PlayStep: FC<{ screen: PlayScreen; onDone: StepDone }> = ({ screen, onDone }) => {
+  const xp = useXpFor();
   const startFen = screen.board.fen;
   const player = turnOf(startFen);
   const [fen, setFen] = useState(startFen);
@@ -86,7 +88,7 @@ export const PlayStep: FC<{ screen: PlayScreen; onDone: StepDone }> = ({ screen,
     footer = (
       <FeedbackBar
         tone={attempt === 1 ? "correct" : "partial"}
-        title={`Xeque-mate! +${points} XP`}
+        title={`Xeque-mate! +${xp(points)} XP`}
         message={`Em ${moves} ${moves === 1 ? "lance" : "lances"}. ${screen.success}`}
         actionLabel="Continuar"
         onAction={() => onDone({ key: screen.key, points, max: 10, firstTry: attempt === 1, mistakeNote: attempt > 1 ? screen.mistakeNote : undefined })}

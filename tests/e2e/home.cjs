@@ -1,6 +1,6 @@
 const { chromium } = require("playwright");
 (async () => {
-  const { OUT: S, signedIn } = require("./env.cjs");
+  const { OUT: S, signedIn, postOk } = require("./env.cjs");
   const b = await chromium.launch();
   const { base: SITE, ctx } = await signedIn(b);
   const p = await ctx.newPage();
@@ -36,6 +36,17 @@ const { chromium } = require("playwright");
   check(new URL(p.url()).pathname === "/treino" && (await p.locator("main[data-solution]").count()) > 0, "the trainer survives a reload");
   await p.goto(SITE + "/licoes/m99-l9", { waitUntil: "networkidle" });
   check(new URL(p.url()).pathname === "/", "a lesson that does not exist goes home");
+
+  // A lesson played again after it was completed earns half the XP; stars still use the full points.
+  const runOf = (points) => postOk(ctx.request, `${SITE}/api/lessons/runs`, { lessonId: "m11-l5", points, maxPoints: 40, mistakes: [], records: [] });
+  const first = await runOf(35);
+  check(first.run.xp === 35 && !first.run.repeat, `the first run earns its points (${first.run.xp} XP)`);
+  const again = await runOf(37);
+  check(again.run.xp === 19 && again.run.repeat, `a run of a completed lesson earns half (${again.run.xp} XP)`);
+  check(again.run.stars === 3 && again.progress.xp === first.progress.xp + 19, `with the stars of the full points, and the total adds the half (${again.progress.xp} XP)`);
+  await p.goto(`${SITE}/licoes/m11-l5`, { waitUntil: "networkidle" });
+  check((await p.getByText("Revisão, metade do XP").count()) === 1, "the lesson says so in its header");
+
   console.log(`problems: ${problems.length ? problems.join(" ; ") : "none"}`);
   console.log("errors", errors.length ? errors : "none");
   await b.close();

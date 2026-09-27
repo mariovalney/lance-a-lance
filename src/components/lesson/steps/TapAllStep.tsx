@@ -8,8 +8,10 @@ import { RichText } from "@/components/common/RichText";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { StepLayout, StepPrompt } from "@/components/lesson/StepLayout";
 import type { StepDone } from "@/components/lesson/types";
+import { useXpFor } from "@/components/lesson/xp";
 
 export const TapAllStep: FC<{ screen: TapAllScreen; onDone: StepDone }> = ({ screen, onDone }) => {
+  const xp = useXpFor();
   const [found, setFound] = useState<Square[]>([]);
   const [wrongTaps, setWrongTaps] = useState(0);
   const [flash, setFlash] = useState<Square | null>(null);
@@ -62,7 +64,7 @@ export const TapAllStep: FC<{ screen: TapAllScreen; onDone: StepDone }> = ({ scr
     footer = (
       <FeedbackBar
         tone={wrongTaps === 0 ? "correct" : "partial"}
-        title={wrongTaps === 0 ? `Perfeito! +${points} XP` : `Completou. +${points} XP`}
+        title={wrongTaps === 0 ? `Perfeito! +${xp(points)} XP` : `Completou. +${xp(points)} XP`}
         message={screen.success}
         actionLabel="Continuar"
         onAction={finish}
