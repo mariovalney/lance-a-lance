@@ -2,7 +2,7 @@ import { useMemo, useState, type FC } from "react";
 import { Chess } from "chess.js";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MoveBoard } from "@/components/board/MoveBoard";
 import { RichText } from "@/components/common/RichText";
 import { moveLabel } from "@/components/lesson/steps/moveText";
@@ -52,7 +52,6 @@ export const LineDialog: FC<{
 
   const last = steps.length - 1;
   const go = (to: number) => setStep(Math.max(0, Math.min(last, to)));
-  const first = steps[1]?.san;
   // Move numbers as the game had them: "7. d4" or "7... Nf6".
   const [, turn, , , , moveNumber] = fen.split(" ");
   const startNumber = Number(moveNumber) || 1;
@@ -60,14 +59,11 @@ export const LineDialog: FC<{
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[24rem] rounded-2xl" data-line-ply={step}>
+      <DialogContent className="max-w-[24rem] rounded-2xl" data-line-ply={step} aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle className="font-display">{first ? `Melhor era ${first}` : "Lances do motor"}</DialogTitle>
-          {label && (
-            <DialogDescription>
-              <RichText text={`${label}, e o que o motor esperava depois.`} />
-            </DialogDescription>
-          )}
+          <DialogTitle className="font-display">
+            <RichText text={label ? `Melhor era ${label}` : "Melhor lance"} />
+          </DialogTitle>
         </DialogHeader>
         <MoveBoard
           spec={{ orientation: orientation === "w" ? "white" : "black" }}
