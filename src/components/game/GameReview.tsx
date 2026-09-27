@@ -18,6 +18,7 @@ import { parseUci } from "@/lib/chess/game";
 import { moveLabel } from "@/components/lesson/steps/moveText";
 import { cn } from "@/lib/utils";
 import { RichText } from "@/components/common/RichText";
+import { LineDialog } from "@/components/game/LineDialog";
 import { forgetRouteState, goBack, navigate, paths, routeState } from "@/lib/router";
 import { materialFor } from "@/lib/chess/material";
 import { explainMove } from "@/lib/chess/explain";
@@ -144,6 +145,9 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   const preferred = mark && game?.analysis?.[ply - 1]?.best ? bestAt(positionAt(game.moves, ply - 1).fen, game.analysis[ply - 1].best!) : null;
   const why = mark && game ? explainMove(game, ply) : null;
   const toAnalyse = game ? !game.analysis || lacksLines(game) : false;
+  // The engine's line from the position before the judged move: why it preferred its move.
+  const bestLine = mark ? game?.analysis?.[ply - 1]?.pv : undefined;
+  const [lineOpen, setLineOpen] = useState(false);
 
   let footer;
   if (current.kind === "loading") {
@@ -258,6 +262,14 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
                     </>
                   )}
                   {why && <> {why}</>}
+                  {bestLine?.length ? (
+                    <>
+                      {" "}
+                      <button type="button" onClick={() => setLineOpen(true)} className="font-medium underline underline-offset-4">
+                        Ver lances
+                      </button>
+                    </>
+                  ) : null}
                 </p>
               )}
               <MoveList
@@ -275,6 +287,16 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
       </main>
 
       {footer}
+
+      {game && bestLine?.length ? (
+        <LineDialog
+          open={lineOpen}
+          onOpenChange={setLineOpen}
+          fen={positionAt(game.moves, ply - 1).fen}
+          line={bestLine}
+          orientation={game.player}
+        />
+      ) : null}
     </div>
   );
 };

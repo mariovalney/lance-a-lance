@@ -587,6 +587,7 @@ Mário asked for the move symbols in the review. He chose Lichess's set and an "
   4. material left on the table ("Deixava de ganhar um bispo.").
 
   Anything else, the positional reasons no engine puts into words, gets no sentence. The material is counted only up to the line's last quiet move: the engine's line often stops in the middle of a trade (a queen taken, the recapture past the end), and read to the end that looks like a piece won. The validator checks the rule on hand-written analyses (`ONLY=analise`), one of them the engine's own cut-off line. An analysis saved before the lines existed offers "Analisar de novo".
+- **The engine's line.** After the sentence, "Ver lances" opens a modal with a board of its own, starting on the position before the judged move and stepping through the line the engine calculated from its preferred move: why it preferred it. The move actually played is already in the review, so the modal shows only the engine's line, and closing it leaves the review on the same move.
 - **From the game to its analysis.** The end of a game has "Ver análise", which opens the review and starts the analysis. A reload does not start it again.
 - **The material balance.** A number beside the rating during a game and in the review:
   - 0 at the start;

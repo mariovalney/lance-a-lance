@@ -174,6 +174,27 @@ const { chromium } = require("playwright");
   const stored = await (await p.request.get(`${base}/api/games/${g.id}`)).json();
   check(stored.game?.analysis?.length === g.moves + 1, `and is saved with the game (${stored.game?.analysis?.length} positions)`);
   await p.screenshot({ path: `${OUT}/game-analysis.png` });
+
+  // A judged move opens the engine's line in a dialog of its own; the review stays put.
+  const judgedAt = g.marks.findIndex(Boolean);
+  if (judgedAt >= 0) {
+    await p.locator("ol[aria-label='Lances da partida'] button").nth(judgedAt).click();
+    const reviewPly = (await game()).ply;
+    await p.getByRole("button", { name: "Ver lances" }).click();
+    const lineStep = async () => Number(await p.locator("[data-line-ply]").getAttribute("data-line-ply"));
+    await p.locator("[data-line-ply]").waitFor({ timeout: 5_000 }).catch(() => undefined);
+    check((await lineStep()) === 0, "the engine's line opens before its move");
+    await p.getByRole("button", { name: "Próximo lance da linha" }).click();
+    check((await lineStep()) === 1, "and steps through it");
+    await p.getByRole("button", { name: "Fim da linha" }).click();
+    check((await lineStep()) > 1, `to its end (${await lineStep()})`);
+    await p.screenshot({ path: `${OUT}/game-line.png` });
+    await p.keyboard.press("Escape");
+    await p.waitForTimeout(300);
+    check((await p.locator("[data-line-ply]").count()) === 0 && (await game()).ply === reviewPly, "closing it leaves the review on the same move");
+  } else {
+    console.log("no judged move in this game: the line dialog is not checked");
+  }
   await p.reload({ waitUntil: "networkidle" });
   await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
   check((await game()).analysis === "done" && (await p.getByRole("button", { name: "Analisar" }).count()) === 0, "a reload keeps it, and nothing is left to analyse");
