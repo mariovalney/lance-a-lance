@@ -4,6 +4,7 @@ import { ARTICLE, NAME, hangingPieces } from "@/content/lib/analysis";
 import { afterMove, isLegalPosition, placementToFen } from "@/content/lib/positions";
 import {
   doubledPawns,
+  pawnsOf,
   isolatedPawns,
   mobility,
   openFiles,
@@ -152,6 +153,75 @@ function rookToOpenFile(): Screen | null {
           : `A coluna aberta é a \`${pos.open}\`. Leve uma torre para lá.`,
       success: "Torre na coluna aberta: ela controla a coluna inteira e pode invadir.",
       mistakeNote: "Torre na coluna aberta",
+    };
+  }
+  return null;
+}
+
+/** Files with a black pawn and no white one: half open for White's rooks. */
+function semiOpenFiles(fen: string): string[] {
+  const white = new Set(pawnsOf(fen, "w").map((s) => s[0]));
+  const black = new Set(pawnsOf(fen, "b").map((s) => s[0]));
+  return FILES.filter((f) => !white.has(f) && black.has(f));
+}
+
+function semiOpenChoice(): Screen | null {
+  for (let guard = 0; guard < 300; guard++) {
+    const pawns = randomPawns();
+    const file = pick(["b", "c", "d", "e", "f"]);
+    for (const sq of Object.keys(pawns) as Square[]) if (sq[0] === file && pawns[sq] === "P") delete pawns[sq];
+    const fen = legalFen(withKings({ ...pawns, a1: "R" }));
+    if (!fen) continue;
+    const semi = semiOpenFiles(fen);
+    if (semi.length !== 1 || openFiles(fen).length) continue;
+    const others = pickDistinct(
+      FILES.filter((f) => f !== semi[0]),
+      3,
+    );
+    return {
+      kind: "choice",
+      key: `semiaberta:${fen}`,
+      prompt: "Qual coluna está **semiaberta** para as brancas (sem peão branco, com peão preto)?",
+      board: { fen },
+      options: shuffle([semi[0], ...others]).map((f) => ({ id: f, label: `Coluna ${f}`, mono: true })),
+      correct: semi[0],
+      explain: `Na coluna \`${semi[0]}\` só há peão preto. Uma torre branca ali pressiona esse peão, que vira alvo.`,
+      mistakeNote: "Achar a coluna semiaberta",
+    };
+  }
+  return null;
+}
+
+/** One rook already on the open file: bring the other behind it. */
+function doubleRooks(): Screen | null {
+  for (let guard = 0; guard < 200; guard++) {
+    const pos = openFilePosition();
+    if (!pos) continue;
+    const g = load(pos.fen);
+    const first = (["a1", "e1", "f1"] as Square[]).find((sq) => g.get(sq)?.type === "r" && g.get(sq)?.color === "w");
+    const spot = pick(([2, 3] as const).map((r) => `${pos.open}${r}` as Square).filter((sq) => !g.get(sq)));
+    if (!first || !spot) continue;
+    g.remove(first);
+    g.put({ type: "r", color: "w" }, spot);
+    const fen = legalFen(Object.fromEntries(ALL_SQUARES.flatMap((sq) => {
+      const p = g.get(sq);
+      return p ? [[sq, p.color === "w" ? p.type.toUpperCase() : p.type]] : [];
+    })) as Pieces);
+    if (!fen) continue;
+    const ok = (m: { piece: string; from: string; to: string; promotion?: string }) =>
+      m.piece === "r" && m.from[0] !== pos.open && m.to[0] === pos.open && hangingPieces(afterMove(fen, m as never)!.fen(), "w").length === 0;
+    const sol = legalMoves(fen).find((m) => ok(m));
+    if (!sol) continue;
+    return {
+      kind: "move",
+      key: `dobrar-torres:${fen}`,
+      prompt: `Uma torre já está na coluna \`${pos.open}\`. Coloque a outra na mesma coluna.`,
+      board: { fen, marks: { [spot]: "focus" } },
+      accept: (m) => ok(m),
+      solution: uciOf(sol),
+      wrong: (m) => (m.piece === "r" && m.to[0] === pos.open ? "Essa casa deixa uma peça sua sem proteção." : `Leve a outra torre para a coluna \`${pos.open}\`.`),
+      success: "Torres dobradas: uma protege a outra, e juntas pesam o dobro na coluna.",
+      mistakeNote: "Dobrar as torres",
     };
   }
   return null;
@@ -323,6 +393,40 @@ function improveWorst(): Screen | null {
   return null;
 }
 
+function knightOrBishop(): Screen {
+  return {
+    kind: "choice",
+    key: "casa-forte-peca",
+    prompt: "Qual peça branca aproveita melhor a casa forte em `d5`?",
+    board: { fen: "6k1/pp3ppp/3p4/2p5/2P5/8/PP3PPP/6K1 w - - 0 1", marks: { d5: "good" } },
+    options: [
+      { id: "cavalo", label: "Cavalo" },
+      { id: "bispo", label: "Bispo" },
+      { id: "torre", label: "Torre" },
+    ],
+    correct: "cavalo",
+    explain: "O cavalo precisa chegar perto da ação para jogar, e dali ninguém o expulsa. O bispo e a torre atacam de longe, de qualquer casa.",
+    mistakeNote: "A peça da casa forte",
+  };
+}
+
+function isolatedPlan(): Screen {
+  return {
+    kind: "choice",
+    key: "plano-isolado",
+    prompt: "O peão preto de `d5` está isolado. Qual é o melhor plano contra ele?",
+    board: { fen: "6k1/pp3ppp/8/3p4/8/8/PP3PPP/6K1 w - - 0 1", marks: { d5: "focus", d4: "good" } },
+    options: [
+      { id: "bloquear", label: "Colocar uma peça em d4, na frente dele" },
+      { id: "trocar", label: "Trocar os outros peões" },
+      { id: "avancar", label: "Avançar os peões do lado do rei" },
+    ],
+    correct: "bloquear",
+    explain: "Com uma peça em `d4`, o peão fica parado. Nenhum peão preto pode expulsar essa peça, e o peão parado vira alvo.",
+    mistakeNote: "Plano contra o peão isolado",
+  };
+}
+
 function compact(list: (Screen | null)[]): Screen[] {
   return list.filter((s): s is Screen => Boolean(s));
 }
@@ -343,7 +447,19 @@ export const lessonEstrutura: LessonDef = {
       },
       tip: "Aqui: `d5` é passado, `c2` e `c3` são dobrados, `a2` é isolado.",
     },
-    ...compact([pawnKindRound("isolados"), pawnKindRound("dobrados"), pawnKindRound("passados"), islandsRound()]),
+    ...compact([pawnKindRound("isolados"), pawnKindRound("dobrados"), pawnKindRound("passados")]),
+    {
+      kind: "explain",
+      title: "O que fazer com cada um",
+      text: "Cada tipo de peão pede um plano:",
+      steps: [
+        "Isolado: coloque uma peça na casa da frente dele. Ele fica parado e vira alvo.",
+        "Dobrados: um tapa o outro, e nenhum protege o vizinho. Ataque-os.",
+        "Passado: empurre. Cada casa que ele anda dá mais trabalho ao adversário.",
+      ],
+    },
+    isolatedPlan(),
+    ...compact([islandsRound(), pawnKindRound(pick(["isolados", "dobrados", "passados"] as const))]),
   ],
 };
 
@@ -358,9 +474,14 @@ export const lessonColunas: LessonDef = {
       title: "Colunas abertas",
       text: "Uma coluna **aberta** não tem peões. Torres adoram colunas abertas: dali atacam até o fundo do campo adversário.",
       board: { fen: "r5k1/pp3ppp/8/8/8/8/PP3PPP/3R2K1 w - - 0 1", arrows: [{ from: "d1", to: "d8" }], marks: { d8: "soft" } },
-      tip: "Coluna só sem peões seus (com peão adversário) é **semiaberta**, também boa para torres.",
+      steps: [
+        "Leve uma torre para a coluna aberta antes do adversário.",
+        "Coloque a outra torre na mesma coluna: uma protege a outra.",
+        "Pela coluna, a torre chega na 7ª fileira, onde estão os peões dele.",
+      ],
+      tip: "Coluna sem peões seus, mas com peão dele, é **semiaberta**: também serve para torres.",
     },
-    ...compact([openFileChoice(), rookToOpenFile(), rookToOpenFile()]),
+    ...compact([openFileChoice(), rookToOpenFile(), semiOpenChoice(), doubleRooks(), rookToOpenFile(), doubleRooks()]),
   ],
 };
 
@@ -375,8 +496,9 @@ export const lessonCasasFortes: LessonDef = {
       title: "Casa forte",
       text: "Uma **casa forte** fica no campo adversário, é protegida por um peão seu e nenhum peão inimigo consegue atacá-la. É o lugar ideal para um cavalo.",
       board: { fen: "6k1/pp3ppp/3p4/2pN4/2P5/8/PP3PPP/6K1 w - - 0 1", marks: { d5: "good" }, arrows: [{ from: "c4", to: "d5", tone: "good" }] },
+      steps: ["Ache uma casa no campo dele que nenhum peão preto consegue atacar.", "Proteja essa casa com um peão seu.", "Leve um cavalo para lá."],
     },
-    ...compact([outpostTap(), knightToOutpost(), knightToOutpost()]),
+    ...compact([outpostTap(), knightToOutpost(), knightOrBishop(), outpostTap(), knightToOutpost(), knightToOutpost()]),
   ],
 };
 
@@ -392,7 +514,14 @@ export const lessonPecaBoaRuim: LessonDef = {
       text: "Um bispo com muitos peões seus em casas da mesma cor fica **ruim**: os próprios peões bloqueiam as diagonais. Com os peões na outra cor, ele é um bispo **bom**.",
       board: { fen: "6k1/5ppp/4p3/3pP3/3P4/2B5/5PPP/6K1 w - - 0 1", marks: { c3: "bad", d4: "soft", e5: "soft" } },
     },
-    ...compact([bishopRound(), bishopRound(), worstTap(), worstTap()]),
+    ...compact([bishopRound(), bishopRound(), bishopRound()]),
+    {
+      kind: "explain",
+      title: "Consertar uma peça ruim",
+      text: "Uma peça ruim tem conserto:",
+      steps: ["Bispo ruim: mude seus peões para a outra cor, ou troque o bispo.", "Qualquer peça presa: leve-a para fora da corrente de peões, onde ela tenha casas."],
+    },
+    ...compact([worstTap(), worstTap(), improveWorst()]),
   ],
 };
 
@@ -412,7 +541,8 @@ export const lessonPlano: LessonDef = {
         "Leve essa peça para uma casa ativa: coluna aberta, casa forte ou diagonal livre.",
         "Troque as peças adversárias que mais atrapalham você.",
       ],
+      tip: "Um lance, uma melhoria. Comece pela peça pior.",
     },
-    ...compact([worstTap(), improveWorst(), improveWorst()]),
+    ...compact([worstTap(), improveWorst(), rookToOpenFile(), improveWorst(), worstTap(), improveWorst()]),
   ],
 };
