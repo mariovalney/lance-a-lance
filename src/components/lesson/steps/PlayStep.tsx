@@ -13,6 +13,7 @@ import { DEFAULT_ILLEGAL } from "@/components/lesson/steps/moveText";
 
 type Status = "playing" | "won" | "failed";
 const POINTS_BY_ATTEMPT = [10, 7, 5, 3];
+const linkClass = "text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50";
 
 export const PlayStep: FC<{ screen: PlayScreen; onDone: StepDone }> = ({ screen, onDone }) => {
   const startFen = screen.board.fen;
@@ -67,6 +68,7 @@ export const PlayStep: FC<{ screen: PlayScreen; onDone: StepDone }> = ({ screen,
     }, 550);
   };
 
+  /** Back to the starting position, after a failure or by choice: either way, a new attempt. */
   const retry = () => {
     setFen(startFen);
     setLastMove(null);
@@ -112,9 +114,16 @@ export const PlayStep: FC<{ screen: PlayScreen; onDone: StepDone }> = ({ screen,
         message={message?.text ?? `Lances: ${moves} de ${screen.maxMoves}.${screen.hint ? ` ${screen.hint}` : ""}`}
         onDismiss={() => setMessage(null)}
         extra={
-          <button type="button" onClick={skip} className="self-start text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">
-            Pular este exercício
-          </button>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 self-start">
+            {moves > 0 && (
+              <button type="button" onClick={retry} disabled={busy} className={linkClass} data-restart>
+                Recomeçar
+              </button>
+            )}
+            <button type="button" onClick={skip} className={linkClass}>
+              Pular este exercício
+            </button>
+          </div>
         }
       />
     );

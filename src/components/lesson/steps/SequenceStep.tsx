@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
-import { Eye } from "lucide-react";
+import { Eye, RotateCcw } from "lucide-react";
 import { moveSound, playSound } from "@/lib/sound";
 import type { SequenceScreen } from "@/content/types";
 import type { Square } from "@/lib/chess/squares";
@@ -146,22 +146,42 @@ export const SequenceStep: FC<SequenceStepProps> = ({
     }, 300 + (screen.line.length - ply) * 800);
   };
 
+  /** Back to the starting position. The wrong moves already made still count. */
+  const restart = () => {
+    if (busy || done) return;
+    setFen(startFen);
+    setPly(0);
+    setLastMove(screen.board.lastMove ?? null);
+    setWrongHere(0);
+    setMessage(null);
+  };
+
   const points = gaveUp ? 0 : pointsForWrongTaps(wrong);
   const expected = screen.line[ply] ? parseUci(screen.line[ply]) : null;
   const showHint = hintArrows && !done && wrongHere >= 2 && expected;
   const playerMoves = screen.line.filter((_, i) => i % 2 === 0).map(parseUci);
   const total = playerMoves.length;
   const doneMoves = Math.min(Math.ceil(ply / 2), total);
+  const linkClass =
+    "inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50";
+  const restartButton =
+    total > 1 && ply > 0 && !done ? (
+      <button type="button" onClick={restart} disabled={busy} className={linkClass} data-restart>
+        <RotateCcw className="h-4 w-4" aria-hidden /> Recomeçar
+      </button>
+    ) : undefined;
   const giveUpButton =
     allowGiveUp && !done ? (
-      <button
-        type="button"
-        onClick={giveUp}
-        disabled={busy}
-        className="inline-flex items-center gap-1.5 self-start text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
-      >
+      <button type="button" onClick={giveUp} disabled={busy} className={linkClass}>
         <Eye className="h-4 w-4" aria-hidden /> Ver solução
       </button>
+    ) : undefined;
+  const actions =
+    restartButton || giveUpButton ? (
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 self-start">
+        {restartButton}
+        {giveUpButton}
+      </div>
     ) : undefined;
 
   let footer;
@@ -184,12 +204,12 @@ export const SequenceStep: FC<SequenceStepProps> = ({
         tone={message.tone === "wrong" ? "wrong" : "neutral"}
         title={message.tone === "wrong" ? (showHint ? "Olha a seta no tabuleiro" : "Ainda não") : undefined}
         message={message.text}
-        extra={giveUpButton}
+        extra={actions}
         onDismiss={() => setMessage((m) => (m?.tone === "wrong" ? null : m))}
       />
     );
-  } else if (total > 1 || giveUpButton) {
-    footer = <FeedbackBar tone="neutral" message={total > 1 ? `Lance ${doneMoves + 1} de ${total}.` : undefined} extra={giveUpButton} />;
+  } else if (total > 1 || actions) {
+    footer = <FeedbackBar tone="neutral" message={total > 1 ? `Lance ${doneMoves + 1} de ${total}.` : undefined} extra={actions} />;
   }
 
   return (

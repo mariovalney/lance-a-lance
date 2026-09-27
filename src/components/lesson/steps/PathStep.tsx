@@ -77,7 +77,7 @@ export const PathStep: FC<{ screen: PathScreen; onDone: StepDone }> = ({ screen,
         message={`Alvos: ${collected.length} de ${screen.targets.length} · lances: ${moves} (dá para fazer em ${par})`}
         extra={
           moves > 0 ? (
-            <button type="button" onClick={reset} className="self-start text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">
+            <button type="button" onClick={reset} data-restart className="self-start text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">
               Recomeçar
             </button>
           ) : undefined
