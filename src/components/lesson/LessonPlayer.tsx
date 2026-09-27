@@ -1,6 +1,6 @@
 import { useMemo, useState, type FC } from "react";
-import { X } from "lucide-react";
-import type { LessonDef, Screen } from "@/content/types";
+import { Lightbulb, X } from "lucide-react";
+import type { ExplainScreen, LessonDef, Screen } from "@/content/types";
 import { isExercise } from "@/content/types";
 import type { LessonRunResult } from "@/lib/progress/types";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ExplainBody } from "@/components/lesson/ExplainBody";
 import { ExplainStep } from "@/components/lesson/steps/ExplainStep";
 import { TapStep } from "@/components/lesson/steps/TapStep";
 import { TapAllStep } from "@/components/lesson/steps/TapAllStep";
@@ -59,6 +60,10 @@ export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFi
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<ExerciseResult[]>([]);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  // The explanations already shown: the hint opens them again, from any exercise after them.
+  const explained = useMemo(() => screens.slice(0, index).filter((s): s is ExplainScreen => s.kind === "explain"), [screens, index]);
+  const canHint = explained.length > 0 && isExercise(screens[index]);
 
   const exerciseCount = screens.filter(isExercise).length;
   const points = results.reduce((s, r) => s + r.points, 0);
@@ -111,6 +116,18 @@ export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFi
             <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
+        {canHint && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-full text-gold hover:text-gold"
+            onClick={() => setShowHint(true)}
+            aria-label="Rever a explicação"
+            data-hint
+          >
+            <Lightbulb className="!h-5 !w-5" />
+          </Button>
+        )}
         <div className="shrink-0 rounded-full bg-gold-soft px-2.5 py-1 font-mono text-sm font-bold tabular text-gold" aria-label={`${points} XP nesta lição`}>
           {points} XP
         </div>
@@ -119,6 +136,26 @@ export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFi
       <div key={index} className="flex min-h-0 flex-1 flex-col">
         {renderStep(screens[index], handleDone)}
       </div>
+
+      <Dialog open={showHint && canHint} onOpenChange={setShowHint}>
+        <DialogContent className="max-h-[85dvh] max-w-[26rem] overflow-y-auto rounded-2xl" data-hint-dialog>
+          <DialogHeader className="text-left">
+            <DialogTitle className="font-display text-xl">{explained[0]?.title}</DialogTitle>
+            <DialogDescription className="sr-only">A explicação desta lição, para rever antes de responder.</DialogDescription>
+          </DialogHeader>
+          {explained.map((screen, i) => (
+            <div key={i} className="flex flex-col gap-3">
+              {i > 0 && <h3 className="font-display text-lg font-bold">{screen.title}</h3>}
+              <ExplainBody screen={screen} />
+            </div>
+          ))}
+          <DialogFooter>
+            <Button className="h-11 w-full rounded-xl font-bold" onClick={() => setShowHint(false)}>
+              Voltar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmExit} onOpenChange={setConfirmExit}>
         <DialogContent className="max-w-[22rem] rounded-2xl">
