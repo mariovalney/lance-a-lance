@@ -139,7 +139,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   const close = () => goBack(paths.game);
   const game = current.kind === "ready" ? current.game : null;
   const shown = game ? positionAt(game.moves, ply) : null;
-  const marks = game?.analysis ? judgements(game.analysis) : [];
+  const marks = game?.analysis ? judgements(game.analysis, game.moves) : [];
   // The move that led to the board shown, if the analysis judged it, and what the engine preferred there.
   const mark = ply > 0 ? marks[ply - 1] : null;
   const preferred = mark && game?.analysis?.[ply - 1]?.best ? bestAt(positionAt(game.moves, ply - 1).fen, game.analysis[ply - 1].best!) : null;

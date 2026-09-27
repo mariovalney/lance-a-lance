@@ -1,5 +1,5 @@
 import { Chess, type Move } from "chess.js";
-import { judge } from "@shared/analysis";
+import { judgeMove } from "@shared/analysis";
 import { replay } from "@shared/games";
 import type { Game, PositionEval } from "@shared/types";
 import { parseUci, type Color } from "@/lib/chess/game";
@@ -95,7 +95,7 @@ export function explainMove(game: Game, ply: number): string | null {
   const before = analysis[ply - 1];
   const after = analysis[ply];
   const mover: Color = ply % 2 === 1 ? "w" : "b";
-  if (!judge(before, after, mover)) return null;
+  if (!judgeMove(analysis, game.moves, ply)) return null;
 
   const mateAfter = mateFor(after, mover);
   if (mateAfter < 0) return `Permite mate em ${-mateAfter}.`;

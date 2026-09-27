@@ -75,7 +75,7 @@ export function gamePgn(game: Game): string {
   ];
 
   const sans = chess.history();
-  const marks = game.analysis ? judgements(game.analysis) : [];
+  const marks = game.analysis ? judgements(game.analysis, game.moves) : [];
   const board = new Chess();
   const tokens: string[] = [];
   let afterComment = false;

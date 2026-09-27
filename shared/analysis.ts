@@ -79,11 +79,25 @@ export function judge(before: PositionEval, after: PositionEval, mover: "w" | "b
 }
 
 /**
+ * The judgement of the move that led to position `ply` (1 is White's first
+ * move). The engine's own best move is never judged: each position is searched
+ * on its own, and in a sharp one two neighbouring searches can disagree by more
+ * than a threshold even when the move played was the one the engine chose.
+ */
+export function judgeMove(analysis: PositionEval[], moves: string[], ply: number): Judgement | null {
+  const before = analysis[ply - 1];
+  const after = analysis[ply];
+  if (!before || !after) return null;
+  if (before.best !== null && before.best === moves[ply - 1]) return null;
+  return judge(before, after, ply % 2 === 1 ? "w" : "b");
+}
+
+/**
  * The judgement of every move of a game: entry `i` is for the move that led to
  * position `i + 1`. White moves first, so even entries are White's.
  */
-export function judgements(analysis: PositionEval[]): (Judgement | null)[] {
-  return analysis.slice(1).map((after, i) => judge(analysis[i], after, i % 2 === 0 ? "w" : "b"));
+export function judgements(analysis: PositionEval[], moves: string[]): (Judgement | null)[] {
+  return analysis.slice(1).map((_, i) => judgeMove(analysis, moves, i + 1));
 }
 
 /** The longest line kept for a position: enough to see a piece fall, short enough to stay small. */

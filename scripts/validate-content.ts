@@ -182,6 +182,13 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
       expected: "Deixava de ganhar um cavalo.",
     },
     {
+      // Two searches that disagree must not mark the engine's own move.
+      name: "o lance do motor não é erro",
+      game: game(["e2e4", "e7e5", "g1f3"], [cp(20, ["e2e4"]), cp(30, ["e7e5"]), cp(30, ["g1f3", "b8c6"]), cp(-400, ["b8c6"])]),
+      ply: 3,
+      expected: null,
+    },
+    {
       name: "imprecisão sem material",
       game: game(["e2e4", "e7e5", "a2a3"], [cp(20, ["e2e4"]), cp(30, ["e7e5"]), cp(30, ["g1f3", "b8c6"]), cp(-40, ["g8f6", "b1c3"])]),
       ply: 3,
@@ -203,6 +210,9 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
   }
   console.log(`melhor lance: ${bestCases.length} casos checados`);
 
+  const { judgements } = await import("@shared/analysis");
+  const unstable = cases.find((c) => c.name === "o lance do motor não é erro")!.game;
+  if (judgements(unstable.analysis!, unstable.moves)[2] !== null) errors.push("análise: o lance do motor foi marcado");
   for (const c of cases) {
     const got = explainMove(c.game, c.ply);
     if (got !== c.expected) errors.push(`análise (${c.name}): esperava ${JSON.stringify(c.expected)}, veio ${JSON.stringify(got)}`);
