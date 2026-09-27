@@ -42,18 +42,21 @@ interface PuzzleOptions {
 /** Real games from the Lichess puzzle database (CC0). Opponent replies are automatic. */
 export function puzzleRounds(theme: PuzzleTheme, n: number, o: PuzzleOptions): Screen[] {
   const pool = puzzlesOf(theme).slice(o.skip ?? 0);
-  return pickDistinct(pool, n).map((p) => {
-    const plies = Math.ceil(p.line.length / 2);
-    return {
-      kind: "sequence",
-      key: `puzzle:${theme}:${p.id}`,
-      prompt: `Procure ${o.lookFor}.${plies > 1 ? ` São ${plies} lances seus.` : ""}`,
-      board: puzzleBoard(p),
-      line: p.line,
-      anyMateAtEnd: p.mate,
-      wrong: (m, i) => (i === 0 ? `\`${m.san}\` não é o golpe. ${o.hint}` : `\`${m.san}\` deixa escapar a vantagem. Continue o ataque.`),
-      success: o.success,
-      mistakeNote: o.note,
-    } satisfies Screen;
-  });
+  return pickDistinct(pool, n).map((p) => puzzleScreen(theme, p, o));
+}
+
+/** One puzzle as a line to play. */
+export function puzzleScreen(theme: PuzzleTheme, p: Puzzle, o: PuzzleOptions): Screen {
+  const plies = Math.ceil(p.line.length / 2);
+  return {
+    kind: "sequence",
+    key: `puzzle:${theme}:${p.id}`,
+    prompt: `Procure ${o.lookFor}.${plies > 1 ? ` São ${plies} lances seus.` : ""}`,
+    board: puzzleBoard(p),
+    line: p.line,
+    anyMateAtEnd: p.mate,
+    wrong: (m, i) => (i === 0 ? `\`${m.san}\` não é o golpe. ${o.hint}` : `\`${m.san}\` deixa escapar a vantagem. Continue o ataque.`),
+    success: o.success,
+    mistakeNote: o.note,
+  };
 }
