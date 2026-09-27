@@ -2,6 +2,7 @@ import { useMemo, useState, type FC } from "react";
 import { Lightbulb, X } from "lucide-react";
 import type { ExplainScreen, LessonDef, Screen } from "@/content/types";
 import { isExercise } from "@/content/types";
+import { buildLesson } from "@/content/curriculum";
 import type { LessonRunResult } from "@/lib/progress/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,7 +57,7 @@ function renderStep(screen: Screen, onDone: (r: ExerciseResult | null) => void) 
 
 export const LessonPlayer: FC<LessonPlayerProps> = ({ lesson, code, onExit, onFinish }) => {
   // A fresh set of examples every time the lesson is opened.
-  const screens = useMemo(() => lesson.build(), [lesson]);
+  const screens = useMemo(() => buildLesson(lesson), [lesson]);
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<ExerciseResult[]>([]);
   const [confirmExit, setConfirmExit] = useState(false);

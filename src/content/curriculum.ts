@@ -1,4 +1,4 @@
-import type { LessonDef, LessonMeta, ModuleDef } from "@/content/types";
+import type { LessonDef, LessonMeta, ModuleDef, Screen } from "@/content/types";
 import { lessonCoordenadas } from "@/content/lessons/m1-l1-coordenadas";
 import { lessonCoresDiagonais } from "@/content/lessons/m1-l2-cores-diagonais";
 import { lessonPosicaoInicial } from "@/content/lessons/m1-l3-posicao-inicial";
@@ -23,6 +23,26 @@ import { lessonGambitoDama, lessonItaliana, lessonLondon, lessonPretasD4, lesson
 import { lessonCasasFortes, lessonColunas, lessonEstrutura, lessonPecaBoaRuim, lessonPlano } from "@/content/lessons/m10-meio-jogo";
 import { lessonLucena, lessonOposicao, lessonPhilidor, lessonQuadrado, lessonReiPeao } from "@/content/lessons/m11-finais";
 
+/** How many times a lesson is drawn before giving up on a run with no repeated exercise. */
+const DRAWS = 40;
+
+/** Whether two screens of a run are the same exercise: its key names the exercise. */
+export function repeats(screens: Screen[]): boolean {
+  const keys = screens.flatMap((s) => ("key" in s ? [s.key] : []));
+  return new Set(keys).size < keys.length;
+}
+
+/**
+ * A fresh run of a lesson, with no exercise twice: each builder draws on its
+ * own, so two of them can land on the same example, and a draw that repeats
+ * one is thrown away. The validator reports a lesson that still repeats after
+ * every draw.
+ */
+export function buildLesson(lesson: LessonDef): Screen[] {
+  let screens = lesson.build();
+  for (let draw = 1; draw < DRAWS && repeats(screens); draw++) screens = lesson.build();
+  return screens;
+}
 
 function ready(lesson: LessonDef): LessonMeta {
   return { id: lesson.id, title: lesson.title, summary: lesson.summary, lesson };

@@ -1,6 +1,6 @@
 /* Builds every lesson many times and checks each generated screen.
  * Run: pnpm validate */
-import { CURRICULUM } from "@/content/curriculum";
+import { CURRICULUM, buildLesson, repeats } from "@/content/curriculum";
 import type { BoardSpec, Screen } from "@/content/types";
 import { ALL_SQUARES, type Square } from "@/lib/chess/squares";
 import { isLegalPosition } from "@/content/lib/positions";
@@ -104,11 +104,12 @@ for (const mod of CURRICULUM) {
     for (let run = 0; run < RUNS; run++) {
       let built: Screen[];
       try {
-        built = meta.lesson.build();
+        built = buildLesson(meta.lesson);
       } catch (e) {
         errors.push(`${meta.id}: build() threw ${(e as Error).message}`);
         continue;
       }
+      if (repeats(built)) errors.push(`${meta.id}: an exercise repeats in a run even after every draw; the lesson needs a bigger pool`);
       if (run === 0) {
         screens = built.length;
         exercises = built.filter((s) => s.kind !== "explain").length;
