@@ -31,7 +31,6 @@ export function readLegacyAccount(stateRaw: unknown, puzzleLog: Record<string, u
   const state = obj(stateRaw);
   const streak = obj(state.streak);
   const puzzles = obj(state.puzzles);
-  const games = obj(state.games);
   const lastDay = str(streak.lastDay);
 
   const lessons = Object.entries(obj(state.lessons)).map(([lessonId, raw]) => {
@@ -102,14 +101,9 @@ export function readLegacyAccount(stateRaw: unknown, puzzleLog: Record<string, u
         streak: nat(puzzles.streak),
         bestStreak: nat(puzzles.bestStreak),
       },
-      games: {
-        ...EMPTY_STATS.games,
-        rating: nat(games.rating, START_RATING) || START_RATING,
-        played: nat(games.played),
-        wins: nat(games.wins),
-        draws: nat(games.draws),
-        losses: nat(games.losses),
-      },
+      // Version 1 kept only the game totals, never the games, and the totals
+      // are counted from the saved games: they start over.
+      games: EMPTY_STATS.games,
     },
     lessons,
     lessonRuns,

@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { readLegacyAccount } from "./legacy.js";
-import { writeAccount } from "./account.js";
+import { recountGames, writeAccount } from "./account.js";
 
 /**
  * Schema, as an ordered list. Every migration runs once, inside a transaction,
@@ -228,5 +228,12 @@ export const MIGRATIONS: Migration[] = [
       await client.query("DROP TABLE puzzle_log");
       await client.query("DROP TABLE progress");
     },
+  },
+  {
+    // 005 carried the game totals of the first games version, which saved no
+    // games. The totals are counted from the saved games from now on.
+    name: "006_game_stats_from_rows",
+    sql: "",
+    run: (client) => recountGames(client, null),
   },
 ];

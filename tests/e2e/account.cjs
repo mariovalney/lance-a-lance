@@ -47,6 +47,8 @@ function progressFor(xp) {
     history: [],
     records: { "coords-30s": 21 },
     puzzles: { rating: 861, played: 3, solved: 2, streak: 1, bestStreak: 2, recent: ["aaa"] },
+    // Totals with no games behind them, as the first games version kept them.
+    games: { rating: 900, played: 3, wins: 1, draws: 1, losses: 1 },
     updatedAt: Date.now(),
   };
 }
@@ -136,6 +138,7 @@ async function xpOnScreen(page) {
   check(restored.lessons["m1-l1"]?.bestStars === 3 && restored.lessons["m1-l2"]?.bestPct === 80, "its lessons arrived");
   check(restored.records["coords-30s"] === 21, "its drill record arrived");
   check(restored.puzzles.rating === 861 && restored.puzzles.played === 3 && restored.puzzles.solved === 2, "its puzzle rating and counts arrived");
+  check(restored.games.played === 0 && restored.games.rating === 800, `its game totals, with no games behind them, start over (${restored.games.played}, ${restored.games.rating})`);
   const attempts = await (await first.request.get(BASE + "/api/puzzles/attempts?page=0&size=10")).json();
   check(attempts.total === 3 && attempts.items[0].puzzleId === "ccc", `its puzzle history arrived, newest first (${attempts.total})`);
   await first.reload({ waitUntil: "networkidle" });

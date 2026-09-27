@@ -277,6 +277,35 @@ export async function writeAccount(db: Db, userId: string, data: AccountData): P
       [g.id, userId, g.level, g.player, g.assisted, g.moves, g.outcome, g.reason, g.ratingDelta, g.ratingAfter, g.xp, g.startedAt, g.finishedAt],
     );
   }
+  await recountGames(db, userId);
+}
+
+/**
+ * Sets the game counters and the game rating from the rated games that are
+ * saved, for one person or, with null, for everybody. A backup can carry totals
+ * with no games behind them (version 1 kept only totals), and the card must
+ * never count a game the history cannot show.
+ */
+export async function recountGames(db: Db, userId: string | null): Promise<void> {
+  await db.query(
+    `UPDATE player_stats s SET
+       game_played = r.played, game_wins = r.wins, game_draws = r.draws, game_losses = r.losses,
+       game_rating = COALESCE(r.rating, $2)
+     FROM (
+       SELECT u.user_id,
+         count(g.id)::int AS played,
+         count(g.id) FILTER (WHERE g.outcome = 'win')::int AS wins,
+         count(g.id) FILTER (WHERE g.outcome = 'draw')::int AS draws,
+         count(g.id) FILTER (WHERE g.outcome = 'loss')::int AS losses,
+         (array_agg(g.rating_after ORDER BY g.finished_at DESC, g.id DESC) FILTER (WHERE g.id IS NOT NULL))[1] AS rating
+       FROM player_stats u
+       LEFT JOIN games g ON g.user_id = u.user_id AND g.finished_at IS NOT NULL AND g.rating_delta IS NOT NULL
+       WHERE $1::uuid IS NULL OR u.user_id = $1
+       GROUP BY u.user_id
+     ) r
+     WHERE s.user_id = r.user_id`,
+    [userId, START_RATING],
+  );
 }
 
 export const EMPTY_STATS: AccountData["stats"] = {
