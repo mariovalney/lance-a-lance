@@ -135,6 +135,7 @@ const rowFor = (page, email) => page.locator(`[data-user="${email}"]`);
     ["/admin", 200],
     ["/treino", 200],
     ["/partida", 200],
+    ["/partidas", 200],
     ["/partidas/00000000-0000-4000-8000-000000000000", 200],
     ["/licoes/m1-l1", 200],
   ]) {

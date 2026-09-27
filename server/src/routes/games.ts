@@ -122,18 +122,24 @@ gameRoutes.delete("/:id", async (c) => {
   return c.json({ progress: await readProgress(pool, userId) });
 });
 
-/** Finished games, newest first. */
+/** Finished games, newest first; `assisted=true` or `false` keeps one kind only. */
 gameRoutes.get("/", async (c) => {
   const paging = pageOf(c.req.query("page"), c.req.query("size"));
   if (!paging) return c.json({ error: "invalid_page" }, 400);
+  const kind = c.req.query("assisted");
+  if (kind !== undefined && kind !== "true" && kind !== "false") return c.json({ error: "invalid_filter" }, 400);
+  const assisted = kind === undefined ? null : kind === "true";
   const userId = c.get("user").id;
   const [{ rows }, count] = await Promise.all([
     query<GameRow>(
-      `SELECT ${GAME_COLUMNS} FROM games WHERE user_id = $1 AND finished_at IS NOT NULL
+      `SELECT ${GAME_COLUMNS} FROM games WHERE user_id = $1 AND finished_at IS NOT NULL AND ($4::boolean IS NULL OR assisted = $4)
         ORDER BY finished_at DESC, id LIMIT $2 OFFSET $3`,
-      [userId, paging.size, paging.page * paging.size],
+      [userId, paging.size, paging.page * paging.size, assisted],
     ),
-    query<{ total: string }>("SELECT count(*) AS total FROM games WHERE user_id = $1 AND finished_at IS NOT NULL", [userId]),
+    query<{ total: string }>(
+      "SELECT count(*) AS total FROM games WHERE user_id = $1 AND finished_at IS NOT NULL AND ($2::boolean IS NULL OR assisted = $2)",
+      [userId, assisted],
+    ),
   ]);
   return c.json({ total: Number(count.rows[0].total), items: rows.map(gameJson) });
 });

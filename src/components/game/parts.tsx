@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
+import { useEffect, useRef, type FC, type ReactNode } from "react";
 import { ArrowLeft, Check, History, Minus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HistorySheet } from "@/components/common/HistorySheet";
 import { useProgress } from "@/lib/progress/useProgress";
 import { PROVISIONAL_GAMES } from "@/lib/progress/scoring";
 import type { Game } from "@/lib/progress/types";
@@ -20,8 +19,8 @@ export const GameTitle: FC<{ game: Game }> = ({ game }) => (
 );
 
 /**
- * The top of both screens: back, the title, the history of finished games (a
- * game picked there opens at its own address) and the game rating.
+ * The top of the game screens: back, the title, the way to the finished games
+ * (on the setup only), the material balance and the game rating.
  */
 export const GameHeader: FC<{
   onBack: () => void;
@@ -29,16 +28,15 @@ export const GameHeader: FC<{
   subtitle: ReactNode;
   /** The rating change of the game just finished, if any. */
   delta?: number | null;
-  /** Changes when a game finishes, so the delta animates and the history reloads. */
+  /** Changes when a game finishes, so the delta animates. */
   version?: number;
-  /** The history of finished games; only where a new game is set up. */
+  /** A way to the history of finished games; only where a new game is set up. */
   history?: boolean;
   /** The player's material balance on the board shown, when a board is shown. */
   material?: number | null;
 }> = ({ onBack, backLabel, subtitle, delta = null, version = 0, history = false, material = null }) => {
-  const { state, games } = useProgress();
+  const { state } = useProgress();
   const stats = state.games;
-  const [historyOpen, setHistoryOpen] = useState(false);
   const provisional = stats.played < PROVISIONAL_GAMES;
 
   return (
@@ -51,7 +49,7 @@ export const GameHeader: FC<{
         <span className="text-xs text-muted-foreground">{subtitle}</span>
       </div>
       {history && (
-        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-full" onClick={() => setHistoryOpen(true)} aria-label="Partidas anteriores">
+        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-full" onClick={() => navigate(paths.games)} aria-label="Partidas anteriores">
           <History className="!h-5 !w-5" />
         </Button>
       )}
@@ -85,26 +83,6 @@ export const GameHeader: FC<{
         )}
       </div>
 
-      {history && (
-        <HistorySheet
-          open={historyOpen}
-          onOpenChange={setHistoryOpen}
-          description="Toque numa partida para rever os lances."
-          empty="Nenhuma partida ainda."
-          version={version}
-          load={games.page}
-          keyOf={(g) => g.id}
-          render={(g) => (
-            <GameRow
-              game={g}
-              onPick={() => {
-                setHistoryOpen(false);
-                navigate(paths.gameReview(g.id));
-              }}
-            />
-          )}
-        />
-      )}
     </header>
   );
 };
@@ -175,7 +153,7 @@ export const MoveList: FC<{
 };
 
 /** One finished game in the history; tapping it opens the review. */
-const GameRow: FC<{ game: Game; onPick: () => void }> = ({ game: g, onPick }) => {
+export const GameRow: FC<{ game: Game; onPick: () => void }> = ({ game: g, onPick }) => {
   if (!g.outcome || !g.reason || !g.finishedAt) return null;
   const Icon = g.outcome === "win" ? Check : g.outcome === "draw" ? Minus : X;
   const moves = Math.ceil(g.moves.length / 2);
@@ -196,7 +174,7 @@ const GameRow: FC<{ game: Game; onPick: () => void }> = ({ game: g, onPick }) =>
         </span>
         <span className="text-xs text-muted-foreground">
           {REASON[g.reason]} {moves} {moves === 1 ? "lance" : "lances"}
-          {g.assisted ? " · assistida" : ""} · {new Date(g.finishedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+          · {new Date(g.finishedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
         </span>
       </span>
       {g.ratingDelta !== null && g.ratingAfter !== null && (

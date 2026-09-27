@@ -10,6 +10,7 @@ export type Route =
   | { name: "home" }
   | { name: "trainer" }
   | { name: "game" }
+  | { name: "games" }
   | { name: "gameReview"; gameId: string }
   | { name: "lesson"; lessonId: string }
   | { name: "admin" }
@@ -25,7 +26,7 @@ export function parseRoute(pathname: string): Route {
     case "partida":
       return { name: "game" };
     case "partidas":
-      return { name: "gameReview", gameId: second };
+      return second ? { name: "gameReview", gameId: second } : { name: "games" };
     case "licoes":
       return { name: "lesson", lessonId: second };
     case "admin":
@@ -41,6 +42,7 @@ export const paths = {
   home: "/",
   trainer: "/treino",
   game: "/partida",
+  games: "/partidas",
   gameReview: (id: string) => `/partidas/${id}`,
   lesson: (id: string) => `/licoes/${id}`,
   admin: "/admin",

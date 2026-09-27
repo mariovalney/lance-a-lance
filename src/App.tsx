@@ -16,6 +16,7 @@ import { ResultScreen } from "@/components/result/ResultScreen";
 import { PuzzleTrainer } from "@/components/trainer/PuzzleTrainer";
 import { GameScreen } from "@/components/game/GameScreen";
 import { GameReview } from "@/components/game/GameReview";
+import { GameHistory } from "@/components/game/GameHistory";
 import { ResetScreen } from "@/components/home/ResetScreen";
 import { SignInScreen } from "@/components/home/SignInScreen";
 import { OfflineScreen } from "@/components/home/OfflineScreen";
@@ -137,6 +138,14 @@ const Shell: FC = () => {
     return (
       <div className="h-full">
         <GameScreen />
+      </div>
+    );
+  }
+
+  if (route.name === "games") {
+    return (
+      <div className="h-full">
+        <GameHistory />
       </div>
     );
   }

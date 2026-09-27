@@ -608,3 +608,4 @@ With the engine's line in a modal, Mário asked that the back button close the m
   - The engine's line in "Ver lances" opens with the game's last move marked, and shows each move of the line as an arrow while stepping through it. Only there.
   - The assisted game went the other way: its best move stays under the board as text, with the reason when the engine's line shows one for certain (a mate, material won: `explainBest`), and no arrow on the board.
   - The assisted switch no longer says the game is not rated. The header and the end of the game already say it.
+- **The game history is a page.** `/partidas` replaced the sheet, with rated and assisted games in separate tabs (the list takes `assisted=true|false`). The tab is kept with the page's history entry, so closing a review or reloading lands on the same tab. The paged list itself (`HistoryList`) is shared with the trainer's history, which stays a sheet.

@@ -9,6 +9,7 @@ export const CLIENT_PATHS: readonly RegExp[] = [
   /^\/$/,
   /^\/treino$/,
   /^\/partida$/,
+  /^\/partidas$/,
   /^\/partidas\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
   /^\/licoes\/m\d+-l\d+$/,
   /^\/admin$/,

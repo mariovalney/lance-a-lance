@@ -175,12 +175,21 @@ const { chromium } = require("playwright");
   // Only where a new game is set up.
   await p.getByRole("button", { name: "Nova partida" }).click();
   await p.getByRole("button", { name: "Partidas anteriores" }).click();
-  await p.getByRole("dialog").getByText(/contra o computador/).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
-  const rows = await p.getByRole("dialog").locator("li").allTextContents();
-  check(rows.length === 2, `the history lists the two finished games (${rows.length}: ${rows.map((r) => r.replace(/\s+/g, " ")).join(" | ")})`);
+  // A page of its own, rated and assisted games apart.
+  const listed = async () => {
+    const panel = p.locator("[role='tabpanel']");
+    await panel.getByText(/contra o computador|Nenhuma/).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+    return (await panel.locator("li button").allTextContents()).map((r) => r.replace(/\s+/g, " "));
+  };
+  check(new URL(p.url()).pathname === "/partidas", `the history is a page (${new URL(p.url()).pathname})`);
+  const rated = await listed();
+  check(rated.length === 1, `the rated tab lists the rated game (${rated.length}: ${rated.join(" | ")})`);
   await p.screenshot({ path: `${OUT}/game-history.png` });
-  // The newest: the assisted game, not analysed yet.
-  await p.getByRole("dialog").locator("li button").first().click();
+  await p.getByRole("tab", { name: "Assistidas" }).click();
+  const assistedRows = await listed();
+  check(assistedRows.length === 1, `the assisted tab lists the assisted game (${assistedRows.length}: ${assistedRows.join(" | ")})`);
+  // The assisted game, not analysed yet.
+  await p.locator("[role='tabpanel'] li button").first().click();
   await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
   g = await game();
   const total = g.ply;
@@ -221,7 +230,11 @@ const { chromium } = require("playwright");
 
   await p.getByRole("button", { name: "Fechar" }).click();
   await p.waitForTimeout(300);
-  check(new URL(p.url()).pathname === "/partida", `closing the review goes back to the game (${new URL(p.url()).pathname})`);
+  check(new URL(p.url()).pathname === "/partidas", `closing the review goes back to the history (${new URL(p.url()).pathname})`);
+  check((await p.getByRole("tab", { name: "Assistidas" }).getAttribute("aria-selected")) === "true", "on the tab it was on");
+  await p.getByRole("button", { name: "Voltar para a partida" }).click();
+  await p.waitForTimeout(300);
+  check(new URL(p.url()).pathname === "/partida", `and from there back to the game (${new URL(p.url()).pathname})`);
 
   // Somebody else's game, or no game at all, is not found, and says so.
   await p.goto(`${base}/partidas/00000000-0000-4000-8000-000000000000`, { waitUntil: "networkidle" });

@@ -18,7 +18,8 @@ export interface ProgressContextValue {
     finish: (id: string, moves: string[], resigned: boolean) => Promise<Game>;
     /** Only before both sides moved. */
     callOff: (id: string) => Promise<void>;
-    page: (page: number, size: number) => Promise<Page<Game>>;
+    /** Finished games, newest first; `assisted` keeps one kind only. */
+    page: (page: number, size: number, assisted?: boolean) => Promise<Page<Game>>;
     /** A finished game of this account; `not_found` for anyone else's. */
     get: (id: string) => Promise<Game>;
     /** Keeps the engine's evaluation of every position with a finished game. */
