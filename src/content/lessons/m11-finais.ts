@@ -284,9 +284,9 @@ function bridgeChoice(): Screen {
     prompt: "Na Lucena, em qual fileira a torre faz a ponte?",
     board: boardFor(LUCENA_FEN),
     options: [
-      { id: "4", label: "4ª fileira", mono: true },
-      { id: "1", label: "1ª fileira", mono: true },
-      { id: "7", label: "7ª fileira", mono: true },
+      { id: "4", label: "4ª" },
+      { id: "1", label: "1ª" },
+      { id: "7", label: "7ª" },
     ],
     correct: "4",
     explain: "Na 4ª, a torre fica perto o bastante para se colocar entre o seu rei e a torre dele quando os xeques chegarem.",
