@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { isClientPath, normalizePath } from "@shared/routes";
 
 /**
@@ -71,7 +71,9 @@ const depth = (): number => {
  */
 export function navigate(path: string, { replace = false, state = {} }: { replace?: boolean; state?: Record<string, unknown> } = {}): void {
   if (path === window.location.pathname + window.location.search) return;
-  if (replace) window.history.replaceState({ ...state, depth: depth() }, "", path);
+  // Leaving from an open dialog takes the dialog's entry, so going back does
+  // not land on a dialog that is no longer there.
+  if (replace || overlayOf(window.history.state)) window.history.replaceState({ ...state, depth: depth() }, "", path);
   else window.history.pushState({ ...state, depth: depth() + 1 }, "", path);
   window.scrollTo(0, 0);
   notify();
@@ -83,6 +85,12 @@ export function navigate(path: string, { replace = false, state = {} }: { replac
  * reload, or a link opened straight on this screen), without leaving the app.
  */
 export function goBack(fallback: string): void {
+  // From inside a dialog (a "leave" button in it), its own entry goes first.
+  if (overlayOf(window.history.state)) {
+    window.addEventListener("popstate", () => goBack(fallback), { once: true });
+    window.history.back();
+    return;
+  }
   if (depth() > 0) window.history.back();
   else navigate(fallback, { replace: true });
 }
@@ -97,6 +105,36 @@ export function routeState(): Record<string, unknown> {
 export function forgetRouteState(key: string): void {
   const { [key]: _dropped, ...rest } = routeState();
   window.history.replaceState(rest, "");
+}
+
+const overlayOf = (state: unknown): unknown => (state as { overlay?: unknown } | null)?.overlay;
+let overlays = 0;
+
+/**
+ * Makes the back button (Android's included) close a dialog or a sheet while
+ * it is open, instead of leaving the screen: opening it adds an entry to the
+ * history at the same address, and going back from that entry closes it.
+ * Closing it any other way takes the entry away again.
+ */
+export function useBackToClose(open: boolean, onClose: () => void): void {
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  useEffect(() => {
+    if (!open) return;
+    const marker = ++overlays;
+    window.history.pushState({ ...routeState(), depth: depth() + 1, overlay: marker }, "");
+    // Only back past every dialog's entry closes it: that is the back button.
+    const onPop = () => {
+      if (!overlayOf(window.history.state)) close.current();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      if (overlayOf(window.history.state) === marker) window.history.back();
+    };
+  }, [open]);
 }
 
 /** The current address, as a screen. Re-renders on every navigation and on back and forward. */

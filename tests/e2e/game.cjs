@@ -189,9 +189,20 @@ const { chromium } = require("playwright");
     await p.getByRole("button", { name: "Fim da linha" }).click();
     check((await lineStep()) > 1, `to its end (${await lineStep()})`);
     await p.screenshot({ path: `${OUT}/game-line.png` });
+    // The back button closes the dialog and nothing else.
+    const reviewAt = p.url();
+    await p.goBack({ waitUntil: "commit" }).catch(() => undefined);
+    await p.waitForTimeout(400);
+    check(
+      (await p.locator("[data-line-ply]").count()) === 0 && p.url() === reviewAt && (await game()).ply === reviewPly,
+      `the back button closes it and leaves the review on the same move (${new URL(p.url()).pathname})`,
+    );
+    // Closed with Escape, it leaves no step behind for the back button.
+    await p.getByRole("button", { name: "Ver lances" }).click();
+    await p.locator("[data-line-ply]").waitFor({ timeout: 5_000 }).catch(() => undefined);
     await p.keyboard.press("Escape");
-    await p.waitForTimeout(300);
-    check((await p.locator("[data-line-ply]").count()) === 0 && (await game()).ply === reviewPly, "closing it leaves the review on the same move");
+    await p.waitForTimeout(400);
+    check((await p.locator("[data-line-ply]").count()) === 0 && p.url() === reviewAt, "Escape closes it too");
   } else {
     console.log("no judged move in this game: the line dialog is not checked");
   }

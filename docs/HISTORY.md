@@ -596,3 +596,11 @@ Mário asked for the move symbols in the review. He chose Lichess's set and an "
 
   It counts the board with the usual values (1, 3, 3, 5, 9), so a promotion counts too. It shows who is ahead without saying what to do, so it needs no engine and fits rated games. He preferred it to Lichess's captured pieces and to a live evaluation bar, which gives away more than the opponent has.
 - **The history** of games is offered only where a new game is set up, not during a game or in a review.
+
+### The back button closes what is on top
+
+With the engine's line in a modal, Mário asked that the back button close the modal and nothing else. That holds for every dialog and sheet in the app, since they all go through `Dialog` and `Sheet` in `src/components/ui/`, which use `useBackToClose` (`src/lib/router.ts`):
+- **Opening** one adds a history entry at the same address.
+- **The back button** leaves that entry, which closes the dialog.
+- **Closing it any other way** (X, Escape, tapping outside) takes the entry away again.
+- **A button inside the dialog that leaves the screen** ("Sair sem salvar", a row of the game history) leaves the dialog's entry first. The trainer test caught the first version: it left only the dialog and stayed in the lesson.
