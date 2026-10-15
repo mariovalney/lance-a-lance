@@ -32,6 +32,7 @@ export const progressApi = {
   saveMoves: (id: string, moves: string[]) => call<{ ok: boolean }>(`/games/${id}/moves`, { method: "PUT", body: JSON.stringify({ moves }) }),
   finishGame: (id: string, moves: string[], resigned: boolean) =>
     call<{ progress: ProgressView; game: Game }>(`/games/${id}/finish`, post({ moves, resigned, day: localDay() })),
+  currentGame: () => call<{ game: Game | null }>("/games/current").then((answer) => answer.game),
   callOffGame: (id: string) => call<{ progress: ProgressView }>(`/games/${id}`, { method: "DELETE" }),
   gamePage: (page: number, size: number, assisted?: boolean) =>
     call<Page<Game>>(`/games?page=${page}&size=${size}${assisted === undefined ? "" : `&assisted=${assisted}`}`),

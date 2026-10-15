@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import type { GameEndReason, GameOutcome } from "../../../shared/types.js";
-import { GAME_SCORE, GAME_XP, RATED_AFTER, eloScoreDelta, isRatedGame, nextStreak, ratingAfter } from "../../../shared/scoring.js";
-import { GAME_LEVELS, MAX_MOVES, UCI, endOf, replay } from "../../../shared/games.js";
-import { GAME_COLUMNS, gameJson, readProgress, statsOf, type GameRow } from "../account.js";
+import { RATED_AFTER } from "../../../shared/scoring.js";
+import { GAME_LEVELS, MAX_MOVES, UCI, continues, replay } from "../../../shared/games.js";
+import { GAME_COLUMNS, gameJson, readProgress, type GameRow } from "../account.js";
 import { pool, query, transaction } from "../db.js";
+import { finishGame, openGame } from "../games.js";
 import { requireUser, type Vars } from "./auth.js";
 import { UUID, pageOf, playerDay } from "./util.js";
 import { isPositionEval } from "../../../shared/analysis.js";
@@ -41,17 +41,27 @@ gameRoutes.post("/", async (c) => {
   return c.json({ progress: await readProgress(pool, userId), game: gameJson(rows[0]) }, 201);
 });
 
+/**
+ * Saves the moves so far. They have to continue the saved ones: the same game
+ * can move on another device or through the API, and then this copy is stale.
+ * That is a 409 with the game as saved, for the app to pick it up.
+ */
 gameRoutes.put("/:id/moves", async (c) => {
   const id = c.req.param("id");
   const body = (await c.req.json().catch(() => null)) as { moves?: unknown } | null;
   const moves = legalMoves(body?.moves);
   if (!UUID.test(id) || !moves) return c.json({ error: "invalid_moves" }, 400);
-  const { rowCount } = await query("UPDATE games SET moves = $3, updated_at = now() WHERE id = $1 AND user_id = $2 AND finished_at IS NULL", [
-    id,
-    c.get("user").id,
-    moves,
-  ]);
-  return rowCount ? c.json({ ok: true }) : c.json({ error: "not_found" }, 404);
+  const userId = c.get("user").id;
+  const result = await transaction(async (client) => {
+    const game = await openGame(client, userId, true);
+    if (game?.id !== id) return { status: 404 as const };
+    if (!continues(game.moves, moves)) return { status: 409 as const, game };
+    await client.query("UPDATE games SET moves = $2, updated_at = now() WHERE id = $1", [id, moves]);
+    return { status: 200 as const };
+  });
+  if (result.status === 404) return c.json({ error: "not_found" }, 404);
+  if (result.status === 409) return c.json({ error: "game_moved", game: gameJson(result.game) }, 409);
+  return c.json({ ok: true });
 });
 
 gameRoutes.post("/:id/finish", async (c) => {
@@ -63,49 +73,14 @@ gameRoutes.post("/:id/finish", async (c) => {
   const day = playerDay(body.day);
 
   const result = await transaction(async (client) => {
-    const { rows } = await client.query<GameRow>(`SELECT ${GAME_COLUMNS} FROM games WHERE id = $1 AND user_id = $2 AND finished_at IS NULL FOR UPDATE`, [
-      id,
-      userId,
-    ]);
-    const game = rows[0];
-    if (!game) return { error: "not_found" as const };
-
-    const end = endOf(replay(moves)!, game.player);
-    let outcome: GameOutcome;
-    let reason: GameEndReason;
-    if (end) ({ outcome, reason } = end);
-    else if (body.resigned) [outcome, reason] = ["loss", "resigned"];
-    else return { error: "not_over" as const };
-
-    const stats = await statsOf(client, userId, true);
-    const rated = isRatedGame(game.assisted, moves.length);
-    let delta: number | null = null;
-    let after: number | null = null;
-    let xp = 0;
-    if (rated) {
-      delta = eloScoreDelta(stats.game_rating, game.level, stats.game_played, GAME_SCORE[outcome]);
-      after = ratingAfter(stats.game_rating, delta);
-      delta = after - stats.game_rating;
-      xp = GAME_XP[outcome];
-      const streak = nextStreak({ current: stats.streak_current, best: stats.streak_best, lastDay: stats.streak_last_day }, day);
-      await client.query(
-        `UPDATE player_stats SET xp = xp + $2, streak_current = $3, streak_best = $4, streak_last_day = $5,
-           game_rating = $6, game_played = game_played + 1, game_wins = game_wins + $7, game_draws = game_draws + $8,
-           game_losses = game_losses + $9, updated_at = now()
-          WHERE user_id = $1`,
-        [userId, xp, streak.current, streak.best, streak.lastDay, after, +(outcome === "win"), +(outcome === "draw"), +(outcome === "loss")],
-      );
-    }
-    const updated = await client.query<GameRow>(
-      `UPDATE games SET moves = $2, outcome = $3, reason = $4, rating_delta = $5, rating_after = $6, xp = $7,
-         updated_at = now(), finished_at = now()
-        WHERE id = $1 RETURNING ${GAME_COLUMNS}`,
-      [id, moves, outcome, reason, delta, after, xp],
-    );
-    return { game: gameJson(updated.rows[0]) };
+    const game = await openGame(client, userId, true);
+    if (game?.id !== id) return { error: "not_found" as const };
+    if (!continues(game.moves, moves)) return { error: "game_moved" as const };
+    const done = await finishGame(client, userId, game, moves, body.resigned as boolean, day);
+    return done ? { game: gameJson(done) } : { error: "not_over" as const };
   });
 
-  if ("error" in result) return c.json({ error: result.error }, result.error === "not_found" ? 404 : 400);
+  if ("error" in result) return c.json({ error: result.error }, result.error === "not_found" ? 404 : result.error === "game_moved" ? 409 : 400);
   return c.json({ progress: await readProgress(pool, userId), game: result.game });
 });
 
@@ -120,6 +95,15 @@ gameRoutes.delete("/:id", async (c) => {
   );
   if (!rowCount) return c.json({ error: "not_found" }, 404);
   return c.json({ progress: await readProgress(pool, userId) });
+});
+
+/**
+ * The open game, or null. The game screen asks every few seconds, so a move
+ * made on another device or through the API shows up on its own.
+ */
+gameRoutes.get("/current", async (c) => {
+  const game = await openGame(pool, c.get("user").id);
+  return c.json({ game: game ? gameJson(game) : null });
 });
 
 /** Finished games, newest first; `assisted=true` or `false` keeps one kind only. */

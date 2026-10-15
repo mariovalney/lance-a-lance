@@ -130,16 +130,17 @@ src/
   lib/auth/         accounts: session state and the API calls
   lib/chess/        rules and helpers over chess.js (mate search, notation)
   lib/progress/     the progress read model, its API calls and the lesson points
-  lib/engine/       Stockfish in a Web Worker, the computer's levels
+  lib/engine/       Stockfish in a Web Worker
   styles/fonts.css  the fonts the app serves, so it works offline
-server/src/         Hono API: accounts, progress, puzzles, games, backup and the static files
-shared/             what the app and the server both use: scoring rules, games, types
+server/src/         Hono API: accounts, progress, puzzles, games, backup, /api/v1 and the static files
+shared/             what the app and the server both use: scoring rules, games and levels, notation, types
 assets/             source SVGs for the icon
 public/             generated icons and favicon
 scripts/            validation, data and icon generation
 scripts/data/       filters over the official Lichess puzzle CSV
 tests/e2e/          Playwright scripts
 docs/HISTORY.md     the full history, the method and the decisions
+docs/API.md         playing through /api/v1, for clients such as an MCP server
 ```
 
 ## Content sources and licences

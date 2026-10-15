@@ -12,6 +12,14 @@ export function playerDay(raw: unknown, now = new Date()): string {
   return gap <= 36 * 3600 * 1000 ? raw : today;
 }
 
+/**
+ * Today in Brazil (UTC-3, no daylight saving since 2019), for the day streak
+ * of what is played through the API, which has no local day to send.
+ */
+export function brazilDay(now = new Date()): string {
+  return new Date(now.getTime() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 export const isInt = (v: unknown, min: number, max: number): v is number => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

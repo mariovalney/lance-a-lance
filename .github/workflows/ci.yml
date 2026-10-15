@@ -106,6 +106,7 @@ jobs:
           GOOGLE_AUTH_URL=http://127.0.0.1:2626/authorize \
           GOOGLE_TOKEN_URL=http://127.0.0.1:2626/token \
           GOOGLE_USERINFO_URL=http://127.0.0.1:2626/userinfo \
+          USER_API_KEYS="admin@exemplo.com|e2e-key-0123456789abcdef" \
           node server/dist/server/src/index.js &
           # Wait for the migrations to run and the port to answer.
           for i in $(seq 1 30); do
@@ -134,7 +135,7 @@ jobs:
 
       # The database is the only store, so these drive the same server, each
       # starting from a wiped test account.
-      - name: Home, trainer, history, auto-advance, PWA and games
+      - name: Home, trainer, history, auto-advance, PWA, games and the API
         env:
           URL: http://127.0.0.1:3111
         run: |
@@ -144,6 +145,7 @@ jobs:
           pnpm e2e:auto
           pnpm e2e:pwa
           pnpm e2e:game
+          pnpm e2e:api
 
       # The walkthrough plays all 59 lessons and takes about twelve minutes,
       # so it is not here: run the Walkthrough workflow by hand for a change

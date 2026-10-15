@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Engine, HINT_TIME_MS, botMove } from "@/lib/engine/stockfish";
-import type { BotLevel } from "@/lib/engine/levels";
+import type { BotLevel } from "@shared/games";
 
 /**
  * The two Stockfish workers a game uses: the opponent, at its level, and for an

@@ -3,7 +3,7 @@ import { OPENINGS } from "@/content/lessons/m4-valor-notacao";
 import { boardFor, isLegalPosition, withRandomKings } from "@/content/lib/positions";
 import { parsePlacement, toFen, type PieceChar } from "@/lib/chess/fen";
 import { legalMoves, uciOf } from "@/lib/chess/game";
-import { readMove, withoutOrigin } from "@/lib/chess/notation";
+import { readMove, withoutOrigin } from "@shared/notation";
 import { ALL_SQUARES, fileIndex, rankOf, toSquare, type Square } from "@/lib/chess/squares";
 import { pick, pickDistinct, shuffle } from "@/lib/random";
 

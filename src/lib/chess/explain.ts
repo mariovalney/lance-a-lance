@@ -3,8 +3,8 @@ import { judgeMove } from "@shared/analysis";
 import { replay } from "@shared/games";
 import type { Game, PositionEval } from "@shared/types";
 import { parseUci, type Color } from "@/lib/chess/game";
-import { PIECE_NAME, PIECE_VALUE, materialFor } from "@/lib/chess/material";
-import { describeMove } from "@/lib/chess/notation";
+import { PIECE_NAME, PIECE_VALUE, materialFor } from "@shared/material";
+import { describeMove } from "@shared/notation";
 
 /**
  * Why a judged move was bad, in one sentence, read off the lines the engine

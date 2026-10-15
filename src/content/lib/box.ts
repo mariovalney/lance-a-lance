@@ -1,5 +1,5 @@
 import type { Chess, Move } from "chess.js";
-import { readMove } from "@/lib/chess/notation";
+import { readMove } from "@shared/notation";
 import { FILES, fileIndex, rankOf, toSquare, type Square } from "@/lib/chess/squares";
 
 /*
