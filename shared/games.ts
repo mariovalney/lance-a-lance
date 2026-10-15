@@ -52,6 +52,13 @@ export const UCI = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
 /** Far beyond any real game (the longest ones run to a few hundred moves). */
 export const MAX_MOVES = 1200;
 
+/**
+ * Whether `moves` continues `saved` (or repeats it). The same game can be
+ * played on two devices, or in the app and through the API, so a list that
+ * does not start with every saved move comes from a stale copy.
+ */
+export const continues = (saved: string[], moves: string[]): boolean => moves.length >= saved.length && saved.every((m, i) => moves[i] === m);
+
 /** The game after these UCI moves from the initial position, or null if one is illegal. */
 export function replay(moves: string[]): Chess | null {
   const chess = new Chess();

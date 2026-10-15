@@ -5,6 +5,7 @@ import { progressApi } from "@/lib/progress/api";
 import { ProgressContext, type ProgressContextValue } from "@/lib/progress/context";
 import type { ProgressState } from "@/lib/progress/types";
 import { OfflineScreen } from "@/components/home/OfflineScreen";
+import { continues } from "@shared/games";
 
 /**
  * The signed-in person's progress, as the server keeps it. The app reports what
@@ -43,6 +44,10 @@ export const ProgressProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
 const ProgressStore: FC<{ initial: ProgressState; children: ReactNode }> = ({ initial, children }) => {
   const [state, setState] = useState(initial);
+  const latest = useRef(state);
+  useEffect(() => {
+    latest.current = state;
+  }, [state]);
   // Moves are saved one request at a time, in order.
   const moveChain = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -90,6 +95,18 @@ const ProgressStore: FC<{ initial: ProgressState; children: ReactNode }> = ({ in
     setState((await progressApi.callOffGame(id)).progress);
   }, []);
 
+  const currentGame = useCallback<ProgressContextValue["games"]["current"]>(async () => {
+    const open = await progressApi.currentGame();
+    const known = latest.current.games.current;
+    if (known && known.id !== open?.id) {
+      // Ended or called off elsewhere: the rating and the counts moved too.
+      setState((await progressApi.load()).progress);
+    } else if (open && !(known && continues(open.moves, known.moves))) {
+      setState((s) => ({ ...s, games: { ...s.games, current: open } }));
+    }
+    return open;
+  }, []);
+
   const reset = useCallback(async () => {
     setState((await progressApi.reset()).progress);
   }, []);
@@ -99,8 +116,17 @@ const ProgressStore: FC<{ initial: ProgressState; children: ReactNode }> = ({ in
   }, []);
 
   const games = useMemo<ProgressContextValue["games"]>(
-    () => ({ start: startGame, saveMoves, finish: finishGame, callOff: callOffGame, page: progressApi.gamePage, get: progressApi.gameById, saveAnalysis: progressApi.saveAnalysis }),
-    [startGame, saveMoves, finishGame, callOffGame],
+    () => ({
+      start: startGame,
+      saveMoves,
+      finish: finishGame,
+      callOff: callOffGame,
+      current: currentGame,
+      page: progressApi.gamePage,
+      get: progressApi.gameById,
+      saveAnalysis: progressApi.saveAnalysis,
+    }),
+    [startGame, saveMoves, finishGame, callOffGame, currentGame],
   );
 
   const value = useMemo<ProgressContextValue>(

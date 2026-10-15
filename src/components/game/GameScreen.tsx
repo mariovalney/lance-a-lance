@@ -16,9 +16,10 @@ import { MoveBoard } from "@/components/board/MoveBoard";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { DEFAULT_ILLEGAL, moveLabel } from "@/components/lesson/steps/moveText";
 import { useProgress } from "@/lib/progress/useProgress";
+import { ApiError } from "@/lib/auth/api";
 import type { Game } from "@/lib/progress/types";
 import { RATED_AFTER, isRatedGame } from "@shared/scoring";
-import { BOT_LEVELS, endOf, levelByRating, levelNear, replay, type BotLevel } from "@shared/games";
+import { BOT_LEVELS, continues, endOf, levelByRating, levelNear, replay, type BotLevel } from "@shared/games";
 import { useGameEngines } from "@/lib/engine/useGameEngines";
 import { legalMoves, parseUci, turnOf, uciOf, type Color, type MoveInput } from "@/lib/chess/game";
 import type { Square } from "@/lib/chess/squares";
@@ -48,6 +49,9 @@ interface Hint {
 
 /** The computer never answers faster than this, so its move can be seen. */
 const MIN_THINK_MS = 350;
+
+/** How often the screen asks for the game, to follow moves made on another device or through the API. */
+const FOLLOW_MS = 2000;
 
 const SIDES: { id: Side; label: string }[] = [
   { id: "w", label: "Brancas" },
@@ -116,6 +120,23 @@ export const GameScreen: FC = () => {
   const resigned = useRef(false);
   // Bumped on every new game, so a reply computed for an old one is dropped.
   const gameId = useRef(0);
+  /** Shows a game that has ended, here or elsewhere. */
+  const ended = useCallback((done: Game) => {
+    gameId.current++;
+    const b = boardAt(done.moves);
+    chess.current = b.chess;
+    current.current = null;
+    setGame(done);
+    setBoard(b);
+    setHint(null);
+    setThinking(false);
+    setFinished((n) => n + 1);
+    if (done.ratingDelta !== null) setLastDelta(done.ratingDelta);
+    if (done.outcome === "win") playSound("correct");
+    if (done.outcome === "loss") playSound("wrong");
+    setPhase("over");
+  }, []);
+
   /** Hands the end to the server, which reads the result off the final position. */
   const finish = useCallback(
     async (resign: boolean) => {
@@ -126,20 +147,13 @@ export const GameScreen: FC = () => {
       setThinking(false);
       setPhase("saving");
       try {
-        const done = await games.finish(g.id, g.moves, resign);
-        current.current = null;
-        setGame(done);
-        setFinished((n) => n + 1);
-        if (done.ratingDelta !== null) setLastDelta(done.ratingDelta);
-        if (done.outcome === "win") playSound("correct");
-        if (done.outcome === "loss") playSound("wrong");
-        setPhase("over");
+        ended(await games.finish(g.id, g.moves, resign));
       } catch {
         setFailure("finish");
         setPhase("failed");
       }
     },
-    [games],
+    [games, ended],
   );
 
   /** Plays a move on the board and saves it, or ends the game. Returns false once it is over. */
@@ -252,6 +266,62 @@ export const GameScreen: FC = () => {
       setPhase("failed");
     }
   };
+
+  /**
+   * Catches up with the server: the open game moved on another device or
+   * through the API, ended or was called off there, or a game started there.
+   * Moves this screen made and has not saved yet are not a difference.
+   */
+  const follow = async (open: Game | null) => {
+    const local = current.current;
+    if (local && (phase === "playing" || phase === "failed")) {
+      if (open?.id === local.id) {
+        if (!continues(open.moves, local.moves)) show(open);
+        return;
+      }
+      try {
+        ended(await games.get(local.id));
+      } catch (error) {
+        if (!(error instanceof ApiError && error.code === "not_found")) return;
+        // Called off elsewhere.
+        current.current = null;
+        setGame(null);
+        if (open) show(open);
+        else setPhase("setup");
+      }
+    } else if (!local && open && (phase === "setup" || phase === "over" || phase === "failed")) {
+      show(open);
+    }
+  };
+  const following = useRef(follow);
+  useEffect(() => {
+    following.current = follow;
+  });
+
+  useEffect(() => {
+    let busy = false;
+    const check = async () => {
+      if (busy || document.visibilityState !== "visible") return;
+      busy = true;
+      try {
+        const asked = gameId.current;
+        const open = await games.current();
+        // Something happened here meanwhile; the next round sees it.
+        if (asked === gameId.current) await following.current(open);
+      } catch {
+        /* the next round tries again */
+      } finally {
+        busy = false;
+      }
+    };
+    const timer = window.setInterval(() => void check(), FOLLOW_MS);
+    const onVisible = () => void check();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [games]);
 
   const onMove = (input: MoveInput) => {
     if (phase !== "playing" || thinking) return;

@@ -18,6 +18,12 @@ export interface ProgressContextValue {
     finish: (id: string, moves: string[], resigned: boolean) => Promise<Game>;
     /** Only before both sides moved. */
     callOff: (id: string) => Promise<void>;
+    /**
+     * The open game as the server has it now, which another device or the API
+     * may have moved. Keeps the progress in step, reloading it when the game
+     * ended somewhere else.
+     */
+    current: () => Promise<Game | null>;
     /** Finished games, newest first; `assisted` keeps one kind only. */
     page: (page: number, size: number, assisted?: boolean) => Promise<Page<Game>>;
     /** A finished game of this account; `not_found` for anyone else's. */
