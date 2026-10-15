@@ -48,9 +48,10 @@ export interface GameRow {
   started_at: Date;
   finished_at: Date | null;
   analysis: PositionEval[] | null;
+  undos: number;
 }
 
-export const GAME_COLUMNS = "id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, finished_at, analysis";
+export const GAME_COLUMNS = "id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, finished_at, analysis, undos";
 
 export function gameJson(row: GameRow): Game {
   return {
@@ -67,6 +68,7 @@ export function gameJson(row: GameRow): Game {
     startedAt: row.started_at.toISOString(),
     finishedAt: row.finished_at?.toISOString() ?? null,
     analysis: row.analysis,
+    undos: row.undos,
   };
 }
 

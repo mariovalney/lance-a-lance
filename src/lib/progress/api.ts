@@ -29,9 +29,10 @@ export const progressApi = {
   puzzlePage: (page: number, size: number) => call<Page<PuzzleAttempt>>(`/puzzles/attempts?page=${page}&size=${size}`),
 
   startGame: (input: GameStartInput) => call<{ progress: ProgressView; game: Game }>("/games", post(input)),
-  saveMoves: (id: string, moves: string[]) => call<{ ok: boolean }>(`/games/${id}/moves`, { method: "PUT", body: JSON.stringify({ moves }) }),
-  finishGame: (id: string, moves: string[], resigned: boolean) =>
-    call<{ progress: ProgressView; game: Game }>(`/games/${id}/finish`, post({ moves, resigned, day: localDay() })),
+  saveMoves: (id: string, moves: string[], undos: number) =>
+    call<{ ok: boolean }>(`/games/${id}/moves`, { method: "PUT", body: JSON.stringify({ moves, undos }) }),
+  finishGame: (id: string, moves: string[], resigned: boolean, undos: number) =>
+    call<{ progress: ProgressView; game: Game }>(`/games/${id}/finish`, post({ moves, resigned, day: localDay(), undos })),
   currentGame: () => call<{ game: Game | null }>("/games/current").then((answer) => answer.game),
   callOffGame: (id: string) => call<{ progress: ProgressView }>(`/games/${id}`, { method: "DELETE" }),
   gamePage: (page: number, size: number, assisted?: boolean) =>

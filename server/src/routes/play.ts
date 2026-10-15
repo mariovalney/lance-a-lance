@@ -136,6 +136,7 @@ function view(game: GameRow) {
       id: game.id,
       level: game.level,
       assisted: game.assisted,
+      undos: game.undos,
       player: COLOR[game.player],
       computer: COLOR[game.player === "w" ? "b" : "w"],
       turn: COLOR[turn],
@@ -362,6 +363,41 @@ playRoutes.get("/game/hint", async (c) => {
       const move = parseMove(chess, uci);
       if (!move) throw new Error(`engine suggested an illegal move: ${uci}`);
       return ok(c, { hint: { san: move.san, uci: uciOf(move), from: move.from, to: move.to, reading: readMove(move) } });
+    });
+  } catch (error) {
+    if (error instanceof EngineDown) return engineDown(c);
+    throw error;
+  }
+});
+
+/**
+ * Takes back the player's last move and the computer's reply, only in an
+ * assisted game, as rated games are never taken back. The count of undos goes
+ * up, so the app reloads the game instead of saving its longer copy over it.
+ */
+playRoutes.post("/game/undo", async (c) => {
+  const userId = c.get("user").id;
+  try {
+    return await serially(userId, async () => {
+      let game = await openGame(pool, userId);
+      if (!game) return fail(c, 404, "no_game", "There is no game in progress.");
+      if (!game.assisted) return fail(c, 409, "not_assisted", "Moves are only taken back in assisted games, which are not rated.", view(game));
+      game = await settled(userId, game);
+      // Back to the player's turn before their last move: two plies, its reply included.
+      const keep = game.moves.length - 2;
+      if (keep < (game.player === "w" ? 0 : 1)) return fail(c, 409, "nothing_to_undo", "There is no move of yours to take back.", view(game));
+      const moves = game.moves.slice(0, keep);
+      const { rows } = await query<GameRow>(
+        `UPDATE games SET moves = $3, undos = undos + 1, updated_at = now()
+          WHERE id = $1 AND user_id = $2 AND finished_at IS NULL AND moves = $4
+          RETURNING ${GAME_COLUMNS}`,
+        [game.id, userId, moves, game.moves],
+      );
+      if (!rows[0]) {
+        const now = await openGame(pool, userId);
+        return fail(c, 409, "game_moved", "The game changed on another device. Read it again.", now ? view(now) : {});
+      }
+      return ok(c, view(rows[0]));
     });
   } catch (error) {
     if (error instanceof EngineDown) return engineDown(c);

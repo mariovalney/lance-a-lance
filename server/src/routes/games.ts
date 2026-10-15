@@ -41,6 +41,9 @@ gameRoutes.post("/", async (c) => {
   return c.json({ progress: await readProgress(pool, userId), game: gameJson(rows[0]) }, 201);
 });
 
+/** A copy made before moves were taken back is stale; a client that sends no count is not checked. */
+const sameUndos = (game: GameRow, undos: unknown) => undos === undefined || undos === game.undos;
+
 /**
  * Saves the moves so far. They have to continue the saved ones: the same game
  * can move on another device or through the API, and then this copy is stale.
@@ -48,14 +51,14 @@ gameRoutes.post("/", async (c) => {
  */
 gameRoutes.put("/:id/moves", async (c) => {
   const id = c.req.param("id");
-  const body = (await c.req.json().catch(() => null)) as { moves?: unknown } | null;
+  const body = (await c.req.json().catch(() => null)) as { moves?: unknown; undos?: unknown } | null;
   const moves = legalMoves(body?.moves);
   if (!UUID.test(id) || !moves) return c.json({ error: "invalid_moves" }, 400);
   const userId = c.get("user").id;
   const result = await transaction(async (client) => {
     const game = await openGame(client, userId, true);
     if (game?.id !== id) return { status: 404 as const };
-    if (!continues(game.moves, moves)) return { status: 409 as const, game };
+    if (!continues(game.moves, moves) || !sameUndos(game, body?.undos)) return { status: 409 as const, game };
     await client.query("UPDATE games SET moves = $2, updated_at = now() WHERE id = $1", [id, moves]);
     return { status: 200 as const };
   });
@@ -66,7 +69,7 @@ gameRoutes.put("/:id/moves", async (c) => {
 
 gameRoutes.post("/:id/finish", async (c) => {
   const id = c.req.param("id");
-  const body = (await c.req.json().catch(() => null)) as { moves?: unknown; resigned?: unknown; day?: unknown } | null;
+  const body = (await c.req.json().catch(() => null)) as { moves?: unknown; resigned?: unknown; day?: unknown; undos?: unknown } | null;
   const moves = legalMoves(body?.moves);
   if (!UUID.test(id) || !moves || typeof body?.resigned !== "boolean") return c.json({ error: "invalid_finish" }, 400);
   const userId = c.get("user").id;
@@ -75,7 +78,7 @@ gameRoutes.post("/:id/finish", async (c) => {
   const result = await transaction(async (client) => {
     const game = await openGame(client, userId, true);
     if (game?.id !== id) return { error: "not_found" as const };
-    if (!continues(game.moves, moves)) return { error: "game_moved" as const };
+    if (!continues(game.moves, moves) || !sameUndos(game, body.undos)) return { error: "game_moved" as const };
     const done = await finishGame(client, userId, game, moves, body.resigned as boolean, day);
     return done ? { game: gameJson(done) } : { error: "not_over" as const };
   });

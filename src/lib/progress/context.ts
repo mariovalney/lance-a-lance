@@ -12,10 +12,10 @@ export interface ProgressContextValue {
   loadPuzzlePage: (page: number, size: number) => Promise<Page<PuzzleAttempt>>;
   games: {
     start: (input: GameStartInput) => Promise<Game>;
-    /** Saves the moves so far; the latest call wins. */
-    saveMoves: (id: string, moves: string[]) => void;
+    /** Saves the moves so far; the latest call wins. `undos` is the game's count as this copy knows it. */
+    saveMoves: (id: string, moves: string[], undos: number) => void;
     /** The server reads the result off the final position; `resigned` is the only thing it takes as given. */
-    finish: (id: string, moves: string[], resigned: boolean) => Promise<Game>;
+    finish: (id: string, moves: string[], resigned: boolean, undos: number) => Promise<Game>;
     /** Only before both sides moved. */
     callOff: (id: string) => Promise<void>;
     /**

@@ -75,17 +75,17 @@ const ProgressStore: FC<{ initial: ProgressState; children: ReactNode }> = ({ in
     return answer.game;
   }, []);
 
-  const saveMoves = useCallback<ProgressContextValue["games"]["saveMoves"]>((id, moves) => {
+  const saveMoves = useCallback<ProgressContextValue["games"]["saveMoves"]>((id, moves, undos) => {
     // A failed save is caught by the next one, which carries every move.
-    moveChain.current = moveChain.current.then(() => progressApi.saveMoves(id, moves)).catch(() => undefined);
+    moveChain.current = moveChain.current.then(() => progressApi.saveMoves(id, moves, undos)).catch(() => undefined);
     // The read model's open game follows, so leaving the screen and coming
     // back resumes from the last move, not from when the progress loaded.
     setState((s) => (s.games.current?.id === id ? { ...s, games: { ...s.games, current: { ...s.games.current, moves } } } : s));
   }, []);
 
-  const finishGame = useCallback<ProgressContextValue["games"]["finish"]>(async (id, moves, resigned) => {
+  const finishGame = useCallback<ProgressContextValue["games"]["finish"]>(async (id, moves, resigned, undos) => {
     await moveChain.current;
-    const answer = await progressApi.finishGame(id, moves, resigned);
+    const answer = await progressApi.finishGame(id, moves, resigned, undos);
     setState(answer.progress);
     return answer.game;
   }, []);

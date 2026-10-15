@@ -67,6 +67,11 @@ export interface Game {
   finishedAt: string | null;
   /** One entry per position, the initial one included, once the game was analysed. */
   analysis: PositionEval[] | null;
+  /**
+   * Times moves were taken back (assisted games, through the API). A save or
+   * a finish carrying another count comes from a stale copy.
+   */
+  undos: number;
 }
 
 export interface GameStats {

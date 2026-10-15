@@ -249,4 +249,11 @@ export const MIGRATIONS: Migration[] = [
     name: "008_lesson_versions",
     sql: "ALTER TABLE lesson_progress ADD COLUMN version smallint NOT NULL DEFAULT 1;",
   },
+  {
+    // Moves taken back in an assisted game through the API. The list of moves
+    // gets shorter, which a copy that only checks it continues the saved one
+    // would not notice: the count tells the app to reload the game.
+    name: "009_game_undos",
+    sql: "ALTER TABLE games ADD COLUMN undos integer NOT NULL DEFAULT 0;",
+  },
 ];

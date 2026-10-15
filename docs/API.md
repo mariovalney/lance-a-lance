@@ -55,7 +55,8 @@ Every answer is JSON shaped as `{ success, data }`:
 | `not_your_turn` | 409 | It was the computer's turn (the app left it there); it has moved now, and the game comes along |
 | `game_moved` | 409 | The game changed in the app while this move was being answered; the game comes along |
 | `cannot_cancel` | 409 | Cancelling after both sides moved |
-| `not_assisted` | 409 | Asking a hint in a rated game; the game comes along |
+| `not_assisted` | 409 | Asking a hint, or taking a move back, in a rated game; the game comes along |
+| `nothing_to_undo` | 409 | Taking a move back before you moved; the game comes along |
 | `engine_unavailable` | 503 | The computer could not answer; nothing was saved, so the same request can be sent again |
 | `server_error` | 500 | Anything else |
 
@@ -109,6 +110,12 @@ In an assisted game, on your turn: the full-strength engine's move, after the sa
 ```
 
 A rated game has no hints: 409 `not_assisted`, carrying the game. On the computer's turn, 409 `not_your_turn`.
+
+### `POST /api/v1/game/undo`
+
+In an assisted game: takes back your last move and the computer's reply, so it is your turn again one move earlier. Answers with the game. One call takes back one move of yours; call again for more.
+
+A rated game is never taken back: 409 `not_assisted`. Before you moved: 409 `nothing_to_undo`. The game's `undos` count goes up, and the app, if open, reloads the game.
 
 ### `POST /api/v1/game/resign`
 
@@ -165,7 +172,8 @@ Calls off the open game, only before both sides moved: it leaves nothing behind.
 | Field | |
 |---|---|
 | `player`, `computer`, `turn` | `white` or `black`. `player` is also the side the board faces |
-| `assisted` | `true` for a game started with assistance, here or in the app: it offers hints and is never rated |
+| `assisted` | `true` for a game started with assistance, here or in the app: it offers hints and undo, and is never rated |
+| `undos` | Times moves were taken back |
 | `ply` | Moves played so far, both sides. The `ply` to send with the next move |
 | `fen` | The position. `fen` and `pieces` are the two shapes the `position` option of [react-chessboard](https://github.com/Clariity/react-chessboard) accepts, which is what the app draws with |
 | `pieces` | Square to piece: `w` or `b` for the color, then `K Q R B N P` |

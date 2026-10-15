@@ -147,7 +147,7 @@ export const GameScreen: FC = () => {
       setThinking(false);
       setPhase("saving");
       try {
-        ended(await games.finish(g.id, g.moves, resign));
+        ended(await games.finish(g.id, g.moves, resign, g.undos));
       } catch {
         setFailure("finish");
         setPhase("failed");
@@ -170,7 +170,7 @@ export const GameScreen: FC = () => {
         void finish(false);
         return false;
       }
-      games.saveMoves(next.id, next.moves);
+      games.saveMoves(next.id, next.moves, next.undos);
       return true;
     },
     [games, finish],
@@ -270,13 +270,14 @@ export const GameScreen: FC = () => {
   /**
    * Catches up with the server: the open game moved on another device or
    * through the API, ended or was called off there, or a game started there.
-   * Moves this screen made and has not saved yet are not a difference.
+   * Moves this screen made and has not saved yet are not a difference; moves
+   * taken back through the API are, though the list only got shorter.
    */
   const follow = async (open: Game | null) => {
     const local = current.current;
     if (local && (phase === "playing" || phase === "failed")) {
       if (open?.id === local.id) {
-        if (!continues(open.moves, local.moves)) show(open);
+        if (open.undos !== local.undos || !continues(open.moves, local.moves)) show(open);
         return;
       }
       try {
