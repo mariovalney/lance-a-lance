@@ -14,6 +14,25 @@ function flag(name: string, fallback: boolean): boolean {
 
 const production = process.env.NODE_ENV !== "development";
 
+/**
+ * `USER_API_KEYS`: who may play through `/api/v1`, as a comma separated list
+ * of `email|key`. A malformed entry stops the boot rather than locking
+ * somebody out without a word.
+ */
+function apiKeys(raw: string | undefined): { email: string; key: string }[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry, i) => {
+      const [email, key, extra] = entry.split("|").map((part) => part.trim());
+      if (!email?.includes("@") || !key || extra !== undefined) throw new Error(`USER_API_KEYS entry ${i + 1} is not email|key`);
+      if (key.length < 16) throw new Error(`USER_API_KEYS entry ${i + 1}: the key needs at least 16 characters`);
+      return { email: email.toLowerCase(), key };
+    });
+}
+
 export const env = {
   production,
   port: Number(process.env.PORT ?? 3000),
@@ -48,6 +67,9 @@ export const env = {
         userinfoUrl: process.env.GOOGLE_USERINFO_URL || "https://openidconnect.googleapis.com/v1/userinfo",
       }
     : null,
+
+  /** Without any key the API at /api/v1 is off and answers 404. */
+  apiKeys: apiKeys(process.env.USER_API_KEYS),
 
   /**
    * Sending mail is optional. Without SMTP_HOST there is no way to send a

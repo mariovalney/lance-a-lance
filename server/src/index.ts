@@ -9,6 +9,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { authRoutes, type Vars } from "./routes/auth.js";
 import { backupRoutes } from "./routes/backup.js";
 import { gameRoutes } from "./routes/games.js";
+import { playRoutes } from "./routes/play.js";
 import { lessonRoutes, progressRoutes } from "./routes/progress.js";
 import { puzzleRoutes } from "./routes/puzzles.js";
 import { isClientPath } from "../../shared/routes.js";
@@ -35,6 +36,7 @@ api.route("/lessons", lessonRoutes);
 api.route("/puzzles", puzzleRoutes);
 api.route("/games", gameRoutes);
 api.route("/backup", backupRoutes);
+api.route("/v1", playRoutes);
 api.all("*", (c) => c.json({ error: "not_found" }, 404));
 
 app.route("/api", api);
@@ -110,6 +112,7 @@ const server = serve({ fetch: app.fetch, port: env.port, hostname: "0.0.0.0" }, 
   console.log(`lance-a-lance listening on ${info.address}:${info.port}`);
   console.log(`  static: ${hasBuild ? env.staticDir : "(none)"}`);
   console.log(`  signup: only the first account; after that the admin adds people at /admin`);
+  console.log(`  api:    ${env.apiKeys.length ? `/api/v1 for ${env.apiKeys.length} key(s)` : "off, no USER_API_KEYS"}`);
   console.log(`  mail:   ${env.smtp ? `${env.smtp.host}:${env.smtp.port}` : "not configured, so no password reset"}`);
   if (env.smtp && !env.appUrl) console.warn("  APP_URL is not set: reset links fall back to the request's Host header");
 });

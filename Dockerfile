@@ -10,6 +10,7 @@
 #   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 #                    optional; without them signing in with Google is off
 #   COOKIE_SECURE    defaults to true, which is right behind Easypanel's TLS
+#   USER_API_KEYS    optional, email|key pairs for /api/v1 (docs/API.md)
 
 FROM node:22-alpine AS build
 WORKDIR /app
