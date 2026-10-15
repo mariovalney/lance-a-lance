@@ -37,6 +37,7 @@ const { chromium } = require("playwright");
 
     r = await api("GET", "/game");
     check(r.success && (r.data.status === "none" || r.data.status === "defeat" || r.data.status === "victory" || r.data.status === "draw"), `no open game after the reset (${r.data.status})`);
+    check(r.data.player && r.data.player.rating === 800 && r.data.player.played === 0 && r.data.player.suggestedLevel === 800, "the player's rating and suggested level come along");
 
     r = await api("POST", "/game", { level: 401 });
     check(r.status === 400 && r.data.error === "invalid_level", "a level the app does not offer is refused");
@@ -123,6 +124,29 @@ const { chromium } = require("playwright");
     check(s.phase === "setup", "and the app goes back to the setup");
     r = await api("DELETE", "/game");
     check(r.status === 404 && r.data.error === "no_game", "with nothing open, there is nothing to call off");
+
+    // Assisted: hints from the full-strength engine, never rated.
+    r = await api("GET", "/game/hint");
+    check(r.status === 404 && r.data.error === "no_game", "no hint without a game");
+    r = await api("POST", "/game", { level: 800, color: "white", assisted: "yes" });
+    check(r.status === 400 && r.data.error === "invalid_assisted", "assisted must be a boolean");
+    r = await api("POST", "/game", { level: 800, color: "white" });
+    r = await api("GET", "/game/hint");
+    check(r.status === 409 && r.data.error === "not_assisted" && r.data.game.assisted === false, "a rated game gets no hint");
+    await api("DELETE", "/game");
+    r = await api("POST", "/game", { level: 800, color: "white", assisted: true });
+    check(r.status === 201 && r.data.game.assisted === true, "a game can start assisted");
+    const before = (await api("GET", "/game")).data.player;
+    r = await api("GET", "/game/hint");
+    const hint = r.data.hint;
+    check(r.success && hint && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(hint.uci) && typeof hint.reading === "string", `an assisted game gets a hint (${hint?.san})`);
+    r = await api("POST", "/game/move", { move: hint.uci, ply: 0 });
+    check(r.success && r.data.game.moves[0].uci === hint.uci, "the hint is a legal move");
+    r = await api("POST", "/game/move", { move: r.data.game.legalMoves[0].uci, ply: 2 });
+    r = await api("POST", "/game/resign");
+    check(r.success && r.data.game.result.ratingDelta === null, "an assisted game is not rated");
+    r = await api("GET", "/game");
+    check(r.data.player.rating === before.rating && r.data.player.played === before.played, "and leaves the rating and the count alone");
 
     check(errors.length === 0, `no page errors (${errors.join(" | ")})`);
   } catch (error) {

@@ -5,9 +5,9 @@ import { RATED_AFTER } from "../../../shared/scoring.js";
 import { GAME_LEVELS, UCI, levelByRating, levelNear, replay } from "../../../shared/games.js";
 import { PIECE_VALUE, materialFor } from "../../../shared/material.js";
 import { readMove } from "../../../shared/notation.js";
-import { GAME_COLUMNS, type GameRow } from "../account.js";
+import { GAME_COLUMNS, statsOf, type GameRow } from "../account.js";
 import { pool, query, transaction } from "../db.js";
-import { computerMove } from "../engine.js";
+import { bestMove, computerMove } from "../engine.js";
 import { env } from "../env.js";
 import { finishGame, openGame } from "../games.js";
 import type { Vars } from "./auth.js";
@@ -19,7 +19,8 @@ import { brazilDay } from "./util.js";
  * account with its email. Every answer is `{ success, data }`.
  *
  * It is the same game the app plays: one open game per person, the same
- * levels, rated the same way. The difference is who moves the computer: here
+ * levels, rated the same way, and assisted games (never rated) with the
+ * full-strength engine's move as a hint. The difference is who moves the computer: here
  * the server does, before answering, so a move comes back with the reply. The
  * app's game screen asks for the open game every few seconds and picks the
  * moves up. Documented in docs/API.md.
@@ -156,6 +157,15 @@ function view(game: GameRow) {
   };
 }
 
+/**
+ * The account's game rating, its rated games and the level the app's setup
+ * suggests for it (the closest one), so a client can offer the same default.
+ */
+async function playerOf(userId: string) {
+  const stats = await statsOf(pool, userId);
+  return { rating: stats.game_rating, played: stats.game_played, suggestedLevel: levelNear(stats.game_rating).rating };
+}
+
 /* ---------- moving ---------- */
 
 class EngineDown extends Error {}
@@ -217,18 +227,21 @@ const engineDown = (c: Context) => fail(c, 503, "engine_unavailable", "The compu
 
 /* ---------- routes ---------- */
 
-/** The open game, or the last one that ended, or none at all. */
+/** The open game, or the last one that ended, or none at all, with the player's rating. */
 playRoutes.get("/game", async (c) => {
   const userId = c.get("user").id;
   try {
     return await serially(userId, async () => {
       const open = await openGame(pool, userId);
-      if (open) return ok(c, view(await settled(userId, open)));
+      if (open) {
+        const game = view(await settled(userId, open));
+        return ok(c, { ...game, player: await playerOf(userId) });
+      }
       const { rows } = await query<GameRow>(
         `SELECT ${GAME_COLUMNS} FROM games WHERE user_id = $1 AND finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1`,
         [userId],
       );
-      return ok(c, rows[0] ? view(rows[0]) : { status: "none", game: null });
+      return ok(c, { ...(rows[0] ? view(rows[0]) : { status: "none", game: null }), player: await playerOf(userId) });
     });
   } catch (error) {
     if (error instanceof EngineDown) return engineDown(c);
@@ -236,9 +249,13 @@ playRoutes.get("/game", async (c) => {
   }
 });
 
-/** A new game: `level` as in the app, `color` white, black or random. Always rated, as in the app without assistance. */
+/**
+ * A new game: `level` as in the app, `color` white, black or random, and
+ * `assisted` (default false): an assisted game offers hints and is never
+ * rated, as in the app.
+ */
 playRoutes.post("/game", async (c) => {
-  const body = (await c.req.json().catch(() => null)) as { level?: unknown; color?: unknown } | null;
+  const body = (await c.req.json().catch(() => null)) as { level?: unknown; color?: unknown; assisted?: unknown } | null;
   if (!GAME_LEVELS.includes(body?.level as never)) {
     return fail(c, 400, "invalid_level", `level must be one of ${GAME_LEVELS.join(", ")}.`);
   }
@@ -246,14 +263,16 @@ playRoutes.post("/game", async (c) => {
   if (color !== "white" && color !== "black" && color !== "random") {
     return fail(c, 400, "invalid_color", "color must be white, black or random.");
   }
+  const assisted = body?.assisted ?? false;
+  if (typeof assisted !== "boolean") return fail(c, 400, "invalid_assisted", "assisted must be true or false.");
   const player: Color = color === "white" ? "w" : color === "black" ? "b" : Math.random() < 0.5 ? "w" : "b";
   const userId = c.get("user").id;
   return serially(userId, async () => {
     const { rows } = await query<GameRow>(
-      `INSERT INTO games (user_id, level, player, assisted) VALUES ($1, $2, $3, false)
+      `INSERT INTO games (user_id, level, player, assisted) VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id) WHERE finished_at IS NULL DO NOTHING
        RETURNING ${GAME_COLUMNS}`,
-      [userId, body!.level, player],
+      [userId, body!.level, player, assisted],
     );
     if (!rows[0]) {
       const open = await openGame(pool, userId);
@@ -313,6 +332,36 @@ playRoutes.post("/game/move", async (c) => {
         return fail(c, 409, "game_moved", "The game changed on another device. Read it again.", now ? view(now) : {});
       }
       return ok(c, view(saved));
+    });
+  } catch (error) {
+    if (error instanceof EngineDown) return engineDown(c);
+    throw error;
+  }
+});
+
+/**
+ * The full-strength engine's move for the player, only in an assisted game:
+ * a rated game never gets one, from here or from the app.
+ */
+playRoutes.get("/game/hint", async (c) => {
+  const userId = c.get("user").id;
+  try {
+    return await serially(userId, async () => {
+      const game = await openGame(pool, userId);
+      if (!game) return fail(c, 404, "no_game", "There is no game in progress.");
+      if (!game.assisted) return fail(c, 409, "not_assisted", "Hints are only for assisted games, which are not rated.", view(game));
+      const chess = replay(game.moves)!;
+      if (chess.turn() !== game.player) return fail(c, 409, "not_your_turn", "It is the computer's turn. Read the game again.", view(game));
+      let uci: string;
+      try {
+        uci = await bestMove(game.moves);
+      } catch (error) {
+        console.error("engine failed:", error);
+        throw new EngineDown();
+      }
+      const move = parseMove(chess, uci);
+      if (!move) throw new Error(`engine suggested an illegal move: ${uci}`);
+      return ok(c, { hint: { san: move.san, uci: uciOf(move), from: move.from, to: move.to, reading: readMove(move) } });
     });
   } catch (error) {
     if (error instanceof EngineDown) return engineDown(c);

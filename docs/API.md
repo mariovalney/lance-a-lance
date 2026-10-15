@@ -4,7 +4,7 @@
 
 - One open game per person. A game started here shows up at `/partida` in the app, and the other way around.
 - The same computer levels, played the same way (`shared/games.ts`). The server runs the computer's moves with the same Stockfish build the app loads.
-- Always rated, like an app game without assistance: Elo, XP, the game counts and the day streak, scored by the server.
+- Rated like an app game without assistance (Elo, XP, the game counts and the day streak, scored by the server), unless it is started as assisted: then, as in the app, it is never rated and the full-strength engine's move is available as a hint.
 
 The difference is who moves the computer. In the app the browser does. Here the server does, before it answers, so a move comes back with the computer's reply in the same response.
 
@@ -47,7 +47,7 @@ Every answer is JSON shaped as `{ success, data }`:
 |---|---|---|
 | `unauthorized` | 401 | Missing key, unknown key, or a key whose email has no account |
 | `not_found` | 404 | No such route, or the API is off |
-| `invalid_level`, `invalid_color`, `invalid_move`, `invalid_ply` | 400 | A body that does not follow this page |
+| `invalid_level`, `invalid_color`, `invalid_assisted`, `invalid_move`, `invalid_ply` | 400 | A body that does not follow this page |
 | `illegal_move` | 400 | The move is not legal in the position; `data.legalMoves` lists the legal ones |
 | `no_game` | 404 | There is no open game |
 | `game_open` | 409 | Creating a game while one is open; the open game comes along |
@@ -55,6 +55,7 @@ Every answer is JSON shaped as `{ success, data }`:
 | `not_your_turn` | 409 | It was the computer's turn (the app left it there); it has moved now, and the game comes along |
 | `game_moved` | 409 | The game changed in the app while this move was being answered; the game comes along |
 | `cannot_cancel` | 409 | Cancelling after both sides moved |
+| `not_assisted` | 409 | Asking a hint in a rated game; the game comes along |
 | `engine_unavailable` | 503 | The computer could not answer; nothing was saved, so the same request can be sent again |
 | `server_error` | 500 | Anything else |
 
@@ -65,17 +66,24 @@ Every answer is JSON shaped as `{ success, data }`:
 Starts a game.
 
 ```json
-{ "level": 1200, "color": "white" }
+{ "level": 1200, "color": "white", "assisted": false }
 ```
 
-- `level`: one of `400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400`, the levels on the app's setup screen.
+- `level`: one of `400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400`, the levels on the app's setup screen. `player.suggestedLevel` from `GET /api/v1/game` is the one the app offers first.
 - `color`: your pieces, `white`, `black` or `random` (the default).
+- `assisted`: `true` for a game with hints (`GET /api/v1/game/hint`) that is never rated; `false` (the default) for a rated one.
 
 Answers 201 with the game. Playing black, the computer's first move is already in it. With a game already open: 409 `game_open`, carrying that game.
 
 ### `GET /api/v1/game`
 
 The open game. With no open game, the last one that ended (look at `status` and `finishedAt`). With no game ever: `{ "status": "none", "game": null }`.
+
+It also carries `player`, for the setup of a new game: the account's game rating, how many rated games it counts and the level the app's setup suggests for that rating (the closest one, the easier on a tie).
+
+```json
+{ "status": "none", "game": null, "player": { "rating": 812, "played": 3, "suggestedLevel": 800 } }
+```
 
 If the open game was left on the computer's turn (the app closed while the computer was thinking), the computer moves before the answer.
 
@@ -91,6 +99,16 @@ Your move, answered with the game after the computer's reply.
 - `ply` (optional, recommended): the number of moves played before this one, which is `game.ply` from the last answer. It makes retries safe: when a move already went through (the answer was lost on the way), sending it again with the same `ply` answers with the game instead of an error. A `ply` that does not match is 409 `stale_ply`, so a move meant for an older position is never played on a newer one.
 
 When your move or the computer's ends the game, the answer already has the result and the rating change.
+
+### `GET /api/v1/game/hint`
+
+In an assisted game, on your turn: the full-strength engine's move, after the same 0.8 s search the app's hint gets.
+
+```json
+{ "hint": { "san": "Nf3", "uci": "g1f3", "from": "g1", "to": "f3", "reading": "cavalo para f3" } }
+```
+
+A rated game has no hints: 409 `not_assisted`, carrying the game. On the computer's turn, 409 `not_your_turn`.
 
 ### `POST /api/v1/game/resign`
 
@@ -147,7 +165,7 @@ Calls off the open game, only before both sides moved: it leaves nothing behind.
 | Field | |
 |---|---|
 | `player`, `computer`, `turn` | `white` or `black`. `player` is also the side the board faces |
-| `assisted` | `true` only for a game started in the app with assistance, which is never rated. Games started here never are |
+| `assisted` | `true` for a game started with assistance, here or in the app: it offers hints and is never rated |
 | `ply` | Moves played so far, both sides. The `ply` to send with the next move |
 | `fen` | The position. `fen` and `pieces` are the two shapes the `position` option of [react-chessboard](https://github.com/Clariity/react-chessboard) accepts, which is what the app draws with |
 | `pieces` | Square to piece: `w` or `b` for the color, then `K Q R B N P` |

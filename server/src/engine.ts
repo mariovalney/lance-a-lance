@@ -20,6 +20,8 @@ import { env } from "./env.js";
 const ENGINE = "stockfish-19-lite-single";
 /** A search that takes longer than this is stuck: the process is killed and the next search starts a fresh one. */
 const SEARCH_TIMEOUT_MS = 15_000;
+/** The full-strength search behind an assisted game's hint, as long as the app's (`HINT_TIME_MS`). */
+const HINT_TIME_MS = 800;
 const IDLE_MS = 10 * 60 * 1000;
 
 /**
@@ -104,12 +106,15 @@ function ask(r: Running, commands: string[], match: (line: string) => boolean): 
   });
 }
 
-async function search(moves: string[], level: BotLevel): Promise<string> {
+/** One search at `level`, or at full strength without one. The options are set every time: the process is shared. */
+async function search(moves: string[], level: BotLevel | null): Promise<string> {
   const r = await engine();
-  const strength = level.elo
-    ? ["setoption name UCI_LimitStrength value true", `setoption name UCI_Elo value ${level.elo}`]
-    : ["setoption name UCI_LimitStrength value false", "setoption name Skill Level value 0"];
-  const go = level.elo ? `go movetime ${BOT_MOVE_TIME_MS}` : `go depth ${level.depth ?? 1}`;
+  const strength = !level
+    ? ["setoption name UCI_LimitStrength value false", "setoption name Skill Level value 20"]
+    : level.elo
+      ? ["setoption name UCI_LimitStrength value true", `setoption name UCI_Elo value ${level.elo}`]
+      : ["setoption name UCI_LimitStrength value false", "setoption name Skill Level value 0"];
+  const go = !level ? `go movetime ${HINT_TIME_MS}` : level.elo ? `go movetime ${BOT_MOVE_TIME_MS}` : `go depth ${level.depth ?? 1}`;
   const line = await ask(r, [...strength, moves.length ? `position startpos moves ${moves.join(" ")}` : "position startpos", go], (l) =>
     l.startsWith("bestmove"),
   );
@@ -131,6 +136,15 @@ export function computerMove(chess: Chess, moves: string[], level: BotLevel): Pr
       return Promise.resolve(m.from + m.to + (m.promotion ?? ""));
     }
   }
+  return queued(moves, level);
+}
+
+/** The full-strength engine's move after these UCI moves: an assisted game's hint. */
+export function bestMove(moves: string[]): Promise<string> {
+  return queued(moves, null);
+}
+
+function queued(moves: string[], level: BotLevel | null): Promise<string> {
   const run = chain.then(() => {
     if (idle) clearTimeout(idle);
     return search(moves, level);
