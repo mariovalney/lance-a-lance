@@ -2,7 +2,7 @@ import type { LessonDef, Screen } from "@/content/types";
 import { afterMove, boardFor, randomVariant, withRandomKings } from "@/content/lib/positions";
 import { toFen, type PieceChar } from "@/lib/chess/fen";
 import { legalMoves, load, pieceDestinations, uciOf } from "@/lib/chess/game";
-import { readMove } from "@/lib/chess/notation";
+import { readMove } from "@shared/notation";
 import { ALL_SQUARES, START_FEN, fileIndex, rankOf, toSquare, type Square } from "@/lib/chess/squares";
 import { pick, pickDistinct, randInt, shuffle } from "@/lib/random";
 

@@ -1,5 +1,5 @@
 import { legalMoves, uciOf } from "@/lib/chess/game";
-import type { BotLevel } from "@/lib/engine/levels";
+import { BOT_MOVE_TIME_MS, type BotLevel } from "@shared/games";
 import { pick } from "@/lib/random";
 
 /**
@@ -10,9 +10,6 @@ import { pick } from "@/lib/random";
  * own name, so both files keep the names they were published with.
  */
 export const ENGINE_URL = "/engine/stockfish-19-lite-single.js";
-
-/** Time the limited-strength levels think per move. */
-const MOVE_TIME_MS = 700;
 
 /** Time the full-strength engine gets for the assisted game's hint. */
 export const HINT_TIME_MS = 800;
@@ -77,7 +74,7 @@ export class Engine {
    * engine sees repetitions too.
    */
   bestMove(moves: string[], level: BotLevel | null): Promise<string> {
-    const go = !level ? `go movetime ${HINT_TIME_MS}` : level.elo ? `go movetime ${MOVE_TIME_MS}` : `go depth ${level.depth ?? 1}`;
+    const go = !level ? `go movetime ${HINT_TIME_MS}` : level.elo ? `go movetime ${BOT_MOVE_TIME_MS}` : `go depth ${level.depth ?? 1}`;
     return this.queue(moves, go).then((r) => r.best);
   }
 

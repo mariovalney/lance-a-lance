@@ -1,7 +1,7 @@
 import type { BoardSpec, LessonDef, Screen } from "@/content/types";
 import { puzzleBoard, puzzleScreen, puzzlesOf, type Puzzle, type PuzzleTheme } from "@/content/lib/puzzles";
 import { load } from "@/lib/chess/game";
-import { readMove } from "@/lib/chess/notation";
+import { readMove } from "@shared/notation";
 import type { Square } from "@/lib/chess/squares";
 import { pickDistinct } from "@/lib/random";
 

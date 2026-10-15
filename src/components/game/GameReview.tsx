@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { RichText } from "@/components/common/RichText";
 import { LineDialog } from "@/components/game/LineDialog";
 import { forgetRouteState, goBack, navigate, paths, routeState } from "@/lib/router";
-import { materialFor } from "@/lib/chess/material";
+import { materialFor } from "@shared/material";
 import { explainMove } from "@/lib/chess/explain";
 
 /** The game after its first `ply` moves. */

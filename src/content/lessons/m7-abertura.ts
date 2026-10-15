@@ -3,7 +3,7 @@ import type { LessonDef, Screen } from "@/content/types";
 import { hangingPieces } from "@/content/lib/analysis";
 import { afterMove, boardFor } from "@/content/lib/positions";
 import { legalMoves, load, pieceDestinations, playLine, uciOf } from "@/lib/chess/game";
-import { readMove } from "@/lib/chess/notation";
+import { readMove } from "@shared/notation";
 import { START_FEN, type Square } from "@/lib/chess/squares";
 import { pick, pickDistinct, shuffle } from "@/lib/random";
 

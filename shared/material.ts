@@ -1,5 +1,3 @@
-import type { Color } from "@/lib/chess/game";
-
 type PieceType = "p" | "n" | "b" | "r" | "q" | "k";
 
 /**
@@ -23,7 +21,7 @@ export const PIECE_NAME: Record<PieceType, string> = {
  * start, +3 a knight ahead. Counted off the board rather than from captures,
  * so a promotion counts too.
  */
-export function materialFor(fen: string, color: Color): number {
+export function materialFor(fen: string, color: "w" | "b"): number {
   let balance = 0;
   for (const ch of fen.split(" ")[0]) {
     const type = ch.toLowerCase() as PieceType;

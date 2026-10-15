@@ -1,6 +1,6 @@
 import type { LessonDef, Screen } from "@/content/types";
 import { boardFor, randomVariant, withRandomKings } from "@/content/lib/positions";
-import { PIECE_NAME } from "@/lib/chess/notation";
+import { PIECE_NAME } from "@shared/notation";
 import { legalMoves, uciOf } from "@/lib/chess/game";
 import { FILES, type Square } from "@/lib/chess/squares";
 import { pick, randInt } from "@/lib/random";

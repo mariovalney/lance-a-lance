@@ -1,7 +1,7 @@
 import type { Screen } from "@/content/types";
 import { randomVariant, verdictOf, type Verdict } from "@/content/lib/positions";
 import { legalMoves } from "@/lib/chess/game";
-import { readMove } from "@/lib/chess/notation";
+import { readMove } from "@shared/notation";
 import { shuffle } from "@/lib/random";
 
 export type VerdictOption = "mate" | "check" | "notcheck" | "stalemate" | "continues";
