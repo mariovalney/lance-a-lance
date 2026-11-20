@@ -12,7 +12,7 @@ import { ApiError } from "@/lib/auth/api";
 import { endOf, replay, startPly } from "@shared/games";
 import type { Square } from "@/lib/chess/squares";
 import { gamePgn, pgnFileName } from "@/lib/chess/pgn";
-import { GLYPH, judgements } from "@shared/analysis";
+import { GLYPH, isGood, judgements, lacksAlternatives } from "@shared/analysis";
 import { JUDGEMENT_COLOR, JUDGEMENT_WORD } from "@/lib/chess/judgement";
 import { analyseGame } from "@/lib/engine/analyse";
 import { useWakeLock } from "@/lib/wakeLock";
@@ -24,7 +24,7 @@ import { LineDialog } from "@/components/game/LineDialog";
 import { StudyDialog } from "@/components/game/StudyDialog";
 import { forgetRouteState, goBack, navigate, paths, routeState } from "@/lib/router";
 import { materialFor } from "@shared/material";
-import { explainMove } from "@/lib/chess/explain";
+import { explainMove, explainOnly } from "@/lib/chess/explain";
 
 /** The game after its first `ply` moves. */
 function positionAt(moves: string[], ply: number) {
@@ -40,8 +40,12 @@ function bestAt(fen: string, uci: string) {
   return { from: move.from as Square, to: move.to as Square, label: moveLabel(move) };
 }
 
-/** An analysis saved before the engine's lines were kept: it judges, but cannot say why. */
-const lacksLines = (g: Game) => Boolean(g.analysis?.some((e) => e.best !== null && !e.pv));
+/**
+ * An analysis saved before the engine's lines were kept (it judges, but cannot
+ * say why) or before the best alternatives were searched (it cannot tell an
+ * only move): it is offered again.
+ */
+const outdated = (g: Game) => Boolean(g.analysis && (g.analysis.some((e) => e.best !== null && !e.pv) || lacksAlternatives(g.analysis, g.moves)));
 
 /** An analysis stopped halfway: it covers the first positions only. */
 const isPartial = (g: Game) => Boolean(g.analysis && g.analysis.length < g.moves.length + 1);
@@ -106,13 +110,15 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
 
   /**
    * A study's first positions are those of the game it began from: their
-   * evaluations come from that game's analysis, when it has one with lines.
+   * evaluations come from that game's analysis, when it is up to date. Not the
+   * position where the study begins: whether it needs the best alternative
+   * depends on the move played there, which is the study's own.
    */
   const carried = async (g: Game): Promise<PositionEval[]> => {
     if (!g.study?.from) return [];
     try {
       const source = await games.get(g.study.from);
-      return source.analysis && !lacksLines(source) ? source.analysis.slice(0, g.study.ply + 1) : [];
+      return source.analysis && !outdated(source) ? source.analysis.slice(0, g.study.ply) : [];
     } catch {
       return [];
     }
@@ -126,8 +132,8 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
     const controller = new AbortController();
     abort.current = controller;
     const total = g.moves.length + 1;
-    setAnalysing({ kind: "running", done: g.analysis && !lacksLines(g) ? g.analysis.length : 0, total });
-    const known = g.analysis && !lacksLines(g) ? g.analysis : await carried(g);
+    setAnalysing({ kind: "running", done: g.analysis && !outdated(g) ? g.analysis.length : 0, total });
+    const known = g.analysis && !outdated(g) ? g.analysis : await carried(g);
     let sofar = known;
     let saved = known.length;
     try {
@@ -172,7 +178,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
         if (autoStart.current) {
           autoStart.current = false;
           forgetRouteState("analyse");
-          if (!game.analysis || lacksLines(game) || isPartial(game)) void start.current(game);
+          if (!game.analysis || outdated(game) || isPartial(game)) void start.current(game);
         }
       })
       .catch((error: unknown) => {
@@ -194,11 +200,13 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   const game = current.kind === "ready" ? current.game : null;
   const shown = game ? positionAt(game.moves, ply) : null;
   const marks = game?.analysis ? judgements(game.analysis, game.moves) : [];
-  // The move that led to the board shown, if the analysis judged it, and what the engine preferred there.
+  // The move that led to the board shown, if the analysis judged it, and what
+  // the engine preferred there; an only move was the engine's own.
   const mark = ply > 0 ? marks[ply - 1] : null;
-  const preferred = mark && game?.analysis?.[ply - 1]?.best ? bestAt(positionAt(game.moves, ply - 1).fen, game.analysis[ply - 1].best!) : null;
-  const why = mark && game ? explainMove(game, ply) : null;
-  const toAnalyse = game ? !game.analysis || lacksLines(game) || isPartial(game) : false;
+  const good = isGood(mark);
+  const preferred = mark && !good && game?.analysis?.[ply - 1]?.best ? bestAt(positionAt(game.moves, ply - 1).fen, game.analysis[ply - 1].best!) : null;
+  const why = mark && game ? (good ? explainOnly(game, ply) : explainMove(game, ply)) : null;
+  const toAnalyse = game ? !game.analysis || outdated(game) || isPartial(game) : false;
   // The engine's line from the position before the judged move: why it preferred its move.
   const bestLine = mark ? game?.analysis?.[ply - 1]?.pv : undefined;
   const [lineOpen, setLineOpen] = useState(false);
@@ -255,7 +263,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
               ) : (
                 <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void analyse(current.game)}>
                   <Sparkles className="!h-4 !w-4" />
-                  {!current.game.analysis ? "Analisar" : lacksLines(current.game) ? "Analisar de novo" : "Continuar análise"}
+                  {!current.game.analysis ? "Analisar" : outdated(current.game) ? "Analisar de novo" : "Continuar análise"}
                 </Button>
               ))}
             <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void exportPgn(current.game).then(setExported)}>

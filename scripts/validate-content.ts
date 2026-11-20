@@ -306,6 +306,99 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
     if (got !== c.expected) errors.push(`análise (${c.name}): esperava ${JSON.stringify(c.expected)}, veio ${JSON.stringify(got)}`);
   }
   console.log(`análise: ${cases.length} casos checados`);
+
+  // The only move (!): the engine's best, with every other move a mistake or
+  // worse, and never a move that is expected rather than found.
+  {
+    const { isPositionEval } = await import("@shared/analysis");
+    const { explainOnly } = await import("@/lib/chess/explain");
+    type Alt = { cp: number; best: string } | { mate: number; best: string } | null;
+    const withAlt = (e: Eval, alt: Alt): Eval => ({ ...e, alt });
+    const start = [cp(20, ["e2e4"]), cp(30, ["e7e5"])];
+    const onlyCases: { name: string; game: import("@shared/types").Game; ply: number; mark: string | null; sentence?: string | null }[] = [
+      {
+        name: "lance único",
+        game: game(["e2e4", "e7e5", "g1f3"], [...start, withAlt(cp(30, ["g1f3"]), { cp: -200, best: "d1h5" }), cp(30, ["b8c6"])]),
+        ply: 3,
+        mark: "only",
+        sentence: "Qualquer outro seria um erro grave. O melhor deles era Qh5 (dama para h5).",
+      },
+      {
+        name: "lance único, o outro seria um erro",
+        game: game(["e2e4", "e7e5", "g1f3"], [...start, withAlt(cp(30, ["g1f3"]), { cp: -100, best: "d1h5" }), cp(30, ["b8c6"])]),
+        ply: 3,
+        mark: "only",
+        sentence: "Qualquer outro seria um erro. O melhor deles era Qh5 (dama para h5).",
+      },
+      {
+        name: "alternativa só um pouco pior",
+        game: game(["e2e4", "e7e5", "g1f3"], [...start, withAlt(cp(30, ["g1f3"]), { cp: -20, best: "d1h5" }), cp(30, ["b8c6"])]),
+        ply: 3,
+        mark: null,
+      },
+      {
+        name: "lance forçado",
+        game: game(["e2e4", "e7e5", "g1f3"], [...start, withAlt(cp(30, ["g1f3"]), null), cp(30, ["b8c6"])]),
+        ply: 3,
+        mark: null,
+      },
+      {
+        name: "recaptura",
+        game: game(["e2e4", "d7d5", "e4d5", "d8d5"], [cp(20, ["e2e4"]), cp(30, ["d7d5"]), cp(40, ["e4d5"]), withAlt(cp(40, ["d8d5"]), { cp: 300, best: "g8f6" }), cp(40, ["b1c3"])]),
+        ply: 4,
+        mark: null,
+      },
+      {
+        // 3.Ng5?? leaves the knight: taking it is what anybody plays.
+        name: "captura depois de erro",
+        game: game(
+          ["e2e4", "e7e5", "g1f3", "d7d6", "f3g5", "d8g5"],
+          [...start, cp(30, ["g1f3"]), cp(40, ["d7d6"]), cp(40, ["d2d4"]), withAlt(cp(-300, ["d8g5"]), { cp: 40, best: "h7h6" }), cp(-300, ["d2d4"])],
+        ),
+        ply: 6,
+        mark: null,
+      },
+      {
+        name: "continua perdido",
+        game: game(["e2e4", "e7e5", "g1f3"], [...start, withAlt(cp(-400, ["g1f3"]), { cp: -900, best: "d1h5" }), cp(-400, ["b8c6"])]),
+        ply: 3,
+        mark: null,
+      },
+      {
+        name: "já estava ganho",
+        game: game(["e2e4", "e7e5", "g1f3"], [...start, withAlt(cp(900, ["g1f3"]), { cp: 600, best: "d1h5" }), cp(900, ["b8c6"])]),
+        ply: 3,
+        mark: null,
+      },
+      {
+        name: "mate em um",
+        game: game(
+          ["f2f3", "e7e5", "g2g4", "d8h4"],
+          [cp(20, ["e2e4"]), cp(-50, ["e7e5"]), cp(-60, ["e2e4"]), withAlt({ mate: -1, best: "d8h4", pv: ["d8h4"] }, { cp: -100, best: "b8c6" }), { cp: -MAX_CP, best: null }],
+        ),
+        ply: 4,
+        mark: null,
+      },
+    ];
+    for (const c of onlyCases) {
+      const got = judgements(c.game.analysis!, c.game.moves)[c.ply - 1];
+      if (got !== c.mark) errors.push(`lance único (${c.name}): esperava ${JSON.stringify(c.mark)}, veio ${JSON.stringify(got)}`);
+      if (c.sentence !== undefined && explainOnly(c.game, c.ply) !== c.sentence) {
+        errors.push(`lance único (${c.name}): esperava ${JSON.stringify(c.sentence)}, veio ${JSON.stringify(explainOnly(c.game, c.ply))}`);
+      }
+    }
+    const shapes: [unknown, boolean][] = [
+      [{ cp: 0, best: "e2e4", alt: { cp: -30, best: "d2d4" } }, true],
+      [{ cp: 0, best: "e2e4", alt: null }, true],
+      [{ mate: 2, best: "e2e4", pv: ["e2e4"], alt: { mate: 5, best: "d2d4" } }, true],
+      [{ cp: 0, best: "e2e4", alt: { cp: -30, best: "d2d4", pv: [] } }, false],
+      [{ cp: 0, best: "e2e4", alt: { cp: -30 } }, false],
+    ];
+    for (const [shape, ok] of shapes) {
+      if (isPositionEval(shape) !== ok) errors.push(`lance único: ${JSON.stringify(shape)} deveria ser ${ok ? "aceito" : "recusado"}`);
+    }
+    console.log(`lance único: ${onlyCases.length} casos checados`);
+  }
 }
 
 if (errors.length) {

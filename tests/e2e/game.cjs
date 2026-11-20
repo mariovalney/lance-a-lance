@@ -242,6 +242,29 @@ const { chromium } = require("playwright");
   const judged = g.marks.filter(Boolean).length;
   check(judged === 0 || /\$[246] \{ [^}]*Melhor era [^}]+\}/.test(analysed), `the PGN carries the judgements (${judged} judged: ${analysed.split("\n\n")[1]?.slice(0, 200)})`);
 
+  // An only move (!), on a hand-written analysis: the first move was the
+  // engine's best, and the best of the others would have been a blunder.
+  {
+    const stored = (await (await p.request.get(`${base}/api/games/${g.id}`)).json()).game;
+    const other = stored.moves[0] === "g1f3" ? "b1c3" : "g1f3";
+    const analysis = stored.moves.map((m, i) => ({ cp: 0, best: m, pv: [m], alt: i === 0 ? { cp: -300, best: other } : null }));
+    analysis.push({ cp: 0, best: null });
+    const put = await p.request.put(`${base}/api/games/${g.id}/analysis`, { data: { analysis } });
+    await p.reload({ waitUntil: "networkidle" });
+    await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
+    const marked = await game();
+    check(put.ok() && marked.analysis === "done" && marked.marks[0] === "!" && marked.marks.slice(1).every((m) => m === null), `an only move is marked "!" (${marked.marks.join(" ")})`);
+    await p.getByRole("button", { name: "Início da partida" }).click();
+    await p.getByRole("button", { name: "Próximo lance" }).click();
+    const said = (await p.locator("p", { hasText: "Lance único." }).first().textContent().catch(() => "")) ?? "";
+    check(/^Lance único\. Qualquer outro seria um erro grave\. O melhor deles era N[fc]3 \(cavalo para [fc]3\)\. Ver lances$/.test(said), `with the best of the others named under the board (${said})`);
+    await p.screenshot({ path: `${OUT}/game-only-move.png` });
+    await p.getByRole("button", { name: "Copiar PGN" }).click();
+    await waitFor("Copiado");
+    const withOnly = await p.evaluate(() => navigator.clipboard.readText());
+    check(/\$1\s+\{ Lance único\.\s+Qualquer\s+outro\s+seria\s+um\s+erro\s+grave\./.test(withOnly), `and in the PGN as $1 (${withOnly.split("\n\n")[1]?.slice(0, 120)})`);
+  }
+
   await p.getByRole("button", { name: "Fechar" }).click();
   await p.waitForTimeout(300);
   check(new URL(p.url()).pathname === "/partidas", `closing the review goes back to the history (${new URL(p.url()).pathname})`);
@@ -301,7 +324,7 @@ const { chromium } = require("playwright");
   for (let i = 0; i < 150 && (await game()).analysis === "running"; i++) await p.waitForTimeout(200);
   const [studied, original] = await Promise.all([studyId, source.id].map(async (id) => (await (await p.request.get(`${base}/api/games/${id}`)).json()).game));
   check(
-    studied.analysis?.length === studied.moves.length + 1 && JSON.stringify(studied.analysis.slice(0, 3)) === JSON.stringify(original.analysis?.slice(0, 3)),
+    studied.analysis?.length === studied.moves.length + 1 && JSON.stringify(studied.analysis.slice(0, 2)) === JSON.stringify(original.analysis?.slice(0, 2)),
     "its analysis reuses the original game's for the positions it carries",
   );
   await p.getByRole("button", { name: "Copiar PGN" }).click();

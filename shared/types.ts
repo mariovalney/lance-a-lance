@@ -40,13 +40,18 @@ export type GameOutcome = "win" | "draw" | "loss";
 /** How a game ended: by the rules of the final position, or by resigning. */
 export type GameEndReason = "checkmate" | "stalemate" | "insufficient" | "repetition" | "fifty" | "resigned";
 
+/** An evaluation from White's side: centipawns, or a mate in so many moves (positive when White mates). */
+export type Score = { cp: number } | { mate: number };
+
 /**
- * The engine's view of one position, from White's side: centipawns, or a mate
- * in so many moves (positive when White mates). `best` is its move there, in
- * UCI, and null where the game is over; `pv` the line it calculated from there
- * (the best move first), absent in analyses saved before lines were kept.
+ * The engine's view of one position, from White's side. `best` is its move
+ * there, in UCI, and null where the game is over; `pv` the line it calculated
+ * from there (the best move first), absent in analyses saved before lines were
+ * kept. Where the move played was `best`, `alt` is the best of the other moves
+ * and its evaluation, searched on its own, or null when there was no other
+ * legal move; absent everywhere else, and in analyses saved before it existed.
  */
-export type PositionEval = ({ cp: number } | { mate: number }) & { best: string | null; pv?: string[] };
+export type PositionEval = Score & { best: string | null; pv?: string[]; alt?: (Score & { best: string }) | null };
 
 /**
  * Where a study game began: the finished game it branched off, null once that

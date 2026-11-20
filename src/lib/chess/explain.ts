@@ -1,5 +1,5 @@
 import { Chess, type Move } from "chess.js";
-import { judgeMove } from "@shared/analysis";
+import { altDrop, judgeMove } from "@shared/analysis";
 import { replay } from "@shared/games";
 import type { Game, PositionEval } from "@shared/types";
 import { parseUci, type Color } from "@/lib/chess/game";
@@ -182,6 +182,25 @@ export function explainMove(game: Game, ply: number): string | null {
   }
   if (missed.length) parts.push(`deixa de ganhar ${namePieces(missed)}`);
   return parts.length ? `Com ${san}, ${who} ${parts.join(" e ")}.` : null;
+}
+
+/**
+ * The sentence for an only move, the move that led to position `ply`: how bad
+ * the best of the other moves would have been, and which one it was.
+ */
+export function explainOnly(game: Game, ply: number): string | null {
+  const analysis = game.analysis;
+  const alt = analysis?.[ply - 1]?.alt;
+  const drop = analysis ? altDrop(analysis, ply) : null;
+  const start = replay(game.moves.slice(0, ply - 1));
+  if (!alt || drop === null || !start) return null;
+  let named: string;
+  try {
+    named = describeMove(new Chess(start.fen()).move(parseUci(alt.best)));
+  } catch {
+    return null;
+  }
+  return `Qualquer outro seria ${drop >= 0.3 ? "um erro grave" : "um erro"}. O melhor deles era ${named}.`;
 }
 
 /**

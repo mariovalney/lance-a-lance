@@ -82,9 +82,11 @@ export class Engine {
    * The engine's evaluation of the position after these moves, searched for
    * `ms`, from the side to move: centipawns or a mate in so many moves
    * (negative when the side to move gets mated), and its best move there.
+   * `only` limits the search to those moves (UCI `searchmoves`): the best of
+   * the others, when the best move is left out.
    */
-  evaluate(moves: string[], ms: number): Promise<{ score: { cp: number } | { mate: number }; best: string; pv: string[] }> {
-    return this.queue(moves, `go movetime ${ms}`).then((r) => {
+  evaluate(moves: string[], ms: number, only?: string[]): Promise<{ score: { cp: number } | { mate: number }; best: string; pv: string[] }> {
+    return this.queue(moves, `go movetime ${ms}${only?.length ? ` searchmoves ${only.join(" ")}` : ""}`).then((r) => {
       if (!r.score) throw new Error("no score");
       return { score: r.score, best: r.best, pv: r.pv };
     });

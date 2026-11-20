@@ -1,10 +1,10 @@
 import { Chess } from "chess.js";
 import { pgnEvent, replay, startPly } from "@shared/games";
-import { GLYPH, judgements } from "@shared/analysis";
+import { GLYPH, isGood, judgements } from "@shared/analysis";
 import type { Game, GameEndReason } from "@shared/types";
 import { parseUci } from "@/lib/chess/game";
 import { JUDGEMENT_WORD } from "@/lib/chess/judgement";
-import { explainMove } from "@/lib/chess/explain";
+import { explainMove, explainOnly } from "@/lib/chess/explain";
 
 /** PGN's result tokens, from White's side. */
 function resultOf(game: Game): string {
@@ -55,7 +55,8 @@ function wrap(tokens: string[]): string {
  * imports (Lichess, chess.com, ChessBase): the seven required tags, the
  * computer's level as its Elo, and the moves in SAN. An analysed game also
  * carries each judged move's NAG ($6 ?!, $2 ?, $4 ??) and a comment with the
- * engine's move, as Lichess exports them. A study is the whole game from the
+ * engine's move, as Lichess exports them, and each only move's ($1 !) with
+ * the best of the others. A study is the whole game from the
  * initial position, its start marked with a comment.
  */
 export function gamePgn(game: Game): string {
@@ -91,7 +92,11 @@ export function gamePgn(game: Game): string {
     const best = game.analysis?.[i]?.best;
     if (mark) {
       tokens.push(`$${GLYPH[mark].nag}`);
-      if (best) {
+      if (isGood(mark)) {
+        const why = explainOnly(game, i + 1);
+        tokens.push(`{ ${JUDGEMENT_WORD[mark]}.${why ? ` ${why}` : ""} }`);
+        afterComment = true;
+      } else if (best) {
         const bestSan = new Chess(board.fen()).move(parseUci(best)).san;
         const why = explainMove(game, i + 1);
         tokens.push(`{ ${JUDGEMENT_WORD[mark]}. Melhor era ${bestSan}.${why ? ` ${why}` : ""} }`);
