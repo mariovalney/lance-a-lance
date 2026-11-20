@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import type { AccountData, BackupV2, Game, Stars } from "../../../shared/types.js";
+import type { AccountData, BackupV2, Stars } from "../../../shared/types.js";
 import { DAY } from "../../../shared/scoring.js";
 import { GAME_LEVELS, MAX_MOVES, UCI } from "../../../shared/games.js";
 import { isPositionEval } from "../../../shared/analysis.js";
@@ -109,7 +109,7 @@ function parseAccountData(v: unknown): AccountData | null {
       nat(a.xp) &&
       isDate(a.at),
   );
-  const gamesOk = every<Game>(
+  const gamesOk = every<AccountData["games"][number]>(
     v.games,
     (g) =>
       typeof g.id === "string" &&
@@ -130,7 +130,13 @@ function parseAccountData(v: unknown): AccountData | null {
       // Absent in the files written before the analysis existed.
       (g.analysis === undefined ||
         g.analysis === null ||
-        (Array.isArray(g.analysis) && g.analysis.length === (g.moves as unknown[]).length + 1 && g.analysis.every(isPositionEval))),
+        (Array.isArray(g.analysis) && g.analysis.length === (g.moves as unknown[]).length + 1 && g.analysis.every(isPositionEval))) &&
+      // Absent in the files written before study games existed.
+      (g.study === undefined ||
+        g.study === null ||
+        (isObj(g.study) &&
+          (g.study.from === null || (typeof g.study.from === "string" && UUID.test(g.study.from))) &&
+          isInt(g.study.ply, 1, (g.moves as unknown[]).length))),
   );
   if (!lessonsOk || !runsOk || !recordsOk || !attemptsOk || !gamesOk) return null;
   return v as unknown as AccountData;

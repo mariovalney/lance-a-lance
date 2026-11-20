@@ -10,8 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { MoveBoard } from "@/components/board/MoveBoard";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { DEFAULT_ILLEGAL, moveLabel } from "@/components/lesson/steps/moveText";
@@ -19,7 +17,7 @@ import { useProgress } from "@/lib/progress/useProgress";
 import { ApiError } from "@/lib/auth/api";
 import type { Game } from "@/lib/progress/types";
 import { RATED_AFTER, isRatedGame } from "@shared/scoring";
-import { BOT_LEVELS, continues, endOf, levelByRating, levelNear, replay, type BotLevel } from "@shared/games";
+import { continues, endOf, levelByRating, levelNear, replay, startPly, type BotLevel } from "@shared/games";
 import { useGameEngines } from "@/lib/engine/useGameEngines";
 import { legalMoves, parseUci, turnOf, uciOf, type Color, type MoveInput } from "@/lib/chess/game";
 import type { Square } from "@/lib/chess/squares";
@@ -29,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { goBack, navigate, paths } from "@/lib/router";
 import { materialFor } from "@shared/material";
 import { explainBest } from "@/lib/chess/explain";
-import { GameHeader, GameTitle, MoveList } from "@/components/game/parts";
+import { AssistedSwitch, GameHeader, GameTitle, LevelPicker, MoveList } from "@/components/game/parts";
 import { REASON, TITLE } from "@/components/game/text";
 
 type Side = "w" | "b" | "random";
@@ -337,8 +335,8 @@ export const GameScreen: FC = () => {
     if (!g) return;
     gameId.current++;
     setThinking(false);
-    if (g.moves.length >= RATED_AFTER) return finish(true);
-    // Nothing to rate yet: the game is called off and leaves no trace.
+    if (g.moves.length - startPly(g) >= RATED_AFTER) return finish(true);
+    // Nothing to keep yet: the game is called off and leaves no trace.
     setPhase("saving");
     try {
       await games.callOff(g.id);
@@ -362,7 +360,7 @@ export const GameScreen: FC = () => {
   const player: Color = game?.player ?? "w";
   const turn = turnOf(board.fen);
   const legal = phase === "playing" && !thinking && turn === player ? legalMoves(board.fen).map(uciOf) : [];
-  const rated = game ? isRatedGame(game.assisted, game.moves.length) : false;
+  const rated = game ? isRatedGame({ assisted: game.assisted, study: game.study !== null }, game.moves.length) : false;
   const headerGame = phase === "setup" ? null : game;
 
   let footer;
@@ -382,7 +380,11 @@ export const GameScreen: FC = () => {
   } else if (phase === "failed" && failure) {
     footer = <FeedbackBar tone="wrong" title={FAILURE[failure]} message="Confira a conexão." actionLabel="Tentar de novo" onAction={retry} />;
   } else if (phase === "over" && game?.outcome && game.reason) {
-    const unrated = game.assisted ? " Partida assistida não vale rating." : " Partida curta demais para valer rating.";
+    const unrated = game.study
+      ? " Partida de estudo não vale rating."
+      : game.assisted
+        ? " Partida assistida não vale rating."
+        : " Partida curta demais para valer rating.";
     footer = (
       <FeedbackBar
         tone={game.outcome === "win" ? "correct" : game.outcome === "draw" ? "partial" : "wrong"}
@@ -451,6 +453,7 @@ export const GameScreen: FC = () => {
           legal,
           moves: board.sans.length,
           assisted: Boolean(game?.assisted),
+          study: game?.study?.ply ?? null,
           hint: hint ? `${hint.from}${hint.to}` : null,
           ply: null,
         })}
@@ -472,7 +475,7 @@ export const GameScreen: FC = () => {
                 onMove={onMove}
                 onIllegal={() => setIllegal(true)}
               />
-              <MoveList sans={board.sans} current={board.sans.length} />
+              <MoveList sans={board.sans} current={board.sans.length} start={game ? startPly(game) : 0} startLabel="Início do estudo" />
             </>
           )}
         </div>
@@ -509,28 +512,7 @@ const GameSetup: FC<{
   onAssisted: (v: boolean) => void;
 }> = ({ level, onLevel, side, onSide, assisted, onAssisted }) => (
   <>
-    <section className="flex flex-col gap-2" aria-labelledby="nivel">
-      <h2 id="nivel" className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-        Nível do computador
-      </h2>
-      <div className="grid grid-cols-4 gap-2" role="group" aria-labelledby="nivel">
-        {BOT_LEVELS.map((l) => (
-          <button
-            key={l.rating}
-            type="button"
-            data-level={l.rating}
-            aria-pressed={l.rating === level.rating}
-            onClick={() => onLevel(l)}
-            className={cn(
-              "h-11 rounded-xl border-2 font-mono text-base font-bold tabular transition-colors",
-              l.rating === level.rating ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:bg-accent",
-            )}
-          >
-            {l.rating}
-          </button>
-        ))}
-      </div>
-    </section>
+    <LevelPicker level={level.rating} onLevel={onLevel} />
     <section className="flex flex-col gap-2" aria-labelledby="lado">
       <h2 id="lado" className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
         Suas peças
@@ -553,12 +535,6 @@ const GameSetup: FC<{
         ))}
       </div>
     </section>
-    <div className="flex items-center justify-between gap-4 rounded-xl border bg-card px-3.5 py-3">
-      <Label htmlFor="game-assisted" className="flex flex-col gap-0.5 text-[15px]">
-        Partida assistida
-        <span className="text-xs font-normal text-muted-foreground">Mostra o melhor lance a cada jogada.</span>
-      </Label>
-      <Switch id="game-assisted" checked={assisted} onCheckedChange={onAssisted} />
-    </div>
+    <AssistedSwitch id="game-assisted" checked={assisted} onChange={onAssisted} />
   </>
 );

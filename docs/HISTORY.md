@@ -685,3 +685,15 @@ A lesson reworked after someone completed it would only earn half, as a review. 
 - On the home, such a lesson keeps its stars and shows "Nova versão". Once nothing is left undone, the continue card suggests it ("Refazer") before the weakest lesson.
 
 A lesson whose content changes enough to deserve another run gets the next number in `shared/lessons.ts`.
+
+## 21. Studying from a move of a game
+
+Reviewing a game he lost (16. e4??, mate in one), Mário asked to start a game from a move picked in the review: not rated, marked as a study, and saying where it began.
+
+- **Which position.** The one on the review's board, after the move picked, as Lichess's analysis board does with "Continue from here". To play a move differently, pick the one before it. The initial position, and a final position the rules ended, offer nothing.
+- **The setup.** "Jogar a partir daqui", under the board, opens a dialog with the level and the assistance, both preset to the game's. The pieces are his side in that game. Only one game is open at a time, so one in progress has to end first, and the dialog says so.
+- **The data.** A study is an ordinary game whose `moves` begin with the first `ply` moves of the original, plus `study_from` and `study_ply` (migration `010_study_games`). Keeping the list from the initial position means the engine sees the whole history (repetitions count across the start), and replay, the PGN and the analysis needed nothing new. The key to the original is checked at commit, so a backup restores its games in any order, and is set to null when the original did not come along in the file.
+- **Never rated, counted from where it began.** `isRatedGame` says no to a study, assisted or not. Calling off (before both sides moved), resigning early through the API and the API's undo count the moves from the start, so the moves carried are never taken back.
+- **Marked.** "estudo" in the header, "Início do estudo" in the move list with the moves carried faded, a third tab in the history ("Estudos") whose rows say where each began ("Depois de 16. e4"), a link from the review back to the original, and in the PGN the Event tag and a comment at the start.
+- **The analysis** of a study takes the original's evaluations for the positions it carries, when the original was analysed with lines, so the engine only runs on the moves played in the study.
+- **The history's tabs** had a layout bug that a third tab made obvious: Radix keeps an inactive tab in the page with `hidden`, which the `flex` class overrode, so each empty tab took its share of the height and the assisted games' list started halfway down the page. `data-[state=inactive]:hidden` fixes it.

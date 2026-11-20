@@ -48,6 +48,16 @@ export type GameEndReason = "checkmate" | "stalemate" | "insufficient" | "repeti
  */
 export type PositionEval = ({ cp: number } | { mate: number }) & { best: string | null; pv?: string[] };
 
+/**
+ * Where a study game began: the finished game it branched off, null once that
+ * game is gone, and how many of its moves it carries. The study is played from
+ * the position after them.
+ */
+export interface GameStudy {
+  from: string | null;
+  ply: number;
+}
+
 export interface Game {
   id: string;
   /** Rating of the computer level. */
@@ -55,8 +65,10 @@ export interface Game {
   player: "w" | "b";
   /** With the engine's best move shown; never rated. */
   assisted: boolean;
-  /** Every move, in UCI. */
+  /** Every move, in UCI, from the initial position: a study's begin with the moves it carries. */
   moves: string[];
+  /** Set for a study game, which is never rated. */
+  study: GameStudy | null;
   outcome: GameOutcome | null;
   reason: GameEndReason | null;
   /** Null for a game that was not rated. */
@@ -136,6 +148,8 @@ export interface GameStartInput {
   level: number;
   player: "w" | "b";
   assisted: boolean;
+  /** A study: the position after the first `ply` moves of one of the player's finished games. */
+  from?: { game: string; ply: number };
 }
 
 /**
@@ -147,6 +161,9 @@ export interface GameFinishInput {
   resigned: boolean;
   day: string;
 }
+
+/** The kinds of finished game the history keeps apart: played without help, assisted, or a study. */
+export type GameKind = "rated" | "assisted" | "study";
 
 export interface Page<T> {
   total: number;
@@ -177,5 +194,6 @@ export interface AccountData {
   lessonRuns: { lessonId: string; pct: number; stars: Stars; xp: number; mistakes: number; at: string }[];
   records: { key: string; value: number }[];
   puzzleAttempts: Omit<PuzzleAttempt, "id">[];
-  games: Game[];
+  /** `study` is absent in files written before study games existed, and reads as null. */
+  games: (Omit<Game, "study"> & { study?: GameStudy | null })[];
 }

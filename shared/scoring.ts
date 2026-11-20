@@ -110,9 +110,13 @@ export const RECENT_PUZZLES = 400;
 export const GAME_SCORE: Record<GameOutcome, number> = { win: 1, draw: 0.5, loss: 0 };
 export const GAME_XP: Record<GameOutcome, number> = { win: 10, draw: 5, loss: 2 };
 
-/** A game is rated once both sides have moved, as on Lichess, and never when assisted. */
+/**
+ * A game is rated once both sides have moved, as on Lichess, and never when
+ * assisted or a study. Before both sides moved a game is called off instead
+ * and leaves nothing behind; a study counts its moves from where it began.
+ */
 export const RATED_AFTER = 2;
 
-export function isRatedGame(assisted: boolean, moveCount: number): boolean {
-  return !assisted && moveCount >= RATED_AFTER;
+export function isRatedGame(game: { assisted: boolean; study: boolean }, moveCount: number): boolean {
+  return !game.assisted && !game.study && moveCount >= RATED_AFTER;
 }

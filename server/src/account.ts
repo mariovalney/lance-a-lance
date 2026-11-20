@@ -49,9 +49,12 @@ export interface GameRow {
   finished_at: Date | null;
   analysis: PositionEval[] | null;
   undos: number;
+  study_from: string | null;
+  study_ply: number | null;
 }
 
-export const GAME_COLUMNS = "id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, finished_at, analysis, undos";
+export const GAME_COLUMNS =
+  "id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, finished_at, analysis, undos, study_from, study_ply";
 
 export function gameJson(row: GameRow): Game {
   return {
@@ -60,6 +63,7 @@ export function gameJson(row: GameRow): Game {
     player: row.player,
     assisted: row.assisted,
     moves: row.moves,
+    study: row.study_ply === null ? null : { from: row.study_from, ply: row.study_ply },
     outcome: row.outcome,
     reason: row.reason,
     ratingDelta: row.rating_delta,
@@ -204,6 +208,12 @@ export async function readAccount(db: Db, userId: string): Promise<AccountData> 
   };
 }
 
+/** Whether a game is a study, from its row. */
+export const isStudy = (row: GameRow): boolean => row.study_ply !== null;
+
+/** The row's moves carried from the game it branched off: none unless it is a study. */
+export const studyPly = (row: GameRow): number => row.study_ply ?? 0;
+
 /** Deletes a person's progress, open game included. */
 export async function clearAccount(db: Db, userId: string): Promise<void> {
   for (const table of ["games", "puzzle_attempts", "drill_records", "lesson_runs", "lesson_progress", "player_stats"]) {
@@ -277,8 +287,9 @@ export async function writeAccount(db: Db, userId: string, data: AccountData): P
   }
   for (const g of data.games) {
     await db.query(
-      `INSERT INTO games (id, user_id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, updated_at, finished_at, analysis)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13, $14)
+      `INSERT INTO games (id, user_id, level, player, assisted, moves, outcome, reason, rating_delta, rating_after, xp, started_at, updated_at, finished_at, analysis,
+         study_from, study_ply)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13, $14, $15, $16)
        ON CONFLICT (id) DO NOTHING`,
       [
         g.id,
@@ -295,7 +306,20 @@ export async function writeAccount(db: Db, userId: string, data: AccountData): P
         g.startedAt,
         g.finishedAt,
         g.analysis ? JSON.stringify(g.analysis) : null,
+        g.study?.from ?? null,
+        g.study?.ply ?? null,
       ],
+    );
+  }
+  // A study keeps pointing at the game it began from only when that game came
+  // along in the same file. The key is checked at commit, so the order of the
+  // games in the file does not matter.
+  if (data.games.some((g) => g.study?.from)) {
+    await db.query(
+      `UPDATE games s SET study_from = NULL
+        WHERE s.user_id = $1 AND s.study_from IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM games o WHERE o.id = s.study_from AND o.user_id = $1)`,
+      [userId],
     );
   }
   await recountGames(db, userId);

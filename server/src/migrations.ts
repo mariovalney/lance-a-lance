@@ -256,4 +256,17 @@ export const MIGRATIONS: Migration[] = [
     name: "009_game_undos",
     sql: "ALTER TABLE games ADD COLUMN undos integer NOT NULL DEFAULT 0;",
   },
+  {
+    // A study game starts from a position of a finished game: it carries that
+    // game's first study_ply moves and points back at it. It is never rated.
+    // The key is checked at commit, so a backup can restore its games in any
+    // order.
+    name: "010_study_games",
+    sql: `
+      ALTER TABLE games
+        ADD COLUMN study_from uuid REFERENCES games (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
+        ADD COLUMN study_ply integer CHECK (study_ply > 0),
+        ADD CHECK (study_from IS NULL OR study_ply IS NOT NULL);
+    `,
+  },
 ];

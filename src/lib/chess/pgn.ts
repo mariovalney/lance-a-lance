@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import { replay } from "@shared/games";
+import { pgnEvent, replay, startPly } from "@shared/games";
 import { GLYPH, judgements } from "@shared/analysis";
 import type { Game, GameEndReason } from "@shared/types";
 import { parseUci } from "@/lib/chess/game";
@@ -55,7 +55,8 @@ function wrap(tokens: string[]): string {
  * imports (Lichess, chess.com, ChessBase): the seven required tags, the
  * computer's level as its Elo, and the moves in SAN. An analysed game also
  * carries each judged move's NAG ($6 ?!, $2 ?, $4 ??) and a comment with the
- * engine's move, as Lichess exports them.
+ * engine's move, as Lichess exports them. A study is the whole game from the
+ * initial position, its start marked with a comment.
  */
 export function gamePgn(game: Game): string {
   const chess = replay(game.moves);
@@ -63,7 +64,7 @@ export function gamePgn(game: Game): string {
   const you = "Você";
   const computer = `Computador ${game.level}`;
   const headers = [
-    tag("Event", game.assisted ? "Partida assistida contra o computador" : "Partida contra o computador"),
+    tag("Event", pgnEvent({ assisted: game.assisted, study: game.study !== null })),
     tag("Site", "Lance a Lance"),
     tag("Date", pgnDate(game.startedAt)),
     tag("Round", "-"),
@@ -76,6 +77,7 @@ export function gamePgn(game: Game): string {
 
   const sans = chess.history();
   const marks = game.analysis ? judgements(game.analysis, game.moves) : [];
+  const start = startPly(game);
   const board = new Chess();
   const tokens: string[] = [];
   let afterComment = false;
@@ -95,6 +97,10 @@ export function gamePgn(game: Game): string {
         tokens.push(`{ ${JUDGEMENT_WORD[mark]}. Melhor era ${bestSan}.${why ? ` ${why}` : ""} }`);
         afterComment = true;
       }
+    }
+    if (start && i + 1 === start) {
+      tokens.push("{ Início do estudo }");
+      afterComment = true;
     }
     board.move(san);
   });

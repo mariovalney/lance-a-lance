@@ -2,7 +2,7 @@ import type pg from "pg";
 import type { GameEndReason, GameOutcome } from "../../shared/types.js";
 import { GAME_SCORE, GAME_XP, eloScoreDelta, isRatedGame, nextStreak, ratingAfter } from "../../shared/scoring.js";
 import { endOf, replay } from "../../shared/games.js";
-import { GAME_COLUMNS, statsOf, type GameRow } from "./account.js";
+import { GAME_COLUMNS, isStudy, statsOf, type GameRow } from "./account.js";
 import type { Db } from "./db.js";
 
 /**
@@ -21,7 +21,8 @@ export async function openGame(db: Db, userId: string, forUpdate = false): Promi
 /**
  * Ends an open game, locked by the caller, after these moves. The result is
  * read off the final position; `resigned` only counts while the rules have not
- * ended it. Rated games move the rating, the counts, the XP and the day streak.
+ * ended it. Rated games move the rating, the counts, the XP and the day streak;
+ * assisted and study games are only kept.
  */
 export async function finishGame(
   client: pg.PoolClient,
@@ -39,7 +40,7 @@ export async function finishGame(
   else return null;
 
   const stats = await statsOf(client, userId, true);
-  const rated = isRatedGame(game.assisted, moves.length);
+  const rated = isRatedGame({ assisted: game.assisted, study: isStudy(game) }, moves.length);
   let delta: number | null = null;
   let after: number | null = null;
   let xp = 0;

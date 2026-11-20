@@ -1,8 +1,9 @@
 // A game against the computer, on the real engine and the real server: the card
 // on the home opens it, the engine answers, a reload keeps both the screen and
 // the game, abandoning a rated game costs rating, a game with one move is
-// called off, an assisted game shows the best move and is not rated, and the
-// history lists the games and replays one.
+// called off, an assisted game shows the best move and is not rated, the
+// history lists the games and replays one, and a study starts from a move of a
+// finished game without touching the rating.
 //
 //   URL=http://127.0.0.1:3111 pnpm e2e:game
 const { chromium } = require("playwright");
@@ -237,6 +238,69 @@ const { chromium } = require("playwright");
   await p.getByRole("button", { name: "Voltar para a partida" }).click();
   await p.waitForTimeout(300);
   check(new URL(p.url()).pathname === "/partida", `and from there back to the game (${new URL(p.url()).pathname})`);
+
+  /* ---------- a study: a game from a move of a finished game, never rated ---------- */
+  await p.getByRole("button", { name: "Partidas anteriores" }).click();
+  await p.getByRole("tab", { name: "Partidas", exact: true }).click();
+  await listed();
+  await p.locator("[role='tabpanel'] li button").first().click();
+  await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
+  const source = await game();
+  await p.getByRole("button", { name: "Início da partida" }).click();
+  check((await p.getByRole("button", { name: "Jogar a partir daqui" }).count()) === 0, "the initial position offers no study");
+  await p.locator("ol[aria-label='Lances da partida'] button").nth(1).click();
+  check((await game()).ply === 2, "a move picked in the review");
+  await p.getByRole("button", { name: "Jogar a partir daqui" }).click();
+  const studyDialog = p.locator("[data-study-dialog]");
+  await studyDialog.waitFor({ timeout: 5_000 }).catch(() => undefined);
+  check((await studyDialog.getByText(/^Começa depois de 1\.\.\. .+Partida de estudo, não vale rating\.$/).count()) === 1, `the dialog says where the study starts (${(await studyDialog.textContent())?.slice(0, 120)})`);
+  check((await studyDialog.locator("[data-level][aria-pressed='true']").getAttribute("data-level")) === "400", "with the level of the game reviewed");
+  await p.waitForTimeout(300); // the dialog's opening animation
+  await p.screenshot({ path: `${OUT}/game-study-dialog.png` });
+  const ratingBefore = await rating();
+  await studyDialog.getByRole("button", { name: "Começar" }).click();
+  await p.waitForURL(/\/partida$/, { timeout: 10_000 }).catch(() => undefined);
+  g = await myTurn();
+  check(
+    new URL(p.url()).pathname === "/partida" && g.phase === "playing" && g.study === 2 && g.moves === 2 && g.player === source.player,
+    `the study starts after that move, with the same pieces (study ${g.study}, ${g.moves} moves, ${g.player})`,
+  );
+  check(/estudo/.test(await p.locator("header").textContent()) && (await p.locator("[data-study-start='2']").count()) === 1, "it is marked as a study, its start in the move list");
+  g = await playOne(g);
+  await p.screenshot({ path: `${OUT}/game-study.png` });
+  await p.getByRole("button", { name: "Abandonar" }).click();
+  check(await waitFor(/Partida de estudo não vale rating/), "abandoning a study asks nothing and says it was not rated");
+  check((await ratingOnceChanged(ratingBefore)) === ratingBefore, "the rating stays");
+  const studyId = (await (await p.request.get(`${base}/api/games?page=0&size=1&kind=study`)).json()).items?.[0]?.id;
+
+  await p.getByRole("button", { name: "Nova partida" }).click();
+  await p.getByRole("button", { name: "Partidas anteriores" }).click();
+  check((await listed()).length === 1, "the study stays out of the rated games");
+  await p.getByRole("tab", { name: "Estudos" }).click();
+  const studies = await listed();
+  check(studies.length === 1 && /Depois de 1\. \.\.|Depois de 1\.\.\. /.test(studies[0]), `the studies tab lists it, with where it began (${studies.join(" | ")})`);
+  await p.screenshot({ path: `${OUT}/game-history-studies.png` });
+  await p.locator("[role='tabpanel'] li button").first().click();
+  await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
+  g = await game();
+  check(g.id === studyId && g.study === 2 && (await p.locator("[data-study-start='2']").count()) === 1, "its review marks where it began");
+
+  // Its analysis takes the positions it carries from the game it began from.
+  await p.getByRole("button", { name: "Analisar" }).click();
+  for (let i = 0; i < 150 && (await game()).analysis === "running"; i++) await p.waitForTimeout(200);
+  const [studied, original] = await Promise.all([studyId, source.id].map(async (id) => (await (await p.request.get(`${base}/api/games/${id}`)).json()).game));
+  check(
+    studied.analysis?.length === studied.moves.length + 1 && JSON.stringify(studied.analysis.slice(0, 3)) === JSON.stringify(original.analysis?.slice(0, 3)),
+    "its analysis reuses the original game's for the positions it carries",
+  );
+  await p.getByRole("button", { name: "Copiar PGN" }).click();
+  await waitFor("Copiado");
+  const studyPgn = await p.evaluate(() => navigator.clipboard.readText());
+  check(/\[Event "Estudo contra o computador"\]/.test(studyPgn) && /\{ Início do estudo \}/.test(studyPgn), `its PGN marks the start (${studyPgn.split("\n\n")[1]?.slice(0, 80)})`);
+  await p.screenshot({ path: `${OUT}/game-study-review.png` });
+  await p.getByRole("button", { name: "ver a partida original" }).click();
+  await p.locator(`main[data-game*='"id":"${source.id}"']`).waitFor({ timeout: 10_000 }).catch(() => undefined);
+  check(new URL(p.url()).pathname === `/partidas/${source.id}`, `and leads to the game it began from (${new URL(p.url()).pathname})`);
 
   // Somebody else's game, or no game at all, is not found, and says so.
   await p.goto(`${base}/partidas/00000000-0000-4000-8000-000000000000`, { waitUntil: "networkidle" });

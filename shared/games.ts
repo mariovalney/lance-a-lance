@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import type { GameEndReason, GameOutcome } from "./types.js";
+import type { GameEndReason, GameOutcome, GameStudy } from "./types.js";
 
 /** The computer's levels, by nominal rating. */
 export const GAME_LEVELS = [400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400] as const;
@@ -58,6 +58,15 @@ export const MAX_MOVES = 1200;
  * does not start with every saved move comes from a stale copy.
  */
 export const continues = (saved: string[], moves: string[]): boolean => moves.length >= saved.length && saved.every((m, i) => moves[i] === m);
+
+/** The PGN Event tag of a game, the same in the app's export and the API's. */
+export function pgnEvent(game: { assisted: boolean; study: boolean }): string {
+  const kind = game.study ? (game.assisted ? "Estudo assistido" : "Estudo") : game.assisted ? "Partida assistida" : "Partida";
+  return `${kind} contra o computador`;
+}
+
+/** The moves a game carries from the one it branched off: none unless it is a study. */
+export const startPly = (game: { study: GameStudy | null }): number => game.study?.ply ?? 0;
 
 /** The game after these UCI moves from the initial position, or null if one is illegal. */
 export function replay(moves: string[]): Chess | null {

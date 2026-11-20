@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { BackupV2, GameStartInput, LessonRunOutcome, PositionEval } from "@shared/types";
+import type { BackupV2, GameKind, GameStartInput, LessonRunOutcome, PositionEval } from "@shared/types";
 import type { Game, LessonRunResult, Page, ProgressState, PuzzleAttempt, PuzzleStatus } from "@/lib/progress/types";
 
 export interface ProgressContextValue {
@@ -16,7 +16,7 @@ export interface ProgressContextValue {
     saveMoves: (id: string, moves: string[], undos: number) => void;
     /** The server reads the result off the final position; `resigned` is the only thing it takes as given. */
     finish: (id: string, moves: string[], resigned: boolean, undos: number) => Promise<Game>;
-    /** Only before both sides moved. */
+    /** Only before both sides moved (in a study, since where it began). */
     callOff: (id: string) => Promise<void>;
     /**
      * The open game as the server has it now, which another device or the API
@@ -24,8 +24,8 @@ export interface ProgressContextValue {
      * ended somewhere else.
      */
     current: () => Promise<Game | null>;
-    /** Finished games, newest first; `assisted` keeps one kind only. */
-    page: (page: number, size: number, assisted?: boolean) => Promise<Page<Game>>;
+    /** Finished games, newest first; `kind` keeps one kind only. */
+    page: (page: number, size: number, kind?: GameKind) => Promise<Page<Game>>;
     /** A finished game of this account; `not_found` for anyone else's. */
     get: (id: string) => Promise<Game>;
     /** Keeps the engine's evaluation of every position with a finished game. */

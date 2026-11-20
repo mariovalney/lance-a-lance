@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, type FC } from "react";
 import { Chess } from "chess.js";
-import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Loader2, Sparkles } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Loader2, Sparkles, Swords } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MoveBoard } from "@/components/board/MoveBoard";
 import { FeedbackBar } from "@/components/lesson/FeedbackBar";
 import { GameHeader, GameTitle, MoveList } from "@/components/game/parts";
 import { useProgress } from "@/lib/progress/useProgress";
 import type { Game } from "@/lib/progress/types";
+import type { PositionEval } from "@shared/types";
 import { ApiError } from "@/lib/auth/api";
-import { replay } from "@shared/games";
+import { endOf, replay, startPly } from "@shared/games";
 import type { Square } from "@/lib/chess/squares";
 import { gamePgn, pgnFileName } from "@/lib/chess/pgn";
 import { GLYPH, judgements } from "@shared/analysis";
@@ -19,6 +20,7 @@ import { moveLabel } from "@/components/lesson/steps/moveText";
 import { cn } from "@/lib/utils";
 import { RichText } from "@/components/common/RichText";
 import { LineDialog } from "@/components/game/LineDialog";
+import { StudyDialog } from "@/components/game/StudyDialog";
 import { forgetRouteState, goBack, navigate, paths, routeState } from "@/lib/router";
 import { materialFor } from "@shared/material";
 import { explainMove } from "@/lib/chess/explain";
@@ -84,12 +86,27 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   // Leaving the screen stops an analysis halfway: nothing is saved.
   useEffect(() => () => abort.current?.abort(), []);
 
+  /**
+   * A study's first positions are those of the game it began from: their
+   * evaluations come from that game's analysis, when it has one with lines.
+   */
+  const carried = async (g: Game): Promise<PositionEval[]> => {
+    if (!g.study?.from) return [];
+    try {
+      const source = await games.get(g.study.from);
+      return source.analysis && !lacksLines(source) ? source.analysis.slice(0, g.study.ply + 1) : [];
+    } catch {
+      return [];
+    }
+  };
+
   const analyse = async (g: Game) => {
     const controller = new AbortController();
     abort.current = controller;
     setAnalysing({ kind: "running", done: 0, total: g.moves.length + 1 });
     try {
-      const analysis = await analyseGame(g.moves, (done, total) => setAnalysing({ kind: "running", done, total }), controller.signal);
+      const known = await carried(g);
+      const analysis = await analyseGame(g.moves, (done, total) => setAnalysing({ kind: "running", done, total }), controller.signal, known);
       const saved = await games.saveAnalysis(g.id, analysis);
       setLoaded({ kind: "ready", game: saved, sans: sansOf(saved.moves) });
       setAnalysing({ kind: "idle" });
@@ -148,6 +165,10 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   // The engine's line from the position before the judged move: why it preferred its move.
   const bestLine = mark ? game?.analysis?.[ply - 1]?.pv : undefined;
   const [lineOpen, setLineOpen] = useState(false);
+  // A study can start from any move after which the game went on.
+  const playable = game && ply > 0 ? !endOf(replay(game.moves.slice(0, ply))!, game.player) : false;
+  const [studyOpen, setStudyOpen] = useState(false);
+  const source = game?.study?.from;
 
   let footer;
   if (current.kind === "loading") {
@@ -231,6 +252,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
           moves: game?.moves.length ?? 0,
           legal: [],
           assisted: Boolean(game?.assisted),
+          study: game?.study?.ply ?? null,
           hint: null,
           ply: game ? ply : null,
           analysis: analysing.kind === "running" ? "running" : game?.analysis && !toAnalyse ? "done" : analysing.kind === "failed" ? "failed" : "none",
@@ -272,6 +294,15 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
                   ) : null}
                 </p>
               )}
+              {playable && (
+                <button
+                  type="button"
+                  onClick={() => setStudyOpen(true)}
+                  className="-mt-2 inline-flex items-center gap-1.5 self-start text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  <Swords className="h-4 w-4" aria-hidden /> Jogar a partir daqui
+                </button>
+              )}
               <MoveList
                 sans={current.sans}
                 current={ply}
@@ -280,6 +311,20 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
                   const m = marks[p - 1];
                   return m ? <span className={cn("font-bold", JUDGEMENT_COLOR[m])}>{GLYPH[m].symbol}</span> : null;
                 }}
+                start={startPly(game)}
+                startLabel={
+                  <>
+                    Início do estudo
+                    {source && (
+                      <>
+                        {" · "}
+                        <button type="button" onClick={() => navigate(paths.gameReview(source))} className="underline underline-offset-4 hover:text-foreground">
+                          ver a partida original
+                        </button>
+                      </>
+                    )}
+                  </>
+                }
               />
             </>
           )}
@@ -298,6 +343,8 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
           orientation={game.player}
         />
       ) : null}
+
+      {game && playable && <StudyDialog key={ply} open={studyOpen} onOpenChange={setStudyOpen} game={game} ply={ply} />}
     </div>
   );
 };

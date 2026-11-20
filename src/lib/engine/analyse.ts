@@ -10,15 +10,22 @@ const MS_PER_POSITION = 300;
  * The full-strength engine's evaluation of every position of a game, the
  * initial one included, from White's side. A position where the game is over
  * needs no search: a checkmate is stored as `MAX_CP` against the side mated,
- * any draw as 0. Stops, and throws, once `signal` is aborted.
+ * any draw as 0. `known` evaluates the first positions already (a study's,
+ * from the game it began from), so the search starts after them. Stops, and
+ * throws, once `signal` is aborted.
  */
-export async function analyseGame(moves: string[], onProgress: (done: number, total: number) => void, signal: AbortSignal): Promise<PositionEval[]> {
+export async function analyseGame(
+  moves: string[],
+  onProgress: (done: number, total: number) => void,
+  signal: AbortSignal,
+  known: PositionEval[] = [],
+): Promise<PositionEval[]> {
   const total = moves.length + 1;
   const engine = new Engine();
-  const out: PositionEval[] = [];
+  const out: PositionEval[] = known.slice(0, total);
   try {
     await engine.start(null);
-    for (let ply = 0; ply < total; ply++) {
+    for (let ply = out.length; ply < total; ply++) {
       if (signal.aborted) throw new DOMException("analysis cancelled", "AbortError");
       const chess = replay(moves.slice(0, ply));
       if (!chess) throw new Error("illegal move in the game");

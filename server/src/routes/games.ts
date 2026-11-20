@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { RATED_AFTER } from "../../../shared/scoring.js";
-import { GAME_LEVELS, MAX_MOVES, UCI, continues, replay } from "../../../shared/games.js";
+import { GAME_LEVELS, MAX_MOVES, UCI, continues, endOf, replay } from "../../../shared/games.js";
 import { GAME_COLUMNS, gameJson, readProgress, type GameRow } from "../account.js";
 import { pool, query, transaction } from "../db.js";
 import { finishGame, openGame } from "../games.js";
 import { requireUser, type Vars } from "./auth.js";
 import { UUID, pageOf, playerDay } from "./util.js";
 import { isPositionEval } from "../../../shared/analysis.js";
+import type { GameKind } from "../../../shared/types.js";
 
 /**
  * Games against the computer. The engine runs in the browser; the app starts a
@@ -24,21 +25,55 @@ function legalMoves(v: unknown): string[] | null {
   return isMoves(v) && replay(v) ? v : null;
 }
 
+/** Where a study begins: one of the player's games and how many of its moves to carry. */
+function studyStart(v: unknown): { game: string; ply: number } | null {
+  if (typeof v !== "object" || v === null) return null;
+  const { game, ply } = v as { game?: unknown; ply?: unknown };
+  return typeof game === "string" && UUID.test(game) && Number.isInteger(ply) && (ply as number) >= 1 ? { game, ply: ply as number } : null;
+}
+
+/**
+ * Starts a game. With `from`, a study: it carries the first `ply` moves of one
+ * of the player's finished games and is played from the position after them,
+ * never rated. That position has to be one the game went on from.
+ */
 gameRoutes.post("/", async (c) => {
-  const body = (await c.req.json().catch(() => null)) as { level?: unknown; player?: unknown; assisted?: unknown } | null;
+  const body = (await c.req.json().catch(() => null)) as { level?: unknown; player?: unknown; assisted?: unknown; from?: unknown } | null;
   if (!body || !GAME_LEVELS.includes(body.level as never) || (body.player !== "w" && body.player !== "b") || typeof body.assisted !== "boolean") {
     return c.json({ error: "invalid_game" }, 400);
   }
+  const from = body.from === undefined ? null : studyStart(body.from);
+  if (body.from !== undefined && !from) return c.json({ error: "invalid_game" }, 400);
+  const player = body.player;
   const userId = c.get("user").id;
-  const { rows } = await query<GameRow>(
-    `INSERT INTO games (user_id, level, player, assisted) VALUES ($1, $2, $3, $4)
-     ON CONFLICT (user_id) WHERE finished_at IS NULL DO NOTHING
-     RETURNING ${GAME_COLUMNS}`,
-    [userId, body.level, body.player, body.assisted],
-  );
-  // A game is already open: it has to be finished or called off first.
-  if (!rows[0]) return c.json({ error: "game_open" }, 409);
-  return c.json({ progress: await readProgress(pool, userId), game: gameJson(rows[0]) }, 201);
+
+  const result = await transaction(async (client) => {
+    let moves: string[] = [];
+    if (from) {
+      const source = await client.query<{ moves: string[] }>(
+        "SELECT moves FROM games WHERE id = $1 AND user_id = $2 AND finished_at IS NOT NULL FOR KEY SHARE",
+        [from.game, userId],
+      );
+      if (!source.rows[0]) return { error: "not_found" as const };
+      if (from.ply > source.rows[0].moves.length) return { error: "invalid_game" as const };
+      moves = source.rows[0].moves.slice(0, from.ply);
+      if (endOf(replay(moves)!, player)) return { error: "game_over" as const };
+    }
+    const { rows } = await client.query<GameRow>(
+      `INSERT INTO games (user_id, level, player, assisted, moves, study_from, study_ply) VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (user_id) WHERE finished_at IS NULL DO NOTHING
+       RETURNING ${GAME_COLUMNS}`,
+      [userId, body.level, player, body.assisted, moves, from?.game ?? null, from?.ply ?? null],
+    );
+    // A game is already open: it has to be finished or called off first.
+    return rows[0] ? { game: rows[0] } : { error: "game_open" as const };
+  });
+
+  if ("error" in result) {
+    const status = result.error === "not_found" ? 404 : result.error === "game_open" ? 409 : 400;
+    return c.json({ error: result.error }, status);
+  }
+  return c.json({ progress: await readProgress(pool, userId), game: gameJson(result.game) }, 201);
 });
 
 /** A copy made before moves were taken back is stale; a client that sends no count is not checked. */
@@ -87,13 +122,16 @@ gameRoutes.post("/:id/finish", async (c) => {
   return c.json({ progress: await readProgress(pool, userId), game: result.game });
 });
 
-/** Calls off a game before it counts (before both sides moved): it leaves nothing behind. */
+/**
+ * Calls off a game before it counts (before both sides moved, in a study since
+ * where it began): it leaves nothing behind.
+ */
 gameRoutes.delete("/:id", async (c) => {
   const id = c.req.param("id");
   if (!UUID.test(id)) return c.json({ error: "not_found" }, 404);
   const userId = c.get("user").id;
   const { rowCount } = await query(
-    "DELETE FROM games WHERE id = $1 AND user_id = $2 AND finished_at IS NULL AND cardinality(moves) < $3",
+    "DELETE FROM games WHERE id = $1 AND user_id = $2 AND finished_at IS NULL AND cardinality(moves) - COALESCE(study_ply, 0) < $3",
     [id, userId, RATED_AFTER],
   );
   if (!rowCount) return c.json({ error: "not_found" }, 404);
@@ -109,24 +147,31 @@ gameRoutes.get("/current", async (c) => {
   return c.json({ game: game ? gameJson(game) : null });
 });
 
-/** Finished games, newest first; `assisted=true` or `false` keeps one kind only. */
+/** The kinds of finished game the history keeps apart, as SQL. */
+const KIND: Record<GameKind, string> = {
+  rated: "study_ply IS NULL AND NOT assisted",
+  assisted: "study_ply IS NULL AND assisted",
+  study: "study_ply IS NOT NULL",
+};
+
+/**
+ * Finished games, newest first. `kind` keeps one kind only: `rated` (played
+ * without help, rated once both sides moved), `assisted` or `study`.
+ */
 gameRoutes.get("/", async (c) => {
   const paging = pageOf(c.req.query("page"), c.req.query("size"));
   if (!paging) return c.json({ error: "invalid_page" }, 400);
-  const kind = c.req.query("assisted");
-  if (kind !== undefined && kind !== "true" && kind !== "false") return c.json({ error: "invalid_filter" }, 400);
-  const assisted = kind === undefined ? null : kind === "true";
+  const kind = c.req.query("kind") as GameKind | undefined;
+  if (kind !== undefined && !Object.hasOwn(KIND, kind)) return c.json({ error: "invalid_filter" }, 400);
+  const filter = kind === undefined ? "" : ` AND ${KIND[kind]}`;
   const userId = c.get("user").id;
   const [{ rows }, count] = await Promise.all([
     query<GameRow>(
-      `SELECT ${GAME_COLUMNS} FROM games WHERE user_id = $1 AND finished_at IS NOT NULL AND ($4::boolean IS NULL OR assisted = $4)
+      `SELECT ${GAME_COLUMNS} FROM games WHERE user_id = $1 AND finished_at IS NOT NULL${filter}
         ORDER BY finished_at DESC, id LIMIT $2 OFFSET $3`,
-      [userId, paging.size, paging.page * paging.size, assisted],
+      [userId, paging.size, paging.page * paging.size],
     ),
-    query<{ total: string }>(
-      "SELECT count(*) AS total FROM games WHERE user_id = $1 AND finished_at IS NOT NULL AND ($2::boolean IS NULL OR assisted = $2)",
-      [userId, assisted],
-    ),
+    query<{ total: string }>(`SELECT count(*) AS total FROM games WHERE user_id = $1 AND finished_at IS NOT NULL${filter}`, [userId]),
   ]);
   return c.json({ total: Number(count.rows[0].total), items: rows.map(gameJson) });
 });

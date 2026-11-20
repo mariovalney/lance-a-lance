@@ -2,6 +2,7 @@ import { call } from "@/lib/auth/api";
 import type {
   BackupV2,
   Game,
+  GameKind,
   GameStartInput,
   LessonRunInput,
   LessonRunOutcome,
@@ -35,8 +36,7 @@ export const progressApi = {
     call<{ progress: ProgressView; game: Game }>(`/games/${id}/finish`, post({ moves, resigned, day: localDay(), undos })),
   currentGame: () => call<{ game: Game | null }>("/games/current").then((answer) => answer.game),
   callOffGame: (id: string) => call<{ progress: ProgressView }>(`/games/${id}`, { method: "DELETE" }),
-  gamePage: (page: number, size: number, assisted?: boolean) =>
-    call<Page<Game>>(`/games?page=${page}&size=${size}${assisted === undefined ? "" : `&assisted=${assisted}`}`),
+  gamePage: (page: number, size: number, kind?: GameKind) => call<Page<Game>>(`/games?page=${page}&size=${size}${kind ? `&kind=${kind}` : ""}`),
   gameById: (id: string) => call<{ game: Game }>(`/games/${encodeURIComponent(id)}`).then((answer) => answer.game),
   saveAnalysis: (id: string, analysis: PositionEval[]) =>
     call<{ game: Game }>(`/games/${encodeURIComponent(id)}/analysis`, { method: "PUT", body: JSON.stringify({ analysis }) }).then((answer) => answer.game),

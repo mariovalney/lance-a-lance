@@ -6,6 +6,7 @@
 export type {
   Game,
   GameEndReason,
+  GameKind,
   GameOutcome,
   GameStats,
   LessonStats,

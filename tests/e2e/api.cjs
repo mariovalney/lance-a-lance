@@ -3,8 +3,9 @@
 // is Black, a move comes back with the reply, a retry with the same ply is
 // harmless and an old ply is refused, the app's game screen follows the moves
 // made here and the API sees the app's, a stale copy of the moves cannot
-// overwrite them, resigning is rated, and cancelling only works before both
-// sides moved.
+// overwrite them, resigning is rated, cancelling only works before both
+// sides moved, and a study started in the app shows where it began and is
+// never rated.
 //
 // The server needs the test key for the test account:
 //   USER_API_KEYS="admin@exemplo.com|e2e-key-0123456789abcdef" ... pnpm start
@@ -147,6 +148,56 @@ const { chromium } = require("playwright");
     check(r.success && r.data.game.result.ratingDelta === null, "an assisted game is not rated");
     r = await api("GET", "/game");
     check(r.data.player.rating === before.rating && r.data.player.played === before.played, "and leaves the rating and the count alone");
+
+    // A study, started in the app from a finished game: the API shows where it
+    // began, and neither taking moves back nor an early resignation reaches past it.
+    const startStudy = (from, assisted = true) => ctx.request.post(`${base}/api/games`, { data: { level: 400, player: "b", assisted, from } });
+    let started = await startStudy({ game: g.id, ply: 99 });
+    check(started.status() === 400, "a study cannot start past the end of its game");
+    started = await startStudy({ game: "00000000-0000-4000-8000-000000000000", ply: 1 });
+    check(started.status() === 404, "nor from a game that is not the player's");
+    started = await startStudy({ game: g.id, ply: 3 });
+    r = await api("GET", "/game");
+    const study = r.data.game;
+    check(
+      started.status() === 201 && study.study?.from === g.id && study.study.ply === 3 && study.ply === 3 && r.data.status === "player",
+      `the API shows where a study began (${JSON.stringify(study.study)}, ply ${study.ply})`,
+    );
+    check(
+      study.moves.slice(0, 3).every((m, i) => m.uci === g.moves[i].uci) && /\[Event "Estudo assistido contra o computador"\]/.test(study.pgn) && /\{Início do estudo\}/.test(study.pgn),
+      "it carries the game's moves, and its PGN marks the start",
+    );
+    r = await api("POST", "/game/undo");
+    check(r.status === 409 && r.data.error === "nothing_to_undo", "moves are never taken back past where a study began");
+    r = await api("POST", "/game/move", { move: study.legalMoves[0].uci, ply: 3 });
+    r = await api("POST", "/game/undo");
+    check(r.success && r.data.game.ply === 3, "a move made in the study is taken back to where it began");
+    r = await api("POST", "/game/resign");
+    check(r.success && r.data.status === "cancelled", "resigning before both sides moved in the study calls it off");
+
+    await startStudy({ game: g.id, ply: 3 }, false);
+    r = await api("GET", "/game");
+    r = await api("POST", "/game/move", { move: r.data.game.legalMoves[0].uci, ply: 3 });
+    r = await api("POST", "/game/resign");
+    check(r.success && r.data.status === "defeat" && r.data.game.result.ratingDelta === null, "a study is never rated, assisted or not");
+    r = await api("GET", "/game");
+    check(r.data.player.rating === before.rating && r.data.player.played === before.played, "and leaves the rating and the count alone");
+
+    // The backup keeps where a study began, whatever the order of its games,
+    // and lets go of a game that did not come along.
+    const listed = await (await ctx.request.get(`${base}/api/games?page=0&size=20&kind=study`)).json();
+    check(listed.total === 1 && listed.items[0].study.from === g.id, `the history lists the study apart (${listed.total})`);
+    const backup = await (await ctx.request.get(`${base}/api/backup`)).json();
+    const studyId = listed.items[0].id;
+    const restore = async (games) => {
+      const answer = await ctx.request.post(`${base}/api/backup`, { data: { ...backup, data: { ...backup.data, games } } });
+      const one = await (await ctx.request.get(`${base}/api/games/${studyId}`)).json();
+      return { ok: answer.ok(), study: one.game?.study };
+    };
+    let restored = await restore([...backup.data.games].reverse());
+    check(restored.ok && restored.study?.from === g.id && restored.study.ply === 3, `a backup restores a study before the game it began from (${JSON.stringify(restored.study)})`);
+    restored = await restore(backup.data.games.filter((x) => x.id !== g.id));
+    check(restored.ok && restored.study?.from === null && restored.study.ply === 3, `and without it, the study stays and only the link goes (${JSON.stringify(restored.study)})`);
 
     check(errors.length === 0, `no page errors (${errors.join(" | ")})`);
   } catch (error) {

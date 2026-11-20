@@ -5,6 +5,7 @@
 - One open game per person. A game started here shows up at `/partida` in the app, and the other way around.
 - The same computer levels, played the same way (`shared/games.ts`). The server runs the computer's moves with the same Stockfish build the app loads.
 - Rated like an app game without assistance (Elo, XP, the game counts and the day streak, scored by the server), unless it is started as assisted: then, as in the app, it is never rated and the full-strength engine's move is available as a hint.
+- A study, started in the app from a move of a finished game, is played here like any other open game. It carries that game's first moves, says so in `study`, and is never rated. The API does not start one.
 
 The difference is who moves the computer. In the app the browser does. Here the server does, before it answers, so a move comes back with the computer's reply in the same response.
 
@@ -115,15 +116,15 @@ A rated game has no hints: 409 `not_assisted`, carrying the game. On the compute
 
 In an assisted game: takes back your last move and the computer's reply, so it is your turn again one move earlier. Answers with the game. One call takes back one move of yours; call again for more.
 
-A rated game is never taken back: 409 `not_assisted`. Before you moved: 409 `nothing_to_undo`. The game's `undos` count goes up, and the app, if open, reloads the game.
+A rated game is never taken back: 409 `not_assisted`. Before you moved: 409 `nothing_to_undo`, which in a study means before you moved since it began: the moves it carries are never taken back. The game's `undos` count goes up, and the app, if open, reloads the game.
 
 ### `POST /api/v1/game/resign`
 
-Gives up the open game: a loss, rated. Before both sides moved there is nothing to rate, so, as in the app, the game is called off instead: `{ "status": "cancelled", "game": null }`.
+Gives up the open game: a loss, rated. Before both sides moved there is nothing to rate, so, as in the app, the game is called off instead: `{ "status": "cancelled", "game": null }`. A study counts its moves from where it began.
 
 ### `DELETE /api/v1/game`
 
-Calls off the open game, only before both sides moved: it leaves nothing behind. After that, 409 `cannot_cancel`: resign instead.
+Calls off the open game, only before both sides moved (in a study, since it began): it leaves nothing behind. After that, 409 `cannot_cancel`: resign instead.
 
 ## The game
 
@@ -134,6 +135,7 @@ Calls off the open game, only before both sides moved: it leaves nothing behind.
     "id": "c312f629-ca9e-4c4f-88a4-056a8e8c448e",
     "level": 1400,
     "assisted": false,
+    "study": null,
     "player": "black",
     "computer": "white",
     "turn": "black",
@@ -173,6 +175,7 @@ Calls off the open game, only before both sides moved: it leaves nothing behind.
 |---|---|
 | `player`, `computer`, `turn` | `white` or `black`. `player` is also the side the board faces |
 | `assisted` | `true` for a game started with assistance, here or in the app: it offers hints and undo, and is never rated |
+| `study` | `null`, or for a study `{ from, ply }`: the id of the finished game it began from (`null` once that game is gone) and how many of its moves it carries. `moves` starts with them, and the study is played from the position after them |
 | `undos` | Times moves were taken back |
 | `ply` | Moves played so far, both sides. The `ply` to send with the next move |
 | `fen` | The position. `fen` and `pieces` are the two shapes the `position` option of [react-chessboard](https://github.com/Clariity/react-chessboard) accepts, which is what the app draws with |
@@ -182,8 +185,8 @@ Calls off the open game, only before both sides moved: it leaves nothing behind.
 | `moves` | Every move. `by` is `player` or `computer`; `reading` is the Portuguese reading the app shows next to the SAN |
 | `legalMoves` | Your legal moves, only on your turn |
 | `material` | Material on the board, pawn 1, knight and bishop 3, rook 5, queen 9. `balance` is yours minus the computer's |
-| `result` | `null` while the game goes on; then `{ outcome, reason, ratingDelta, ratingAfter, xp }`, with `outcome` `win`, `draw` or `loss` and `reason` `checkmate`, `stalemate`, `insufficient`, `repetition`, `fifty` or `resigned`. `ratingDelta` is `null` for a game too short to be rated |
-| `pgn` | The game as PGN, with the tags the app's export uses, ready for Lichess or chess.com |
+| `result` | `null` while the game goes on; then `{ outcome, reason, ratingDelta, ratingAfter, xp }`, with `outcome` `win`, `draw` or `loss` and `reason` `checkmate`, `stalemate`, `insufficient`, `repetition`, `fifty` or `resigned`. `ratingDelta` is `null` for a game that was not rated: assisted, a study, or too short |
+| `pgn` | The game as PGN, with the tags the app's export uses, ready for Lichess or chess.com. A study's is the whole game from the first move, its start marked with the comment `{Início do estudo}` |
 
 ## Notes
 

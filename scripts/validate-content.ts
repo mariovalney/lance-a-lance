@@ -193,7 +193,7 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
   type Eval = import("@shared/types").PositionEval;
   const cp = (v: number, pv: string[]): Eval => ({ cp: v, best: pv[0] ?? null, pv });
   const game = (moves: string[], analysis: Eval[]) =>
-    ({ id: "x", level: 800, player: "w", assisted: false, moves, outcome: "loss", reason: "resigned", ratingDelta: null, ratingAfter: null, xp: 0, startedAt: "", finishedAt: "", analysis }) as import("@shared/types").Game;
+    ({ id: "x", level: 800, player: "w", assisted: false, moves, study: null, outcome: "loss", reason: "resigned", ratingDelta: null, ratingAfter: null, xp: 0, startedAt: "", finishedAt: "", analysis }) as import("@shared/types").Game;
   const opening = [cp(20, ["e2e4"]), cp(30, ["e7e5"]), cp(30, ["g1f3"]), cp(40, ["d7d6"]), cp(40, ["d2d4", "e5d4", "f3d4"])];
   const cases: { name: string; game: import("@shared/types").Game; ply: number; expected: string | null }[] = [
     {

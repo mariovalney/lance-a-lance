@@ -2,10 +2,10 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { Chess, type Move } from "chess.js";
 import { RATED_AFTER } from "../../../shared/scoring.js";
-import { GAME_LEVELS, UCI, levelByRating, levelNear, replay } from "../../../shared/games.js";
+import { GAME_LEVELS, UCI, levelByRating, levelNear, pgnEvent, replay } from "../../../shared/games.js";
 import { PIECE_VALUE, materialFor } from "../../../shared/material.js";
 import { readMove } from "../../../shared/notation.js";
-import { GAME_COLUMNS, statsOf, type GameRow } from "../account.js";
+import { GAME_COLUMNS, isStudy, statsOf, studyPly, type GameRow } from "../account.js";
 import { pool, query, transaction } from "../db.js";
 import { bestMove, computerMove } from "../engine.js";
 import { env } from "../env.js";
@@ -82,15 +82,19 @@ function statusOf(game: GameRow, turn: Color): Status {
   return turn === game.player ? "player" : "computer";
 }
 
-/** The game as PGN, with the tags the app's export uses. */
-function pgnOf(game: GameRow, chess: Chess): string {
+/** The game as PGN, with the tags the app's export uses, a study's start marked with a comment. */
+function pgnOf(game: GameRow): string {
+  const start = studyPly(game);
+  const chess = replay(game.moves.slice(0, start))!;
+  if (start) chess.setComment("Início do estudo");
+  for (const m of game.moves.slice(start)) chess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] || undefined });
   const you = "Você";
   const computer = `Computador ${game.level}`;
   const whiteWon = (game.outcome === "win") === (game.player === "w");
   const result = !game.outcome ? "*" : game.outcome === "draw" ? "1/2-1/2" : whiteWon ? "1-0" : "0-1";
   const d = game.started_at;
   const pad = (n: number) => String(n).padStart(2, "0");
-  chess.setHeader("Event", game.assisted ? "Partida assistida contra o computador" : "Partida contra o computador");
+  chess.setHeader("Event", pgnEvent({ assisted: game.assisted, study: isStudy(game) }));
   chess.setHeader("Site", "Lance a Lance");
   chess.setHeader("Date", `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`);
   chess.setHeader("Round", "-");
@@ -136,6 +140,7 @@ function view(game: GameRow) {
       id: game.id,
       level: game.level,
       assisted: game.assisted,
+      study: isStudy(game) ? { from: game.study_from, ply: studyPly(game) } : null,
       undos: game.undos,
       player: COLOR[game.player],
       computer: COLOR[game.player === "w" ? "b" : "w"],
@@ -151,7 +156,7 @@ function view(game: GameRow) {
       result: game.outcome
         ? { outcome: game.outcome, reason: game.reason, ratingDelta: game.rating_delta, ratingAfter: game.rating_after, xp: game.xp }
         : null,
-      pgn: pgnOf(game, chess),
+      pgn: pgnOf(game),
       startedAt: game.started_at.toISOString(),
       finishedAt: game.finished_at?.toISOString() ?? null,
     },
@@ -383,9 +388,13 @@ playRoutes.post("/game/undo", async (c) => {
       if (!game) return fail(c, 404, "no_game", "There is no game in progress.");
       if (!game.assisted) return fail(c, 409, "not_assisted", "Moves are only taken back in assisted games, which are not rated.", view(game));
       game = await settled(userId, game);
-      // Back to the player's turn before their last move: two plies, its reply included.
+      // Back to the player's turn before their last move: two plies, its reply
+      // included. Never past the player's first turn, which in a study comes
+      // after the moves it carries.
       const keep = game.moves.length - 2;
-      if (keep < (game.player === "w" ? 0 : 1)) return fail(c, 409, "nothing_to_undo", "There is no move of yours to take back.", view(game));
+      const start = studyPly(game);
+      const firstTurn = start + ((start % 2 === 0 ? "w" : "b") === game.player ? 0 : 1);
+      if (keep < firstTurn) return fail(c, 409, "nothing_to_undo", "There is no move of yours to take back.", view(game));
       const moves = game.moves.slice(0, keep);
       const { rows } = await query<GameRow>(
         `UPDATE games SET moves = $3, undos = undos + 1, updated_at = now()
@@ -406,8 +415,9 @@ playRoutes.post("/game/undo", async (c) => {
 });
 
 /**
- * Gives up. Before both sides moved there is nothing to rate, so, as in the
- * app, the game is called off instead and leaves nothing behind.
+ * Gives up. Before both sides moved (in a study, since where it began) there
+ * is nothing to keep, so, as in the app, the game is called off instead and
+ * leaves nothing behind.
  */
 playRoutes.post("/game/resign", async (c) => {
   const userId = c.get("user").id;
@@ -415,7 +425,7 @@ playRoutes.post("/game/resign", async (c) => {
     const result = await transaction(async (client) => {
       const game = await openGame(client, userId, true);
       if (!game) return null;
-      if (game.moves.length < RATED_AFTER) {
+      if (game.moves.length - studyPly(game) < RATED_AFTER) {
         await client.query("DELETE FROM games WHERE id = $1", [game.id]);
         return "cancelled" as const;
       }
@@ -426,13 +436,16 @@ playRoutes.post("/game/resign", async (c) => {
   });
 });
 
-/** Calls the game off, only before both sides moved. */
+/** Calls the game off, only before both sides moved (in a study, since where it began). */
 playRoutes.delete("/game", async (c) => {
   const userId = c.get("user").id;
   return serially(userId, async () => {
     const game = await openGame(pool, userId);
     if (!game) return fail(c, 404, "no_game", "There is no game in progress.");
-    const { rowCount } = await query("DELETE FROM games WHERE id = $1 AND finished_at IS NULL AND cardinality(moves) < $2", [game.id, RATED_AFTER]);
+    const { rowCount } = await query("DELETE FROM games WHERE id = $1 AND finished_at IS NULL AND cardinality(moves) - COALESCE(study_ply, 0) < $2", [
+      game.id,
+      RATED_AFTER,
+    ]);
     if (!rowCount) return fail(c, 409, "cannot_cancel", "Both sides have moved, so the game counts now. Resign instead.", view(game));
     return ok(c, { status: "cancelled", game: null });
   });
