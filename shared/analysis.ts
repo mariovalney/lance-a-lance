@@ -1,5 +1,6 @@
-import type { Move } from "chess.js";
+import { Chess, type Move, type PieceSymbol } from "chess.js";
 import { UCI, replay } from "./games.js";
+import { materialFor } from "./material.js";
 import type { PositionEval, Score } from "./types.js";
 
 /**
@@ -7,22 +8,24 @@ import type { PositionEval, Score } from "./types.js";
  * the way Lichess does it (lila, modules/tree/src/main/Advice.scala):
  * a move is an inaccuracy (?!), a mistake (?) or a blunder (??) by how much it
  * drops the mover's winning chances. Lichess marks no good moves; this marks
- * one on the same scale: the only move (!), the engine's best when every other
- * move would have been a mistake or worse.
+ * two on the same scale: the only move (!), the engine's best when every other
+ * move would have been a mistake or worse, and the brilliant one (!!), an only
+ * move that gives up material, as the engine's line shows.
  */
 
-export type Judgement = "inaccuracy" | "mistake" | "blunder" | "only";
+export type Judgement = "inaccuracy" | "mistake" | "blunder" | "only" | "brilliant";
 
-/** The symbol for each judgement, and its NAG in PGN (the standard's $1 is a good move). */
+/** The symbol for each judgement, and its NAG in PGN (the standard's $1 is a good move, $3 a brilliant one). */
 export const GLYPH: Record<Judgement, { symbol: string; nag: number }> = {
   inaccuracy: { symbol: "?!", nag: 6 },
   mistake: { symbol: "?", nag: 2 },
   blunder: { symbol: "??", nag: 4 },
   only: { symbol: "!", nag: 1 },
+  brilliant: { symbol: "!!", nag: 3 },
 };
 
 /** The judgements that praise a move rather than fault it. */
-export const isGood = (j: Judgement | null): boolean => j === "only";
+export const isGood = (j: Judgement | null): boolean => j === "only" || j === "brilliant";
 
 /** Beyond this the evaluation is "winning" either way (Lichess caps it the same). */
 const CP_CEILING = 1000;
@@ -113,14 +116,12 @@ export function altDrop(analysis: PositionEval[], ply: number): number | null {
 const LOST = -0.3;
 
 /**
- * Whether the move that led to position `ply` was the only move: the engine's
- * best, with every other move a mistake or worse (`alt` drops the winning
- * chances by 0.2, Lichess's threshold for "?"). Never for a move that is
- * expected rather than found: a recapture, a capture right after the
- * opponent's mistake, a move that mates at once, or one that still loses.
- * `history` is the game's moves as chess.js plays them.
+ * Whether the move that led to position `ply` stood alone: the engine's best,
+ * with every other move a mistake or worse (`alt` drops the winning chances by
+ * 0.2, Lichess's threshold for "?"), and not a recapture, a mate at once or a
+ * move that still loses. `history` is the game's moves as chess.js plays them.
  */
-export function isOnlyMove(analysis: PositionEval[], moves: string[], ply: number, history: Move[]): boolean {
+function standsAlone(analysis: PositionEval[], moves: string[], ply: number, history: Move[]): boolean {
   const before = analysis[ply - 1];
   const after = analysis[ply];
   const drop = altDrop(analysis, ply);
@@ -130,14 +131,66 @@ export function isOnlyMove(analysis: PositionEval[], moves: string[], ply: numbe
   if (!("mate" in after) && Math.abs(after.cp) >= MAX_CP) return false;
   const move = history[ply - 1];
   const previous = history[ply - 2];
-  if (move?.captured && previous?.captured && previous.to === move.to) return false;
+  return !(move?.captured && previous?.captured && previous.to === move.to);
+}
+
+/** At least this much material, in pawns, before a line counts as giving some up. */
+const SACRIFICE = 2;
+
+/**
+ * The material a line from a position gives up for `color`, at its lowest:
+ * counted after each quiet move only, so a trade under way (a piece taken, the
+ * recapture next, or past the end of the line) is no loss. What `color` lost
+ * and took up to there, or null when the line never gives up SACRIFICE.
+ */
+export function sacrificeIn(fen: string, line: string[], color: "w" | "b"): { lost: PieceSymbol[]; won: PieceSymbol[] } | null {
+  const chess = new Chess(fen);
+  const start = materialFor(fen, color);
+  const lost: PieceSymbol[] = [];
+  const won: PieceSymbol[] = [];
+  let lowest: { net: number; lost: PieceSymbol[]; won: PieceSymbol[] } | null = null;
+  for (const uci of line) {
+    let move: Move;
+    try {
+      move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+    } catch {
+      break;
+    }
+    if (move.captured) (move.color === color ? won : lost).push(move.captured);
+    else {
+      const net = materialFor(chess.fen(), color) - start;
+      if (net <= -SACRIFICE && (!lowest || net < lowest.net)) lowest = { net, lost: [...lost], won: [...won] };
+    }
+  }
+  return lowest ? { lost: lowest.lost, won: lowest.won } : null;
+}
+
+/**
+ * Whether the move that led to position `ply` was brilliant: it stood alone,
+ * and the engine's line from it gives up material. Taking what the opponent
+ * left hanging gives up nothing, so here a capture after their mistake counts.
+ */
+function isBrilliant(analysis: PositionEval[], moves: string[], ply: number, history: Move[]): boolean {
+  const pv = analysis[ply - 1]?.pv;
+  const move = history[ply - 1];
+  if (!move || pv?.[0] !== moves[ply - 1] || !standsAlone(analysis, moves, ply, history)) return false;
+  return sacrificeIn(move.before, pv, move.color) !== null;
+}
+
+/**
+ * Whether the move that led to position `ply` was the only move: it stood
+ * alone, and it was found rather than expected, so not a capture right after
+ * the opponent's mistake, such as taking a piece they left hanging.
+ */
+export function isOnlyMove(analysis: PositionEval[], moves: string[], ply: number, history: Move[]): boolean {
+  if (!standsAlone(analysis, moves, ply, history)) return false;
   const answered = judgeMove(analysis, moves, ply - 1);
-  if (move?.captured && (answered === "mistake" || answered === "blunder")) return false;
-  return true;
+  return !(history[ply - 1]?.captured && (answered === "mistake" || answered === "blunder"));
 }
 
 /** The judgement of the move to `ply`, good or bad. */
 export function markMove(analysis: PositionEval[], moves: string[], ply: number, history: Move[]): Judgement | null {
+  if (isBrilliant(analysis, moves, ply, history)) return "brilliant";
   return isOnlyMove(analysis, moves, ply, history) ? "only" : judgeMove(analysis, moves, ply);
 }
 

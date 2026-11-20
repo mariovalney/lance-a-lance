@@ -24,7 +24,7 @@ import { LineDialog } from "@/components/game/LineDialog";
 import { StudyDialog } from "@/components/game/StudyDialog";
 import { forgetRouteState, goBack, navigate, paths, routeState } from "@/lib/router";
 import { materialFor } from "@shared/material";
-import { explainMove, explainOnly } from "@/lib/chess/explain";
+import { explainBrilliant, explainMove, explainOnly } from "@/lib/chess/explain";
 
 /** The game after its first `ply` moves. */
 function positionAt(moves: string[], ply: number) {
@@ -205,7 +205,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   const mark = ply > 0 ? marks[ply - 1] : null;
   const good = isGood(mark);
   const preferred = mark && !good && game?.analysis?.[ply - 1]?.best ? bestAt(positionAt(game.moves, ply - 1).fen, game.analysis[ply - 1].best!) : null;
-  const why = mark && game ? (good ? explainOnly(game, ply) : explainMove(game, ply)) : null;
+  const why = !mark || !game ? null : mark === "brilliant" ? explainBrilliant(game, ply) : good ? explainOnly(game, ply) : explainMove(game, ply);
   const toAnalyse = game ? !game.analysis || outdated(game) || isPartial(game) : false;
   // The engine's line from the position before the judged move: why it preferred its move.
   const bestLine = mark ? game?.analysis?.[ply - 1]?.pv : undefined;

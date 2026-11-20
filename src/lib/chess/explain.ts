@@ -1,5 +1,5 @@
 import { Chess, type Move } from "chess.js";
-import { altDrop, judgeMove } from "@shared/analysis";
+import { altDrop, judgeMove, sacrificeIn } from "@shared/analysis";
 import { replay } from "@shared/games";
 import type { Game, PositionEval } from "@shared/types";
 import { parseUci, type Color } from "@/lib/chess/game";
@@ -131,7 +131,6 @@ export function explainMove(game: Game, ply: number): string | null {
   const who = mine ? "você" : "o computador";
   const Who = mine ? "Você" : "O computador";
   const other = mine ? "o computador" : "você";
-  const inMoves = (n: number) => (n === 1 ? "no lance seguinte" : `em ${n} lances`);
 
   // A mate let in: whose move let it in, who gets it, and the move it starts with.
   const mateAfter = mateFor(after, mover);
@@ -201,6 +200,38 @@ export function explainOnly(game: Game, ply: number): string | null {
     return null;
   }
   return `Qualquer outro seria ${drop >= 0.3 ? "um erro grave" : "um erro"}. O melhor deles era ${named}.`;
+}
+
+/** "no lance seguinte", "em 3 lances". */
+const inMoves = (n: number) => (n === 1 ? "no lance seguinte" : `em ${n} lances`);
+
+/**
+ * The sentence for a brilliant move, the move that led to position `ply`:
+ * what it gives up, as the engine's line shows, and what that brings, when
+ * the line shows it for certain (a mate, material won, material back). With
+ * nothing that sure, how bad any other move would have been.
+ */
+export function explainBrilliant(game: Game, ply: number): string | null {
+  const before = game.analysis?.[ply - 1];
+  const after = game.analysis?.[ply];
+  const start = replay(game.moves.slice(0, ply - 1));
+  if (!before?.pv || !after || !start) return null;
+  const fen = start.fen();
+  const mover: Color = ply % 2 === 1 ? "w" : "b";
+  const given = sacrificeIn(fen, before.pv, mover);
+  if (!given) return null;
+  const { gone } = netOut(given.lost as PieceType[], given.won as PieceType[]);
+  if (!gone.length) return null;
+  const san = new Chess(fen).move(parseUci(game.moves[ply - 1])).san;
+  const head = `Com ${san}, ${mover === game.player ? "você" : "o computador"} entrega ${namePieces(gone)}`;
+  const mate = mateFor(after, mover);
+  if (mate > 0) return `${head} e dá xeque-mate ${inMoves(mate)}.`;
+  const line = playLine(fen, before.pv, mover);
+  const won = netOut(line.won, line.lost).gone;
+  if (line.net >= MATERIAL_MARGIN && won.length) return `${head} e ganha ${namePieces(won)}.`;
+  if (line.net >= -1) return `${head} e recupera o material.`;
+  const only = explainOnly(game, ply);
+  return `${head}.${only ? ` ${only}` : ""}`;
 }
 
 /**

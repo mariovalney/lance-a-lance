@@ -336,6 +336,49 @@ const { chromium } = require("playwright");
   await p.locator(`main[data-game*='"id":"${source.id}"']`).waitFor({ timeout: 10_000 }).catch(() => undefined);
   check(new URL(p.url()).pathname === `/partidas/${source.id}`, `and leads to the game it began from (${new URL(p.url()).pathname})`);
 
+  /* ---------- a brilliant move (!!), on a hand-written analysis of Légal's trap ---------- */
+  // 4...g6? 5.Nxe5!! Bxd1 6.Bxf7+ Ke7 7.Nd5#: played as an assisted game, so
+  // it touches no rating.
+  {
+    const moves = ["e2e4", "e7e5", "g1f3", "d7d6", "f1c4", "c8g4", "b1c3", "g7g6", "f3e5", "g4d1", "c4f7", "e8e7", "c3d5"];
+    const started = (await (await p.request.post(`${base}/api/games`, { data: { level: 400, player: "w", assisted: true } })).json()).game;
+    const finished = await p.request.post(`${base}/api/games/${started.id}/finish`, { data: { moves, resigned: false, day: new Date().toISOString().slice(0, 10) } });
+    const quiet = (v, best, alt) => ({ cp: v, best, pv: [best], ...(alt ? { alt } : {}) });
+    const line = ["f3e5", "g4d1", "c4f7", "e8e7", "c3d5"];
+    const analysis = [
+      quiet(20, "e2e4", { cp: 15, best: "d2d4" }),
+      quiet(30, "e7e5", { cp: 35, best: "c7c5" }),
+      quiet(30, "g1f3", { cp: 25, best: "b1c3" }),
+      quiet(40, "d7d6", { cp: 45, best: "b8c6" }),
+      quiet(40, "f1c4", { cp: 35, best: "d2d4" }),
+      quiet(40, "g8f6"),
+      quiet(60, "h2h3"),
+      quiet(50, "g8f6"),
+      { mate: 3, best: "f3e5", pv: line, alt: { cp: 60, best: "h2h3" } },
+      { mate: 2, best: "g4d1", pv: line.slice(1), alt: { cp: 150, best: "d6e5" } },
+      { mate: 2, best: "c4f7", pv: line.slice(2), alt: { mate: 3, best: "c3d5" } },
+      { mate: -1, best: "e8e7", pv: line.slice(3), alt: { mate: -1, best: "e8d7" } },
+      { mate: 1, best: "c3d5", pv: line.slice(4), alt: { mate: 2, best: "c3b5" } },
+      { cp: 100000, best: null },
+    ];
+    const put = await p.request.put(`${base}/api/games/${started.id}/analysis`, { data: { analysis } });
+    await p.goto(`${base}/partidas/${started.id}`, { waitUntil: "networkidle" });
+    await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
+    const trap = await game();
+    check(
+      finished.ok() && put.ok() && trap.marks[7] === "??" && trap.marks[8] === "!!" && trap.marks.filter(Boolean).length === 2,
+      `the queen given up for mate is marked "!!" (${trap.marks.map((m) => m ?? "-").join(" ")})`,
+    );
+    await p.locator("ol[aria-label='Lances da partida'] button").nth(8).click();
+    const said = (await p.locator("p", { hasText: "Brilhante." }).first().textContent().catch(() => "")) ?? "";
+    check(/^Brilhante\. Com Nxe5, você entrega a dama e dá xeque-mate em 2 lances\. Ver lances$/.test(said), `with what it gives up and what it brings (${said})`);
+    await p.screenshot({ path: `${OUT}/game-brilliant.png` });
+    await p.getByRole("button", { name: "Copiar PGN" }).click();
+    await waitFor("Copiado");
+    const withBrilliant = await p.evaluate(() => navigator.clipboard.readText());
+    check(/Nxe5 \$3\s+\{ Brilhante\.\s+Com\s+Nxe5,/.test(withBrilliant), `and in the PGN as $3 (${withBrilliant.split("\n\n")[1]?.slice(0, 120)})`);
+  }
+
   // Somebody else's game, or no game at all, is not found, and says so.
   await p.goto(`${base}/partidas/00000000-0000-4000-8000-000000000000`, { waitUntil: "networkidle" });
   check(await waitFor("Partida não encontrada."), "an unknown game is not found");

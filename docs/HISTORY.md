@@ -728,3 +728,10 @@ Measured with the app's own engine on five positions, 300 ms reached depth 15.9 
 - **In the review** the line says "Lance único. Qualquer outro seria um erro. O melhor deles era Nf3 (cavalo para f3).", "um erro grave" when the best of the others was a blunder, in Lichess's study colour for a good move, with "Ver lances" for the line from the move. The PGN carries $1, the standard's good move.
 - **Analyses saved before** have no `alt` and are offered again, like those saved before the lines existed. A study does not carry the original's evaluation of the position where it begins, since whether that one needs `alt` depends on the study's own move.
 
+### The brilliant move (!!)
+
+- **The rule:** a move that stands alone as above and gives up material, as the engine's line from it shows (`sacrificeIn`). The material is counted after each quiet move only, the way the sentences already count it, so a trade under way (a piece taken, the recapture next or past the end of the line) is no loss. Two pawns or more: a piece for a pawn, or the exchange.
+- **The line, not a hanging piece.** WintrChess and chess.com look at a piece left en prise; here the line has to show the material actually going. A sacrifice the best defence declines gets no !!, which is the trade Mário and the app made for the sentences already: fewer marks, none false.
+- **A capture after the opponent's mistake counts here.** In Légal's trap 4...g6? is a blunder and 5.Nxe5 is a capture, which the ! leaves out, but it gives up the queen: "Brilhante. Com Nxe5, você entrega a dama e dá xeque-mate em 2 lances." The validator and the game test carry that line.
+- **The sentence** says what the move gives up and what it brings when the line shows it for certain: a mate, material won, or the material back ("e recupera o material"). With nothing that sure, it falls back on the only move's sentence. Mário asked that it not mention "the engine's line": the sentence says what happens on the board instead. The PGN carries $3, the standard's brilliant move, in Lichess's study colour for it.
+

@@ -398,6 +398,57 @@ if (!process.env.ONLY || process.env.ONLY === "analise") {
       if (isPositionEval(shape) !== ok) errors.push(`lance único: ${JSON.stringify(shape)} deveria ser ${ok ? "aceito" : "recusado"}`);
     }
     console.log(`lance único: ${onlyCases.length} casos checados`);
+
+    // The brilliant move (!!): an only move whose line gives up material.
+    // Légal's trap: after 4...g6? White leaves the queen with 5.Nxe5, and
+    // 5...Bxd1 6.Bxf7+ Ke7 7.Nd5# is mate.
+    const { sacrificeIn } = await import("@shared/analysis");
+    const { explainBrilliant } = await import("@/lib/chess/explain");
+    const legal = ["e2e4", "e7e5", "g1f3", "d7d6", "f1c4", "c8g4", "b1c3", "g7g6", "f3e5"];
+    const legalLine = ["f3e5", "g4d1", "c4f7", "e8e7", "c3d5"];
+    const beforeTrap = [...opening.slice(0, 4), cp(40, ["f1c4"]), cp(40, ["g8f6"]), cp(60, ["h2h3"]), cp(50, ["g8f6"])];
+    const brilliantCases: { name: string; game: import("@shared/types").Game; ply: number; mark: string | null; sentence?: string | null }[] = [
+      {
+        name: "sacrifício de dama com mate",
+        game: game(legal, [...beforeTrap, withAlt({ mate: 3, best: "f3e5", pv: legalLine }, { cp: 60, best: "h2h3" }), { mate: 2, best: "g4d1", pv: legalLine.slice(1) }]),
+        ply: 9,
+        mark: "brilliant",
+        sentence: "Com Nxe5, você entrega a dama e dá xeque-mate em 2 lances.",
+      },
+      {
+        // The same line, with another move about as good: not alone, so nothing.
+        name: "sacrifício que não é o único lance",
+        game: game(legal, [...beforeTrap, withAlt({ mate: 3, best: "f3e5", pv: legalLine }, { cp: 900, best: "h2h3" }), { mate: 2, best: "g4d1", pv: legalLine.slice(1) }]),
+        ply: 9,
+        mark: null,
+      },
+      {
+        // The engine's own line declines the queen: 5...dxe5 6.Qxg4. A pawn
+        // won, nothing given up: an only move, not a brilliant one.
+        name: "a linha não entrega nada",
+        game: game(legal, [...beforeTrap, withAlt(cp(150, ["f3e5", "d6e5", "d1g4", "g8f6"]), { cp: -40, best: "h2h3" }), cp(150, ["d6e5", "d1g4", "g8f6"])]),
+        ply: 9,
+        mark: "only",
+      },
+    ];
+    for (const c of brilliantCases) {
+      const got = judgements(c.game.analysis!, c.game.moves)[c.ply - 1];
+      if (got !== c.mark) errors.push(`brilhante (${c.name}): esperava ${JSON.stringify(c.mark)}, veio ${JSON.stringify(got)}`);
+      if (c.sentence !== undefined && explainBrilliant(c.game, c.ply) !== c.sentence) {
+        errors.push(`brilhante (${c.name}): esperava ${JSON.stringify(c.sentence)}, veio ${JSON.stringify(explainBrilliant(c.game, c.ply))}`);
+      }
+    }
+    // A trade under way is no sacrifice: material counts after quiet moves only.
+    const scotch = replay(["e2e4", "e7e5", "g1f3", "b8c6", "d2d4", "e5d4"])!.fen();
+    const lines: { name: string; got: unknown; expected: unknown }[] = [
+      { name: "troca até o fim", got: sacrificeIn(scotch, ["f3d4", "c6d4", "d1d4", "g8f6"], "w"), expected: null },
+      { name: "troca cortada no fim da linha", got: sacrificeIn(scotch, ["f3d4", "c6d4"], "w"), expected: null },
+      { name: "dama entregue", got: sacrificeIn(replay(legal.slice(0, 8))!.fen(), legalLine, "w"), expected: { lost: ["q"], won: ["p", "p"] } },
+    ];
+    for (const l of lines) {
+      if (JSON.stringify(l.got) !== JSON.stringify(l.expected)) errors.push(`sacrifício (${l.name}): esperava ${JSON.stringify(l.expected)}, veio ${JSON.stringify(l.got)}`);
+    }
+    console.log(`brilhante: ${brilliantCases.length + lines.length} casos checados`);
   }
 }
 
