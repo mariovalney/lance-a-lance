@@ -130,7 +130,10 @@ function parseAccountData(v: unknown): AccountData | null {
       // Absent in the files written before the analysis existed.
       (g.analysis === undefined ||
         g.analysis === null ||
-        (Array.isArray(g.analysis) && g.analysis.length === (g.moves as unknown[]).length + 1 && g.analysis.every(isPositionEval))) &&
+        (Array.isArray(g.analysis) &&
+          g.analysis.length >= 1 &&
+          g.analysis.length <= (g.moves as unknown[]).length + 1 &&
+          g.analysis.every(isPositionEval))) &&
       // Absent in the files written before study games existed.
       (g.study === undefined ||
         g.study === null ||

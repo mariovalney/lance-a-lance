@@ -15,6 +15,7 @@ import { gamePgn, pgnFileName } from "@/lib/chess/pgn";
 import { GLYPH, judgements } from "@shared/analysis";
 import { JUDGEMENT_COLOR, JUDGEMENT_WORD } from "@/lib/chess/judgement";
 import { analyseGame } from "@/lib/engine/analyse";
+import { useWakeLock } from "@/lib/wakeLock";
 import { parseUci } from "@/lib/chess/game";
 import { moveLabel } from "@/components/lesson/steps/moveText";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,12 @@ function bestAt(fen: string, uci: string) {
 
 /** An analysis saved before the engine's lines were kept: it judges, but cannot say why. */
 const lacksLines = (g: Game) => Boolean(g.analysis?.some((e) => e.best !== null && !e.pv));
+
+/** An analysis stopped halfway: it covers the first positions only. */
+const isPartial = (g: Game) => Boolean(g.analysis && g.analysis.length < g.moves.length + 1);
+
+/** How often a running analysis is saved, in positions, so leaving the screen or losing the tab costs little. */
+const SAVE_EVERY = 10;
 
 /** Where the analysis is: not run, running (how far), or failed. A finished one lives on the game. */
 type Analysing = { kind: "idle" } | { kind: "running"; done: number; total: number } | { kind: "failed" };
@@ -83,8 +90,19 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   const [analysing, setAnalysing] = useState<Analysing>({ kind: "idle" });
   const abort = useRef<AbortController | null>(null);
 
-  // Leaving the screen stops an analysis halfway: nothing is saved.
+  // Leaving the screen stops an analysis halfway; what it covered is saved.
   useEffect(() => () => abort.current?.abort(), []);
+  useWakeLock(analysing.kind === "running");
+
+  const show = (game: Game) => setLoaded({ kind: "ready", game, sans: sansOf(game.moves) });
+
+  /** Saves an analysis so far, in order: a later save never lands before an earlier one. */
+  const saving = useRef<Promise<unknown>>(Promise.resolve());
+  const save = (id: string, analysis: PositionEval[]) => {
+    const run = saving.current.then(() => games.saveAnalysis(id, analysis));
+    saving.current = run.catch(() => undefined);
+    return run;
+  };
 
   /**
    * A study's first positions are those of the game it began from: their
@@ -100,17 +118,36 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
     }
   };
 
+  /**
+   * Runs the analysis, from where a stopped one left off, and saves it every
+   * few positions and when it stops, so it can be continued.
+   */
   const analyse = async (g: Game) => {
     const controller = new AbortController();
     abort.current = controller;
-    setAnalysing({ kind: "running", done: 0, total: g.moves.length + 1 });
+    const total = g.moves.length + 1;
+    setAnalysing({ kind: "running", done: g.analysis && !lacksLines(g) ? g.analysis.length : 0, total });
+    const known = g.analysis && !lacksLines(g) ? g.analysis : await carried(g);
+    let sofar = known;
+    let saved = known.length;
     try {
-      const known = await carried(g);
-      const analysis = await analyseGame(g.moves, (done, total) => setAnalysing({ kind: "running", done, total }), controller.signal, known);
-      const saved = await games.saveAnalysis(g.id, analysis);
-      setLoaded({ kind: "ready", game: saved, sans: sansOf(saved.moves) });
+      const analysis = await analyseGame(
+        g.moves,
+        (done, all, evals) => {
+          sofar = evals;
+          setAnalysing({ kind: "running", done, total: all });
+          if (done - saved >= SAVE_EVERY && done < all) {
+            saved = done;
+            void save(g.id, evals).then(show, () => undefined);
+          }
+        },
+        controller.signal,
+        known,
+      );
+      show(await save(g.id, analysis));
       setAnalysing({ kind: "idle" });
     } catch {
+      if (sofar.length > saved) void save(g.id, sofar).then(show, () => undefined);
       setAnalysing(controller.signal.aborted ? { kind: "idle" } : { kind: "failed" });
     }
   };
@@ -135,7 +172,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
         if (autoStart.current) {
           autoStart.current = false;
           forgetRouteState("analyse");
-          if (!game.analysis || lacksLines(game)) void start.current(game);
+          if (!game.analysis || lacksLines(game) || isPartial(game)) void start.current(game);
         }
       })
       .catch((error: unknown) => {
@@ -161,7 +198,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   const mark = ply > 0 ? marks[ply - 1] : null;
   const preferred = mark && game?.analysis?.[ply - 1]?.best ? bestAt(positionAt(game.moves, ply - 1).fen, game.analysis[ply - 1].best!) : null;
   const why = mark && game ? explainMove(game, ply) : null;
-  const toAnalyse = game ? !game.analysis || lacksLines(game) : false;
+  const toAnalyse = game ? !game.analysis || lacksLines(game) || isPartial(game) : false;
   // The engine's line from the position before the judged move: why it preferred its move.
   const bestLine = mark ? game?.analysis?.[ply - 1]?.pv : undefined;
   const [lineOpen, setLineOpen] = useState(false);
@@ -218,7 +255,7 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
               ) : (
                 <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void analyse(current.game)}>
                   <Sparkles className="!h-4 !w-4" />
-                  {current.game.analysis ? "Analisar de novo" : "Analisar"}
+                  {!current.game.analysis ? "Analisar" : lacksLines(current.game) ? "Analisar de novo" : "Continuar análise"}
                 </Button>
               ))}
             <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void exportPgn(current.game).then(setExported)}>
@@ -255,7 +292,18 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
           study: game?.study?.ply ?? null,
           hint: null,
           ply: game ? ply : null,
-          analysis: analysing.kind === "running" ? "running" : game?.analysis && !toAnalyse ? "done" : analysing.kind === "failed" ? "failed" : "none",
+          analysis:
+            analysing.kind === "running"
+              ? "running"
+              : analysing.kind === "failed"
+                ? "failed"
+                : !game?.analysis
+                  ? "none"
+                  : !toAnalyse
+                    ? "done"
+                    : isPartial(game)
+                      ? "partial"
+                      : "outdated",
           marks: marks.map((m) => (m ? GLYPH[m].symbol : null)),
         })}
       >

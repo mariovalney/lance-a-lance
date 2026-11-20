@@ -213,7 +213,18 @@ const { chromium } = require("playwright");
   check(/\[Result "(1-0|0-1|1\/2-1\/2)"\]/.test(pgn) && /\n1\. \S+/.test(pgn) && /\[Site "Lance a Lance"\]/.test(pgn), `as PGN (${pgn.split("\n").slice(0, 2).join(" ")})`);
 
   /* ---------- the analysis: every move judged, kept with the game ---------- */
-  await p.getByRole("button", { name: "Analisar" }).click();
+  // Stopped halfway, it keeps what it covered, and continues from there.
+  await p.getByRole("button", { name: "Analisar", exact: true }).click();
+  const cancel = p.getByRole("button", { name: "Cancelar a análise" });
+  for (let i = 0; i < 100 && !/^[2-9]\//.test((await cancel.textContent().catch(() => "")) ?? ""); i++) await p.waitForTimeout(100);
+  await cancel.click();
+  await p.locator(`main[data-game*='"analysis":"partial"']`).waitFor({ timeout: 10_000 }).catch(() => undefined);
+  const halfway = (await (await p.request.get(`${base}/api/games/${g.id}`)).json()).game?.analysis?.length;
+  check((await game()).analysis === "partial" && halfway >= 2 && halfway <= g.moves, `stopping the analysis keeps what it covered (${halfway} of ${g.moves + 1} positions)`);
+  await p.reload({ waitUntil: "networkidle" });
+  await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
+  check((await p.getByRole("button", { name: "Continuar análise" }).count()) === 1, "a reload offers to continue it");
+  await p.getByRole("button", { name: "Continuar análise" }).click();
   for (let i = 0; i < 150 && (await game()).analysis === "running"; i++) await p.waitForTimeout(200);
   g = await game();
   check(g.analysis === "done" && g.marks.length === g.moves, `the analysis runs to the end (${g.analysis}, ${g.marks.filter(Boolean).join(" ") || "no marks"})`);

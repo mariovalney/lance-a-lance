@@ -3,20 +3,25 @@ import { MAX_CP, MAX_MATE, MAX_PV } from "@shared/analysis";
 import type { PositionEval } from "@shared/types";
 import { Engine } from "@/lib/engine/stockfish";
 
-/** Time the engine gets on each position: a game of 80 moves takes about half a minute on a phone. */
-const MS_PER_POSITION = 300;
+/**
+ * Time the engine gets on each position. The analysis runs after the game, so
+ * it can take its time: a game of 40 moves takes under a minute.
+ */
+const MS_PER_POSITION = 600;
 
 /**
  * The full-strength engine's evaluation of every position of a game, the
  * initial one included, from White's side. A position where the game is over
  * needs no search: a checkmate is stored as `MAX_CP` against the side mated,
- * any draw as 0. `known` evaluates the first positions already (a study's,
- * from the game it began from), so the search starts after them. Stops, and
- * throws, once `signal` is aborted.
+ * any draw as 0. `known` evaluates the first positions already (an analysis
+ * stopped halfway, or a study's first positions from the game it began from),
+ * so the search starts after them. `onProgress` gets every evaluation so far,
+ * for the caller to save as it goes. Stops, and throws, once `signal` is
+ * aborted.
  */
 export async function analyseGame(
   moves: string[],
-  onProgress: (done: number, total: number) => void,
+  onProgress: (done: number, total: number, sofar: PositionEval[]) => void,
   signal: AbortSignal,
   known: PositionEval[] = [],
 ): Promise<PositionEval[]> {
@@ -44,7 +49,7 @@ export async function analyseGame(
             : { cp: side * Math.max(-(MAX_CP - 1), Math.min(MAX_CP - 1, "cp" in score ? score.cp : 0)), best, pv };
         out.push(entry);
       }
-      onProgress(ply + 1, total);
+      onProgress(ply + 1, total, [...out]);
     }
     return out;
   } finally {

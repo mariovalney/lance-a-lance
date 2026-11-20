@@ -697,3 +697,26 @@ Reviewing a game he lost (16. e4??, mate in one), Mário asked to start a game f
 - **Marked.** "estudo" in the header, "Início do estudo" in the move list with the moves carried faded, a third tab in the history ("Estudos") whose rows say where each began ("Depois de 16. e4"), a link from the review back to the original, and in the PGN the Event tag and a comment at the start.
 - **The analysis** of a study takes the original's evaluations for the positions it carries, when the original was analysed with lines, so the engine only runs on the moves played in the study.
 - **The history's tabs** had a layout bug that a third tab made obvious: Radix keeps an inactive tab in the page with `hidden`, which the `flex` class overrode, so each empty tab took its share of the height and the assisted games' list started halfway down the page. `data-[state=inactive]:hidden` fixes it.
+
+## 22. A deeper analysis, and the good moves
+
+Mário asked whether the review would ever mark a !!. It did not: Lichess marks no good move, and the rule chess.com uses was not public. He asked for research first.
+
+### What the others do
+
+- **Lichess** judges bad moves only ([Advice.scala](https://github.com/lichess-org/lila/blob/master/modules/tree/src/main/Advice.scala)). Good moves are a recurring request on its forum; the LiChess Tools extension adds them and calls them "interesting", since any detector of brilliance approximates.
+- **chess.com** ([how moves are classified](https://support.chess.com/en/articles/8572705-how-are-moves-classified-what-is-a-blunder-or-brilliant-and-etc), February 2026) classifies by expected points lost, from the engine and the player's rating. Brilliant is "a good piece sacrifice" that is best or nearly best, leaves the player in no bad position and was needed (not completely winning anyway); Great is a move critical to the result, such as the only good move. Both are more generous for newer players, with no numbers published.
+- **Chesskit** (open source) uses Lichess's winning chances: its "Perfect" is the best move with the second best line more than 10 points of win percentage behind, or a move that turns the result; its "Splendid" adds a piece sacrifice. **WintrChess** works in centipawns, with a hanging piece heuristic for the sacrifice and a 150 cp gap to the second line for "great".
+- **Duolingo** ([September 2026](https://blog.duolingo.com/engineering-game-review/)) defines brilliant as unexpectedly strong, found with a human-like network (Maia); a sacrifice is not required. **Zaidi and Guerzhoy** ([2024](https://arxiv.org/abs/2406.11895)) predicted the moves Lichess users marked !! at 79% and found that what people call brilliant is the best move that a human-level engine finds weak, that is, hard to understand.
+- A vendor's [benchmark](https://www.chessigma.com/benchmarks/brilliant) against chess.com's badges shows how far the open heuristics drift: WintrChess agreed on 45 of 100, Chesskit on 23.
+
+Every open implementation needs the engine's second best line. Mário turned down a looser bar for low ratings (the symbol would stop meaning the same thing) and chess.com's Excellent and Good tiers (a label on almost every move says nothing).
+
+### A deeper analysis that is not lost
+
+Measured with the app's own engine on five positions, 300 ms reached depth 15.9 on average and 600 ms 17.7; asking for two lines at once (MultiPV 2) costs one to four plies at the same time, as the nodes are split between them. The analysis runs after the game, and Mário said it can take longer, so:
+
+- **600 ms per position**, one line: about a minute for a game of 40 moves, three for 120. The judgements already shown come from searches about two plies deeper.
+- **Saved as it goes**, every 10 positions and when it stops: a stopped analysis is its first positions, `PUT /api/games/:id/analysis` accepts that prefix, and the review offers "Continuar análise" (`data-game` analysis `partial`). Nothing stays in the browser.
+- **The screen stays on** while it runs (`useWakeLock`, the Screen Wake Lock API), since Android suspends a page whose screen goes off.
+

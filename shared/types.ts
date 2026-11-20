@@ -77,7 +77,10 @@ export interface Game {
   xp: number;
   startedAt: string;
   finishedAt: string | null;
-  /** One entry per position, the initial one included, once the game was analysed. */
+  /**
+   * One entry per position from the initial one, once the game was analysed:
+   * all of them, or the first ones of an analysis that stopped halfway.
+   */
   analysis: PositionEval[] | null;
   /**
    * Times moves were taken back (assisted games, through the API). A save or
