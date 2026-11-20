@@ -55,7 +55,9 @@ jobs:
   e2e:
     name: Browser checks
     needs: check
-    runs-on: ubuntu-latest
+    # Playwright 1.56 installs Chromium's system libraries only up to Ubuntu
+    # 24.04; ubuntu-latest moved past it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     services:

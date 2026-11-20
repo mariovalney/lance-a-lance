@@ -33,7 +33,9 @@ on:
 jobs:
   walkthrough:
     name: Play every lesson
-    runs-on: ubuntu-latest
+    # Playwright 1.56 installs Chromium's system libraries only up to Ubuntu
+    # 24.04; ubuntu-latest moved past it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
 
     # Progress lives in the database, so the lessons are played against the
