@@ -771,3 +771,8 @@ Reading 5.5, Mário asked for explanations that are more human, with the moves d
 - **The rule of the square is drawn as an area**, the pawn's square outlined from `a5` to `d8`, and then the king walks in and takes the pawn. The opposition shows the kings locked on `e5` and the king that had to move giving way; the key squares are drawn, the defending king arrives in time to cover all three, and taking the opposition lets the king in on `f5`.
 - **Lucena and Philidor are played in full**: the bridge from the check to the rook on the fourth rank (drawn as an area) and the king walking out until the rook blocks the checks; Philidor's rook holding the sixth rank (an area) and then checking from behind once the pawn reaches it.
 
+### Module 10
+
+- **Areas carry the definitions**: the empty neighbouring file that makes a pawn isolated, and the files ahead of a passed pawn with no enemy pawn; the open file a rook goes to; the bad bishop's 6 squares beside the good bishop's 11 with the same pawns, and the 9 the bad one reaches once it leaves the chain (counted with chess.js).
+- **The plans are played**: the blockade of an isolated pawn, a rook going after doubled pawns, a passed pawn pushed; the rooks doubled on the open file and the one that reaches the seventh rank; the knight to the outpost; the bad bishop offering its trade; and the planning routine on one position, from reading the pawns to the worst piece (a knight with 3 squares) taking the outpost and the rook trade offered on the open file.
+
