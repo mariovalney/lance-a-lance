@@ -27,7 +27,8 @@
     "e2e:reset": "node tests/e2e/reset.cjs",
     "e2e:google": "node tests/e2e/google.cjs",
     "e2e:admin": "node tests/e2e/admin.cjs",
-    "e2e:api": "node tests/e2e/api.cjs"
+    "e2e:api": "node tests/e2e/api.cjs",
+    "e2e:demo": "node tests/e2e/demo.cjs"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",

@@ -148,6 +148,7 @@ jobs:
           pnpm e2e:pwa
           pnpm e2e:game
           pnpm e2e:api
+          pnpm e2e:demo
 
       # The walkthrough plays all 59 lessons and takes about twelve minutes,
       # so it is not here: run the Walkthrough workflow by hand for a change

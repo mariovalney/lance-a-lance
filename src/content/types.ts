@@ -18,6 +18,24 @@ export interface BoardSpec {
   swapColors?: boolean;
   /** Highlights the previous move (from, to). */
   lastMove?: [Square, Square];
+  /**
+   * A stretch of the board seen at once, such as the squares a king can still
+   * reach or a piece's moves: tinted, with its edge outlined.
+   */
+  area?: Square[];
+}
+
+/**
+ * One step of a demonstration on an explain screen's board: its moves, played
+ * from where the step before left the board (the first from `board.fen`), and
+ * what is drawn once they are on the board.
+ */
+export interface DemoFrame {
+  /** Moves in UCI, both sides, in the order they are played. */
+  moves?: string[];
+  arrows?: BoardSpec["arrows"];
+  marks?: BoardSpec["marks"];
+  area?: Square[];
 }
 
 /**
@@ -35,6 +53,11 @@ export interface ExplainScreen {
   tip?: RichString;
   /** Ordered steps shown as a numbered checklist. */
   steps?: RichString[];
+  /**
+   * The steps played out on the board, one frame per step: the screen then
+   * shows one step at a time under the board, and choosing a step plays it.
+   */
+  demo?: DemoFrame[];
 }
 
 /** Tap one square; any square in `targets` is accepted. Retries allowed. */

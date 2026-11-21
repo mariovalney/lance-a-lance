@@ -23,6 +23,31 @@ const MARK_STYLE: Record<MarkKind, CSSProperties> = {
   ring: { boxShadow: "inset 0 0 0 3px hsl(var(--primary))" },
 };
 
+/**
+ * The inset shadow that outlines an area square on each side where the
+ * neighbouring square is outside the area, as the board is turned.
+ */
+function areaEdge(square: Square, area: Set<string>, orientation: "white" | "black"): string {
+  const file = FILES.indexOf(square[0] as (typeof FILES)[number]);
+  const rank = Number(square[1]);
+  const outside = (df: number, dr: number) => {
+    const f = FILES[file + df];
+    const r = rank + dr;
+    return !f || r < 1 || r > 8 || !area.has(`${f}${r}`);
+  };
+  const up = orientation === "white" ? 1 : -1;
+  const right = orientation === "white" ? 1 : -1;
+  const edge = "var(--mark-area-edge)";
+  return [
+    outside(0, up) && `inset 0 2px 0 0 ${edge}`,
+    outside(0, -up) && `inset 0 -2px 0 0 ${edge}`,
+    outside(-right, 0) && `inset 2px 0 0 0 ${edge}`,
+    outside(right, 0) && `inset -2px 0 0 0 ${edge}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 /** Extra state for boards where pieces move. */
 export interface BoardInteraction {
   selected?: Square | null;
@@ -65,6 +90,7 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
   const swap = spec.swapColors ?? false;
 
   const marks = useMemo(() => ({ ...(spec.marks ?? {}), ...(overlay ?? {}) }), [spec.marks, overlay]);
+  const area = useMemo(() => new Set<string>(spec.area ?? []), [spec.area]);
   const labels = spec.labels ?? {};
   const interactive = Boolean(onSquareTap);
   const dots = interaction?.dots ?? [];
@@ -134,6 +160,13 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
           className="relative flex h-full w-full items-center justify-center"
           style={{ cursor: interactive ? "pointer" : "default" }}
         >
+          {area.has(square) && (
+            <div
+              className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+              style={{ background: "var(--mark-area)", boxShadow: areaEdge(square as Square, area, orientation) }}
+              data-area
+            />
+          )}
           {isLast && <div className="pointer-events-none absolute inset-0" style={{ background: "var(--mark-last)" }} />}
           {isSelected && <div className="pointer-events-none absolute inset-0" style={{ background: "var(--mark-selected)" }} />}
           {mark && (

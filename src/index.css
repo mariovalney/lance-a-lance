@@ -46,6 +46,8 @@
     --mark-label-fg: #ffffff;
     --mark-last: rgba(246, 206, 60, 0.42);
     --mark-selected: rgba(246, 206, 60, 0.6);
+    --mark-area: rgba(139, 92, 246, 0.26);
+    --mark-area-edge: rgba(109, 40, 217, 0.85);
     --dot: rgba(21, 26, 35, 0.28);
   }
 
@@ -92,6 +94,8 @@
       --mark-label-fg: #ffffff;
       --mark-last: rgba(246, 206, 60, 0.38);
       --mark-selected: rgba(246, 206, 60, 0.55);
+      --mark-area: rgba(167, 139, 250, 0.32);
+      --mark-area-edge: rgba(196, 181, 253, 0.9);
       --dot: rgba(10, 14, 20, 0.4);
     }
   }
@@ -138,6 +142,8 @@
     --mark-label-fg: #ffffff;
     --mark-last: rgba(246, 206, 60, 0.38);
     --mark-selected: rgba(246, 206, 60, 0.55);
+    --mark-area: rgba(167, 139, 250, 0.32);
+    --mark-area-edge: rgba(196, 181, 253, 0.9);
     --dot: rgba(10, 14, 20, 0.4);
   }
 }

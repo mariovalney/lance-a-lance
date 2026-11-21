@@ -2,7 +2,7 @@ import type { LessonDef, Screen } from "@/content/types";
 import MATES from "@/content/data/mates.json";
 import { MATE_IN_ONE_POOL } from "@/content/lessons/m3-l3-xeque-mate";
 import { boardFor, isLegalPosition, mateMoves, placementToFen, randomVariant } from "@/content/lib/positions";
-import { boxSize, boxSquares, judgeApproach, judgeShrink, kingsApart, threatenedPiece, type BoxRule } from "@/content/lib/box";
+import { boxDemo, boxSize, judgeApproach, judgeShrink, kingsApart, threatenedPiece, type BoxRule } from "@/content/lib/box";
 import { legalMoves, load, uciOf } from "@/lib/chess/game";
 import { ALL_SQUARES, type Square } from "@/lib/chess/squares";
 import { pick, pickDistinct, shuffle } from "@/lib/random";
@@ -161,11 +161,16 @@ export const lessonMateEm1: LessonDef = {
       title: "Como achar o mate",
       text: "Todo mate começa com um **xeque**. Então olhe os xeques, um por um.",
       steps: [
-        "Ache todos os lances que dão xeque.",
+        "Ache todos os lances que dão xeque. Aqui só tem um: a torre em `e8`.",
         "Para cada um, pergunte: o rei tem para onde fugir? Dá para colocar uma peça na frente? Dá para capturar quem deu o xeque?",
-        "Três vezes não: é mate.",
+        "O rei não foge: `f8` e `h8` estão na linha da torre, e os próprios peões tampam o resto. Ninguém tampa nem captura. Três vezes não: é mate.",
       ],
-      board: { fen: "6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1", arrows: [{ from: "e1", to: "e8" }] },
+      board: { fen: "6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1" },
+      demo: [
+        { arrows: [{ from: "e1", to: "e8" }] },
+        { moves: ["e1e8"], marks: { g8: "focus" } },
+        { marks: { g8: "bad", f8: "soft", h8: "soft", f7: "soft", g7: "soft", h7: "soft" } },
+      ],
       tip: "Comece pelos xeques das peças que chegam mais perto do rei.",
     },
     ...mateInOne(MATE_IN_ONE_POOL.filter((p) => p.transform !== false).map((p) => p.fen), 3, "m1-padrao"),
@@ -220,7 +225,7 @@ function defenseRounds(n: number): Screen[] {
           const mate = mateMoves(g.fen())[0];
           return `Depois de \`${m.san}\`, vem \`${mate.san}\` e é mate. Abra uma casa de fuga para o rei ou proteja a última fileira.`;
         },
-        success: "Mate evitado. Uma casa de fuga para o rei resolve muitos problemas.",
+        success: "Mate evitado. Com uma casa de fuga ou uma peça cuidando da última fileira, esse xeque deixa de ser mate.",
         mistakeNote: "Defender o mate do corredor",
       } satisfies Screen;
     });
@@ -262,7 +267,12 @@ export const lessonCorredor: LessonDef = {
         "Os peões da frente dele ainda não andaram?",
         "Ninguém defende essa fileira? Então leve a torre ou a dama para lá.",
       ],
-      board: { fen: "3R2k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1", marks: { g8: "bad", f7: "soft", g7: "soft", h7: "soft" } },
+      board: { fen: "6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1" },
+      demo: [
+        { marks: { g8: "focus" }, area: ["a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8"] },
+        { marks: { g8: "focus", f7: "soft", g7: "soft", h7: "soft" } },
+        { moves: ["d1d8"], marks: { g8: "bad" } },
+      ],
     },
     ...mateInOne(BACK_RANK, 3, "corredor"),
     ...puzzleRounds("backRankMate", 2, {
@@ -285,8 +295,6 @@ export const lessonCorredor: LessonDef = {
 
 /* ---------- 5.3 dama e rei ---------- */
 
-/** The queen a knight's jump from the king: the box is what the marks show. */
-const CAIXA = "8/8/3k4/8/2Q5/8/8/4K3 w - - 0 1";
 
 export const lessonDamaRei: LessonDef = {
   id: "m5-l3",
@@ -297,14 +305,20 @@ export const lessonDamaRei: LessonDef = {
     {
       kind: "explain",
       title: "A caixa",
-      text: "A **caixa** é o pedaço do tabuleiro onde o rei adversário ainda pode andar. O mate vem em quatro passos:",
+      text: "A **caixa** é o pedaço do tabuleiro onde o rei adversário ainda pode andar. Cada lance seu deixa a caixa menor.",
       steps: [
         "Ponha a dama a um salto de cavalo do rei: ele fica preso numa caixa.",
         "Quando ele andar, ande com a dama e mantenha o salto de cavalo. A caixa encolhe.",
         "Com o rei dele na borda, pare de encolher e traga o seu rei.",
         "Com os reis perto, a dama dá o mate na borda.",
       ],
-      board: { fen: CAIXA, marks: { ...Object.fromEntries(boxSquares(CAIXA).map((sq) => [sq, "soft"])), d6: "focus" } },
+      board: { fen: "8/8/3k4/8/8/2K5/8/7Q w - - 0 1" },
+      demo: boxDemo("8/8/3k4/8/8/2K5/8/7Q w - - 0 1", [
+        { moves: ["h1e4"], box: true },
+        { moves: ["d6c7", "e4d5", "c7b8"], box: true },
+        { moves: ["c3b4", "b8c7", "b4b5", "c7c8", "b5b6", "c8b8"], box: true },
+        { moves: ["d5d8"], marks: { b8: "bad" } },
+      ]),
     },
     ...shrinkBox(["Q"], 2, "caixa-dama", "a dama", "knight", "Encolha a caixa: leve a dama a um salto de cavalo do rei."),
     approachKing(["Q"], "rei-dama", "a dama"),
@@ -331,19 +345,20 @@ export const lessonDuasTorres: LessonDef = {
     {
       kind: "explain",
       title: "A escada",
-      text: "As torres empurram o rei degrau por degrau até a borda, sem ajuda do seu rei:",
+      text: "As torres empurram o rei degrau por degrau até a borda, sem ajuda do seu rei.",
       steps: [
         "Uma torre fecha uma fileira (ou coluna): o rei não passa dela.",
-        "A outra dá xeque na seguinte, e o rei recua.",
+        "A outra dá xeque na fileira seguinte, e o rei recua.",
         "Elas se revezam, e a caixa perde uma fileira a cada vez.",
+        "Na borda, o xeque é mate.",
       ],
-      board: {
-        fen: "8/8/8/3k4/R7/1R6/8/6K1 w - - 0 1",
-        arrows: [
-          { from: "a4", to: "h4", tone: "hint" },
-          { from: "b3", to: "b5" },
-        ],
-      },
+      board: { fen: "8/8/8/3k4/R7/1R6/8/6K1 w - - 0 1" },
+      demo: boxDemo("8/8/8/3k4/R7/1R6/8/6K1 w - - 0 1", [
+        { arrows: [{ from: "a4", to: "h4", tone: "hint" }], box: true },
+        { moves: ["b3b5", "d5e6"], box: true },
+        { moves: ["a4a6", "e6e7", "b5b7", "e7e8"], box: true },
+        { moves: ["a6a8"], marks: { e8: "bad" } },
+      ]),
       tip: "Se o rei chegar perto de uma torre, leve essa torre para o outro lado do tabuleiro.",
     },
     ...shrinkBox(["R", "R"], 2, "degrau", "uma torre", "check", "Suba um degrau: dê o xeque que empurra o rei para trás."),
@@ -372,8 +387,14 @@ export const lessonTorreRei: LessonDef = {
         "Com os reis frente a frente, a torre dá xeque e o rei dele recua.",
         "Na borda, esse xeque é mate.",
       ],
-      board: { fen: "4k3/8/4K3/8/8/8/8/R7 w - - 0 1", arrows: [{ from: "a1", to: "a8" }], marks: { e8: "focus" } },
-      tip: "Os reis frente a frente, com uma casa entre eles, é a chamada oposição.",
+      board: { fen: "8/4k3/8/8/8/4K3/8/7R w - - 0 1" },
+      demo: boxDemo("8/4k3/8/8/8/4K3/8/7R w - - 0 1", [
+        { moves: ["h1h6"], box: true },
+        { moves: ["e7d7", "e3e4", "d7d8", "e4e5", "d8e7"], marks: { e5: "focus", e7: "focus" }, box: true },
+        { moves: ["h6h7", "e7e8"], box: true },
+        { moves: ["e5d6", "e8f8", "d6e6", "f8g8", "e6f6", "g8f8", "h7h8"], marks: { f8: "bad" } },
+      ]),
+      tip: "Reis frente a frente, com uma casa entre eles: isso se chama **oposição**.",
     },
     ...shrinkBox(["R"], 2, "caixa-torre", "a torre", "smallest", "Corte o rei com a torre: deixe-o com o menor número de casas."),
     approachKing(["R"], "rei-torre", "a torre"),
@@ -450,14 +471,20 @@ export const lessonPastor: LessonDef = {
     {
       kind: "explain",
       title: "A defesa",
-      text: "Não precisa ter medo desse ataque. Defenda `f7` e aproveite que a dama saiu cedo:",
+      text: "Não precisa ter medo desse ataque. Defenda `f7` e aproveite que a dama saiu cedo.",
       steps: [
         "Jogue `e5` e `Nc6`: centro e peça nova no jogo.",
         "Contra `Qh5`, o peão em `g6` expulsa a dama.",
         "Contra `Qf3`, o cavalo em `f6` fecha o caminho até `f7`.",
         "Cada fuga da dama é um lance a mais para você desenvolver.",
       ],
-      board: { fen: "r1bqkbnr/pppp1p1p/2n3p1/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 4", arrows: [{ from: "g6", to: "h5", tone: "good" }] },
+      board: { fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", orientation: "black" },
+      demo: [
+        { moves: ["e2e4", "e7e5", "f1c4", "b8c6"], arrows: [{ from: "c4", to: "f7", tone: "hint" }] },
+        { moves: ["d1h5", "g7g6"], arrows: [{ from: "g6", to: "h5", tone: "good" }] },
+        { moves: ["h5f3", "g8f6"], marks: { f6: "good", f7: "soft" } },
+        { moves: ["b1c3", "f8g7"], marks: { c6: "good", f6: "good", g7: "good" } },
+      ],
     },
     ...PASTOR_DEFENSE.map(({ fen, solution }) => ({
       kind: "move" as const,

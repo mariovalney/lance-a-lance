@@ -1,5 +1,6 @@
 /* Builds every lesson many times and checks each generated screen.
  * Run: pnpm validate */
+import { Chess } from "chess.js";
 import { CURRICULUM, buildLesson, repeats } from "@/content/curriculum";
 import type { BoardSpec, Screen } from "@/content/types";
 import { ALL_SQUARES, type Square } from "@/lib/chess/squares";
@@ -35,6 +36,26 @@ function checkBoard(where: string, b: BoardSpec | undefined) {
   for (const sq of Object.keys(b.marks ?? {})) if (!isSquare(sq)) errors.push(`${where}: bad mark square ${sq}`);
   for (const sq of Object.keys(b.labels ?? {})) if (!isSquare(sq)) errors.push(`${where}: bad label square ${sq}`);
   for (const a of b.arrows ?? []) if (!isSquare(a.from) || !isSquare(a.to)) errors.push(`${where}: bad arrow ${a.from}-${a.to}`);
+  for (const sq of b.area ?? []) if (!isSquare(sq)) errors.push(`${where}: bad area square ${sq}`);
+}
+
+/** A demonstration: one frame per step, every move legal from where the step before left the board. */
+function checkDemo(where: string, s: import("@/content/types").ExplainScreen) {
+  if (!s.demo) return;
+  if (!s.steps || s.demo.length !== s.steps.length) errors.push(`${where}: demo needs one frame per step`);
+  if (!s.board?.fen) return errors.push(`${where}: demo needs a board position`);
+  const game = new Chess(s.board.fen);
+  s.demo.forEach((frame, i) => {
+    checkBoard(`${where} demo ${i + 1}`, { arrows: frame.arrows, marks: frame.marks, area: frame.area });
+    for (const uci of frame.moves ?? []) {
+      try {
+        game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+      } catch {
+        errors.push(`${where} demo ${i + 1}: illegal move ${uci} in ${game.fen()}`);
+        return;
+      }
+    }
+  });
 }
 
 function checkScreen(where: string, s: Screen) {
@@ -44,6 +65,8 @@ function checkScreen(where: string, s: Screen) {
       checkRich(where, s.text);
       checkRich(where, s.tip);
       checkBoard(where, s.board);
+      for (const step of s.steps ?? []) checkRich(where, step);
+      checkDemo(where, s);
       return;
     case "tap": {
       checkRich(where, s.prompt);

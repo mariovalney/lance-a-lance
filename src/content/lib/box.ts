@@ -1,6 +1,8 @@
 import type { Chess, Move } from "chess.js";
 import { readMove } from "@shared/notation";
 import { FILES, fileIndex, rankOf, toSquare, type Square } from "@/lib/chess/squares";
+import { load, parseUci } from "@/lib/chess/game";
+import type { DemoFrame } from "@/content/types";
 
 /*
  * The "box" of the basic mates: the part of the board the lone king can still
@@ -150,6 +152,23 @@ export function loneKingToMove(fen: string): Look {
 export function boxSquares(fen: string): Square[] {
   const { board, turn } = parse(fen);
   return look(board, other(turn)).squares;
+}
+
+/**
+ * A demonstration of a basic mate: each step with `box` draws the lone king's
+ * box as it stands once that step's moves are on the board.
+ */
+export function boxDemo(fen: string, frames: (DemoFrame & { box?: boolean })[]): DemoFrame[] {
+  const game = load(fen);
+  return frames.map(({ box, ...frame }) => {
+    for (const uci of frame.moves ?? []) game.move(parseUci(uci));
+    if (!box) return frame;
+    const now = game.fen();
+    const { board, turn } = parse(now);
+    // The side to move is the attacker unless it has nothing but its king.
+    const lone = [...board.values()].filter((p) => colorOf(p) === turn).length === 1 ? turn : other(turn);
+    return { ...frame, area: look(board, lone).squares };
+  });
 }
 
 /** How far apart the two kings stand, in king steps. */
