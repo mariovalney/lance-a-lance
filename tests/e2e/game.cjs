@@ -246,7 +246,7 @@ const { chromium } = require("playwright");
   await copied();
   const analysed = await p.evaluate(() => navigator.clipboard.readText());
   const judged = g.marks.filter(Boolean).length;
-  check(judged === 0 || /\$[246] \{ [^}]*Melhor era [^}]+\}/.test(analysed), `the PGN carries the judgements (${judged} judged: ${analysed.split("\n\n")[1]?.slice(0, 200)})`);
+  check(judged === 0 || /\$[246]\s+\{\s+[^}]*Melhor\s+era\s+[^}]+\}/.test(analysed), `the PGN carries the judgements (${judged} judged: ${analysed.split("\n\n")[1]?.slice(0, 200)})`);
 
   // An only move (!), on a hand-written analysis: the first move was the
   // engine's best, and the best of the others would have been a blunder.
@@ -268,7 +268,7 @@ const { chromium } = require("playwright");
     await p.getByRole("button", { name: "Copiar PGN" }).click();
     await copied();
     const withOnly = await p.evaluate(() => navigator.clipboard.readText());
-    check(/\$1\s+\{ Lance único\.\s+Qualquer\s+outro\s+seria\s+um\s+erro\s+grave\./.test(withOnly), `and in the PGN as $1 (${withOnly.split("\n\n")[1]?.slice(0, 120)})`);
+    check(/\$1\s+\{\s+Lance\s+único\.\s+Qualquer\s+outro\s+seria\s+um\s+erro\s+grave\./.test(withOnly), `and in the PGN as $1 (${withOnly.split("\n\n")[1]?.slice(0, 120)})`);
   }
 
   await p.getByRole("button", { name: "Fechar" }).click();
@@ -382,7 +382,7 @@ const { chromium } = require("playwright");
     await p.getByRole("button", { name: "Copiar PGN" }).click();
     await copied();
     const withBrilliant = await p.evaluate(() => navigator.clipboard.readText());
-    check(/Nxe5 \$3\s+\{ Brilhante\.\s+Com\s+Nxe5,/.test(withBrilliant), `and in the PGN as $3 (${withBrilliant.split("\n\n")[1]?.slice(0, 120)})`);
+    check(/Nxe5\s+\$3\s+\{\s+Brilhante\.\s+Com\s+Nxe5,/.test(withBrilliant), `and in the PGN as $3 (${withBrilliant.split("\n\n")[1]?.slice(0, 120)})`);
   }
 
   // Somebody else's game, or no game at all, is not found, and says so.
