@@ -766,3 +766,8 @@ Reading 5.5, Mário asked for explanations that are more human, with the moves d
 - **Each opening is played from the first move**, a step per idea: 1.e4 e5 2.Nf3 Nc6 3.Bc4 with the bishop's aim at `f7`; the London's bishop out before `e3`, then the pyramid drawn as an area; the Queen's Gambit offered, taken, and the pawn won back; 1...e5 for Black up to the freeing `d5`; the Queen's Gambit Declined up to `c5`. The plans, which had no board, now play their steps from the position the lesson's line reaches, and a step starts over from another position where the plan needs one (`Ng5` against `f7`).
 - **Nothing an exercise asks is played before it.** The weak `b2` of the London shows the attack, not the defence the next screen asks for, and the elephant trap stops at `Nxd5`, which only looks safe because the knight on `f6` seems pinned; the lesson's line then asks for the refutation.
 
+### Module 11
+
+- **The rule of the square is drawn as an area**, the pawn's square outlined from `a5` to `d8`, and then the king walks in and takes the pawn. The opposition shows the kings locked on `e5` and the king that had to move giving way; the key squares are drawn, the defending king arrives in time to cover all three, and taking the opposition lets the king in on `f5`.
+- **Lucena and Philidor are played in full**: the bridge from the check to the rook on the fourth rank (drawn as an area) and the king walking out until the rook blocks the checks; Philidor's rook holding the sixth rank (an area) and then checking from behind once the pawn reaches it.
+
