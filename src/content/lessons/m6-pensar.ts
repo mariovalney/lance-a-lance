@@ -379,9 +379,20 @@ export const lessonAmeaca: LessonDef = {
     {
       kind: "explain",
       title: "A primeira pergunta",
-      text: "Muita peça se perde porque ninguém olhou o último lance do adversário. Antes de jogar, pergunte:",
-      steps: ["Para onde a peça dele foi?", "O que ela ataca agora?", "O que ela deixou de defender?", "Ele ameaça mate?"],
-      board: { fen: "6k1/5ppp/8/8/3N4/2b5/5PPP/6K1 w - - 0 1", lastMove: ["a5", "c3"], arrows: [{ from: "c3", to: "d4" }], marks: { d4: "focus" } },
+      text: "Muita peça se perde porque ninguém olhou o último lance do adversário. Antes de jogar, pergunte.",
+      steps: [
+        "Para onde a peça dele foi? O bispo saiu de `e7` para `b4`.",
+        "O que ela ataca agora? O seu cavalo de `c3`, que está sem defesa.",
+        "O que ela deixou de defender? O cavalo de `g5`: agora o seu bispo pode capturá-lo de graça.",
+        "Ele ameaça mate? Aqui, não.",
+      ],
+      board: { fen: "6k1/4bppp/8/6n1/8/2N5/P4PPP/2B3K1 b - - 0 1" },
+      demo: [
+        { moves: ["e7b4"], marks: { b4: "focus" } },
+        { arrows: [{ from: "b4", to: "c3" }], marks: { c3: "bad" } },
+        { arrows: [{ from: "c1", to: "g5", tone: "good" }], marks: { g5: "good" } },
+        { marks: { g1: "focus" } },
+      ],
       tip: "Achou a ameaça? Defenda sem deixar outra peça sua sozinha.",
     },
     ...threatPair(),
@@ -400,19 +411,37 @@ export const lessonCCT: LessonDef = {
       kind: "explain",
       title: "Os lances forçados",
       text: "Na sua vez, comece pelos lances que obrigam o adversário a responder. Eles deixam pouca escolha para ele, e é neles que aparecem os golpes.",
-      steps: ["Xeques: quais peças suas podem dar xeque?", "Capturas: o que dá para capturar, saindo no lucro?", "Ameaças: que lance ataca uma peça dele?"],
+      steps: [
+        "Xeques: quais peças suas podem dar xeque? Aqui, o cavalo, em `d6` ou em `c7`. Em `c7`, ele ainda ataca a torre.",
+        "Capturas: o que dá para capturar, saindo no lucro? Aqui, o cavalo de `d5`, que está sem defesa.",
+        "Ameaças: que lance ataca uma peça dele? Aqui, o peão vai a `e5` e ataca o cavalo, que vale mais.",
+      ],
+      board: { fen: "r3k3/pp3ppp/8/1N6/8/8/PP3PPP/6K1 w - - 0 1" },
+      demo: [
+        { moves: ["b5c7"], marks: { e8: "focus", a8: "focus" } },
+        { fen: "6k1/5ppp/8/3n4/8/8/5PPP/3Q2K1 w - - 0 1", moves: ["d1d5"] },
+        { fen: "6k1/5ppp/5n2/8/4P3/8/5PPP/6K1 w - - 0 1", moves: ["e4e5"], arrows: [{ from: "e5", to: "f6" }] },
+      ],
     },
     ...([checkersRound(), capturesRound(), freePieceRound("cct-ganho", "Uma captura ganha material de graça. Encontre-a."), capturesRound()].filter(Boolean) as Screen[]),
     {
       kind: "explain",
       title: "Ameaças",
-      text: "Sem xeque e sem captura boa, procure uma **ameaça**: um lance que ataca uma peça que ele não pode deixar cair. Ou ela está sem defesa, ou vale mais que a peça que ataca.",
-      board: { fen: "6k1/5ppp/2n5/8/8/8/5PPP/5BK1 w - - 0 1", arrows: [{ from: "f1", to: "b5", tone: "good" }, { from: "b5", to: "c6" }], marks: { c6: "focus" } },
+      text: "Sem xeque e sem captura boa, procure uma **ameaça**: um lance que ataca uma peça que ele não pode deixar cair.",
+      steps: ["Uma peça sem defesa: o bispo vai a `b5` e ataca o cavalo solto.", "Uma peça que vale mais que a sua: o cavalo vai a `b5` e ataca a dama."],
+      board: { fen: "6k1/5ppp/2n5/8/8/8/5PPP/5BK1 w - - 0 1" },
+      demo: [
+        { moves: ["f1b5"], arrows: [{ from: "b5", to: "c6" }], marks: { c6: "focus" } },
+        { fen: "6k1/5ppp/3q4/8/3N4/8/5PPP/6K1 w - - 0 1", moves: ["d4b5"], arrows: [{ from: "b5", to: "d6" }], marks: { d6: "focus" } },
+      ],
       tip: "Uma boa ameaça não deixa nenhuma peça sua sozinha.",
     },
     ...([threatRound("cct-ameaca", "Nada para capturar. Faça um lance que ameace ganhar uma peça."), threatRound("cct-ameaca", "Faça um lance que ameace ganhar uma peça.")].filter(Boolean) as Screen[]),
   ],
 };
+
+/** A loose bishop under attack that can be protected, moved to a protected square or traded. */
+const LOOSE_BISHOP = "6k1/5ppp/5b2/8/3B4/8/1P3PPP/2R3K1 w - - 0 1";
 
 export const lessonSoltas: LessonDef = {
   id: "m6-l3",
@@ -438,8 +467,18 @@ export const lessonSoltas: LessonDef = {
     {
       kind: "explain",
       title: "Como consertar",
-      text: "Achou uma peça sua solta? Três jeitos de resolver:",
-      steps: ["Proteja com outra peça.", "Leve a peça para uma casa protegida.", "Troque-a por uma peça dele."],
+      text: "Achou uma peça sua solta? Aqui é o bispo de `d4`, e o bispo preto ataca ele.",
+      steps: [
+        "Proteja com outra peça: a torre vai para `d1`.",
+        "Leve a peça para uma casa protegida: em `c3`, o peão de `b2` defende o bispo.",
+        "Troque-a por uma peça dele: o bispo captura em `f6`.",
+      ],
+      board: { fen: LOOSE_BISHOP },
+      demo: [
+        { moves: ["c1d1"], arrows: [{ from: "d1", to: "d4", tone: "good" }] },
+        { fen: LOOSE_BISHOP, moves: ["d4c3"], arrows: [{ from: "b2", to: "c3", tone: "good" }] },
+        { fen: LOOSE_BISHOP, moves: ["d4f6", "g7f6"] },
+      ],
     },
     ...([protectLooseRound(), protectLooseRound(), looseRound("b")].filter(Boolean) as Screen[]),
   ],

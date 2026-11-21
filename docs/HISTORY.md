@@ -792,3 +792,8 @@ Reading 5.5, Mário asked for explanations that are more human, with the moves d
 
 - **Material and trades are counted on the board.** The material screen adds up each side, pieces marked, and subtracts; a trade and the capture of a protected queen are played capture by capture, each step with the points won or lost and the balance on the last one (3 - 5 = -2, 9 - 3 = +6).
 - **Notation is read as it is played**: `e4` and `e5` with no letter for the pawn, `Nf3` and `Nc6` with the reason the knight is `N` (the `K` is the king's), `Bb5` with the capital for the piece and the lowercase for the file. The symbols get a move each (`Bxc6`, castling, `Rd8#`, `e8=Q`) instead of one sentence listing six, and the two knights that reach `d2` are shown before `Nbd2` is played and `R1e2` is played on a board of its own.
+
+### Module 6
+
+- **The questions are asked on one position each, with their answers.** The first question plays the bishop's move from `e7` to `b4` and answers each step: where it went, the loose knight it attacks, the knight on `g5` it no longer defends, and no mate threat. The forced moves show a knight check that forks king and rook, a free capture and a pawn that attacks a knight worth more, each on a board of its own.
+- **Threats and fixes are played.** A threat on a loose piece and one on a piece worth more (a knight attacking the queen); a loose bishop under attack protected by the rook, moved to a square the pawn defends, and traded, the three from the same position. The fix screen no longer announces "três jeitos".
