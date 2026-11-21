@@ -103,21 +103,35 @@ export const lessonCapturarProteger: LessonDef = {
     {
       kind: "explain",
       title: "Capturar",
-      text: "Para capturar, sua peça vai até a casa de uma peça adversária, que sai do tabuleiro. Cada peça captura do jeito que anda, menos o peão.",
-      board: { fen: "8/8/8/3p4/8/8/8/3R4 w - - 0 1", arrows: [{ from: "d1", to: "d5", tone: "good" }], marks: { d5: "focus" } },
+      text: "Capturar é tirar uma peça do adversário do tabuleiro.",
+      steps: [
+        "Sua peça vai até a casa da peça adversária.",
+        "A peça capturada sai do tabuleiro, e a sua fica no lugar dela.",
+        "Cada peça captura do jeito que anda. Só o peão é diferente: anda reto e captura na diagonal.",
+      ],
+      board: { fen: "8/8/8/1p1p4/2P5/8/8/3R4 w - - 0 1" },
+      demo: [
+        { arrows: [{ from: "d1", to: "d5", tone: "good" }], marks: { d5: "focus" } },
+        { moves: ["d1d5"] },
+        { moves: ["c4b5"] },
+      ],
     },
     ...safeCaptureRounds(2),
     {
       kind: "explain",
       title: "Proteger",
-      text: "Uma peça está **protegida** quando outra peça sua pode capturar de volta quem a capturar. Peça sem proteção é alvo fácil.",
-      board: boardFor("4r3/8/8/8/4N3/3P4/8/8 w - - 0 1", {
-        arrows: [
-          { from: "e8", to: "e4" },
-          { from: "d3", to: "e4", tone: "good" },
-        ],
-        marks: { e4: "focus" },
-      }),
+      text: "Uma peça está **protegida** quando outra peça sua pode capturar de volta quem a capturar.",
+      steps: [
+        "A torre preta ataca o seu cavalo em `e4`.",
+        "Se ela capturar, o seu peão captura de volta.",
+        "A torre vale mais que o cavalo: essa troca não compensa para ela. Peça sem proteção, ao contrário, sai de graça.",
+      ],
+      board: boardFor("4r3/8/8/8/4N3/3P4/8/8 w - - 0 1"),
+      demo: [
+        { arrows: [{ from: "e8", to: "e4" }, { from: "d3", to: "e4", tone: "good" }], marks: { e4: "focus" } },
+        { moves: ["e8e4", "d3e4"] },
+        { marks: { e4: "good" } },
+      ],
       tip: "Antes de cada lance, pergunte: minhas peças estão protegidas?",
     },
     ...protectRounds(2),

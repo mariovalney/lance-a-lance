@@ -31,6 +31,11 @@ export interface BoardSpec {
  * what is drawn once they are on the board.
  */
 export interface DemoFrame {
+  /**
+   * The position this step starts from, instead of where the step before left
+   * the board: to show another way out of the same position.
+   */
+  fen?: string;
   /** Moves in UCI, both sides, in the order they are played. */
   moves?: string[];
   arrows?: BoardSpec["arrows"];

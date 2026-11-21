@@ -115,13 +115,16 @@ export const lessonEnPassant: LessonDef = {
     {
       kind: "explain",
       title: "En passant",
-      text: "Se um peão adversário avança **duas casas** e para bem ao lado do seu, você pode capturá-lo como se ele tivesse andado só uma. Isso se chama **en passant** (\"de passagem\").",
-      board: {
-        fen: "8/8/8/3pP3/8/8/8/8 w - d6 0 1",
-        lastMove: ["d7", "d5"],
-        arrows: [{ from: "e5", to: "d6", tone: "good" }],
-        marks: { d5: "focus" },
-      },
+      text: "Um jeito especial de o peão capturar: **en passant** (\"de passagem\").",
+      steps: [
+        "O peão adversário avança duas casas e para bem ao lado do seu.",
+        "Você captura como se ele tivesse andado só uma: o seu peão vai para `d6`, e o dele sai do tabuleiro.",
+      ],
+      board: { fen: "8/3p4/8/4P3/8/8/8/8 b - - 0 1" },
+      demo: [
+        { moves: ["d7d5"], arrows: [{ from: "e5", to: "d6", tone: "good" }], marks: { d5: "focus" } },
+        { moves: ["e5d6"] },
+      ],
       tip: "Só vale no lance logo em seguida. Se você jogar outra coisa, perde a chance.",
     },
     ...captureRounds(2),

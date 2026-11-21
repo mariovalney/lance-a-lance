@@ -11,10 +11,11 @@ import type { Square } from "@/lib/chess/squares";
 const FIRST_MOVE_MS = 450;
 const NEXT_MOVE_MS = 750;
 
-/** Where each step of a demonstration starts: the position the steps before it left. */
+/** Where each step of a demonstration starts: its own position, or the one the steps before it left. */
 function stepStarts(fen: string, demo: DemoFrame[]): string[] {
-  const game = load(fen);
+  let game = load(fen);
   return demo.map((frame) => {
+    if (frame.fen) game = load(frame.fen);
     const start = game.fen();
     for (const uci of frame.moves ?? []) playDemoMove(game, uci);
     return start;

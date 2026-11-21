@@ -102,28 +102,31 @@ export const lessonRoque: LessonDef = {
     {
       kind: "explain",
       title: "O roque",
-      text: "No **roque**, o rei anda duas casas em direção a uma torre, e a torre pula para o outro lado dele. É um lance só, que esconde o rei e ativa a torre.",
-      board: {
-        fen: "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
-        arrows: [
-          { from: "e1", to: "g1" },
-          { from: "h1", to: "f1", tone: "hint" },
-          { from: "e1", to: "c1" },
-          { from: "a1", to: "d1", tone: "hint" },
-        ],
-      },
-      tip: "Roque pequeno, para o lado de `h`: `O-O`. Roque grande, para o lado de `a`: `O-O-O`.",
+      text: "O **roque** é um lance só, que esconde o rei e coloca a torre no jogo.",
+      steps: [
+        "Roque pequeno, para o lado de `h`: o rei anda duas casas até `g1`, e a torre pula para `f1`.",
+        "Roque grande, para o lado de `a`: o rei anda duas casas até `c8`, e a torre pula para `d8`.",
+      ],
+      board: { fen: "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1" },
+      demo: [{ moves: ["e1g1"] }, { moves: ["e8c8"] }],
+      tip: "Na notação, o roque pequeno é `O-O` e o grande, `O-O-O`.",
     },
     ...castleRounds(),
     {
       kind: "explain",
       title: "Quando não pode",
-      text: "Não dá para rocar se o rei ou aquela torre já se mexeram, se o rei está em xeque, se há peças entre eles, ou se o rei passaria ou pararia em casa atacada.",
-      board: {
-        fen: "rn1qkbnr/ppp2ppp/8/3pp3/8/5NPb/PPPPPP1P/RNBQK2R w KQkq - 0 4",
-        marks: { f1: "bad", h3: "focus" },
-        arrows: [{ from: "h3", to: "f1" }],
-      },
+      text: "Nem sempre dá para rocar. Confira antes.",
+      steps: [
+        "O rei e aquela torre ainda não se mexeram?",
+        "As casas entre eles estão vazias?",
+        "O rei não está em xeque e não passa nem para em casa atacada? Aqui o bispo de `h3` ataca `f1`: não pode.",
+      ],
+      board: { fen: "rn1qkbnr/ppp2ppp/8/3pp3/8/5NPb/PPPPPP1P/RNBQK2R w KQkq - 0 4" },
+      demo: [
+        { marks: { e1: "good", h1: "good" } },
+        { marks: { f1: "good", g1: "good" } },
+        { arrows: [{ from: "h3", to: "f1" }], marks: { f1: "bad", h3: "focus" } },
+      ],
     },
     ...canCastleRounds(3),
   ],

@@ -750,3 +750,8 @@ Reading 5.5, Mário asked for explanations that are more human, with the moves d
 - **A lone piece moves twice in a row.** On a teaching diagram where the side to move has no king (one rook showing how it moves), that side passes and the same piece moves again (`playDemoMove`); anywhere else the turns are the game's, so a two-sided demo with a move out of turn still fails the validator.
 - **Module 2** shows each piece's reach and counts it, the numbers that later make the case for the centre: the rook reaches 14 squares from anywhere on an empty board, the bishop 13 in the centre and 7 in a corner, the queen 27 and 21 on the edge, the king 8 and 3, the knight 8 and 2. Each lesson's second explanation plays what a piece in the way does: an own piece stops the line, an enemy piece is captured, and the knight jumps out over its pawns. The pawn shows the double step, the capture and a promotion to a queen.
 
+### Module 3
+
+- **A step can start over from a position of its own** (`DemoFrame.fen`), to show another answer to the same position: the three ways out of a check (flee, block, capture, from one position where all three exist), the check that is not mate next to the one that is, and the queen move that stalemates next to the one that mates.
+- **Module 3** plays a capture with a piece and with a pawn, a protected knight that the rook would take at a loss, a check given and answered, the safe squares around a king next to an attacked file (as an area), the back rank mate checked step by step, the stalemate that comes from a careless queen move, castling on both sides, a knight promotion that forks king and queen, and en passant from the double step on.
+

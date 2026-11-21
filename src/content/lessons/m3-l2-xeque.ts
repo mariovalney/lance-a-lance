@@ -144,22 +144,33 @@ export const lessonXeque: LessonDef = {
     {
       kind: "explain",
       title: "Xeque",
-      text: "Quando uma peça ataca o rei, é **xeque**. O rei nunca é capturado: quem está em xeque precisa resolver isso no mesmo lance.",
-      board: { fen: "4k3/8/8/8/8/8/8/4R1K1 b - - 0 1", arrows: [{ from: "e1", to: "e8" }], marks: { e8: "bad" } },
+      text: "Quando uma peça ataca o rei, é **xeque**.",
+      steps: [
+        "A torre vai para `e1` e ataca o rei em `e8`: xeque.",
+        "O rei nunca é capturado. Quem está em xeque precisa sair dele já no lance seguinte.",
+      ],
+      board: { fen: "4k3/8/8/8/8/8/8/R5K1 w - - 0 1" },
+      demo: [
+        { moves: ["a1e1"], arrows: [{ from: "e1", to: "e8" }], marks: { e8: "bad" } },
+        { moves: ["e8f7"] },
+      ],
     },
     ...giveCheckRounds(2),
     {
       kind: "explain",
       title: "Três saídas",
-      text: "Para sair do xeque: **fugir** com o rei, **bloquear** colocando uma peça no caminho, ou **capturar** a peça que dá o xeque.",
-      board: {
-        fen: "4r1k1/8/8/8/8/8/3B4/4K3 w - - 0 1",
-        marks: { e8: "focus" },
-        arrows: [
-          { from: "e1", to: "d1", tone: "good" },
-          { from: "d2", to: "e3", tone: "good" },
-        ],
-      },
+      text: "O seu rei está em xeque pela torre de `e8`. Há três jeitos de sair.",
+      steps: [
+        "**Fugir**: o rei sai da linha do ataque.",
+        "**Bloquear**: uma peça sua entra no caminho.",
+        "**Capturar** a peça que dá o xeque.",
+      ],
+      board: { fen: "R3r1k1/8/8/8/8/8/3B4/4K3 w - - 0 1", marks: { e8: "focus" } },
+      demo: [
+        { fen: "R3r1k1/8/8/8/8/8/3B4/4K3 w - - 0 1", moves: ["e1d1"] },
+        { fen: "R3r1k1/8/8/8/8/8/3B4/4K3 w - - 0 1", moves: ["d2e3"] },
+        { fen: "R3r1k1/8/8/8/8/8/3B4/4K3 w - - 0 1", moves: ["a8e8"] },
+      ],
       tip: "Contra xeque de cavalo não dá para bloquear: ele pula.",
     },
     ...escapeRounds(3),
@@ -167,7 +178,12 @@ export const lessonXeque: LessonDef = {
       kind: "explain",
       title: "O rei nunca entra em xeque",
       text: "O rei não pode ir para uma casa atacada por peça adversária. Quando você toca no rei, só aparecem as casas seguras.",
-      board: { fen: "8/8/8/8/4r3/8/5K2/8 w - - 0 1", marks: { e1: "bad", e2: "bad", e3: "bad" }, arrows: [{ from: "e4", to: "e1" }] },
+      steps: ["A torre em `e4` ataca a coluna `e` inteira.", "Em volta do rei, sobram as casas fora dessa coluna."],
+      board: { fen: "8/8/8/8/4r3/8/5K2/8 w - - 0 1" },
+      demo: [
+        { arrows: [{ from: "e4", to: "e1" }], marks: { e1: "bad", e2: "bad", e3: "bad" } },
+        { area: ["f1", "g1", "g2", "f3", "g3"], marks: { e1: "bad", e2: "bad", e3: "bad" } },
+      ],
     },
     ...kingSquaresRounds(1),
   ],

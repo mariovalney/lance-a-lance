@@ -46,15 +46,20 @@ function checkDemo(where: string, s: import("@/content/types").ExplainScreen) {
   if (!s.steps || s.demo.length !== s.steps.length) errors.push(`${where}: demo needs one frame per step`);
   if (!s.board?.fen) return errors.push(`${where}: demo needs a board position`);
   // A position with both kings has to be a legal one; a teaching diagram may lack them.
-  const kings = (s.board.fen.split(" ")[0].match(/k/gi) ?? []).length;
-  let game: Chess;
-  try {
-    game = kings === 2 ? new Chess(s.board.fen) : load(s.board.fen);
-  } catch {
-    return errors.push(`${where}: demo starts from an illegal position ${s.board.fen}`);
-  }
+  const open = (fen: string): Chess | null => {
+    try {
+      return (fen.split(" ")[0].match(/k/gi) ?? []).length === 2 ? new Chess(fen) : load(fen);
+    } catch {
+      errors.push(`${where}: demo starts from an illegal position ${fen}`);
+      return null;
+    }
+  };
+  let game = open(s.board.fen);
+  if (!game) return;
   s.demo.forEach((frame, i) => {
-    checkBoard(`${where} demo ${i + 1}`, { arrows: frame.arrows, marks: frame.marks, area: frame.area });
+    checkBoard(`${where} demo ${i + 1}`, { fen: frame.fen, arrows: frame.arrows, marks: frame.marks, area: frame.area });
+    if (frame.fen) game = open(frame.fen) ?? game;
+    if (!game) return;
     for (const uci of frame.moves ?? []) {
       try {
         playDemoMove(game, uci);

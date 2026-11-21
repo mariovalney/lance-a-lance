@@ -159,8 +159,9 @@ export function boxSquares(fen: string): Square[] {
  * box as it stands once that step's moves are on the board.
  */
 export function boxDemo(fen: string, frames: (DemoFrame & { box?: boolean })[]): DemoFrame[] {
-  const game = load(fen);
+  let game = load(fen);
   return frames.map(({ box, ...frame }) => {
+    if (frame.fen) game = load(frame.fen);
     for (const uci of frame.moves ?? []) playDemoMove(game, uci);
     if (!box) return frame;
     const now = game.fen();
