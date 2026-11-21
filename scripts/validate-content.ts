@@ -5,6 +5,7 @@ import { CURRICULUM, buildLesson, repeats } from "@/content/curriculum";
 import type { BoardSpec, Screen } from "@/content/types";
 import { ALL_SQUARES, type Square } from "@/lib/chess/squares";
 import { isLegalPosition } from "@/content/lib/positions";
+import { load, playDemoMove } from "@/lib/chess/game";
 import { validateScreen as validateMoveScreen } from "./validate-moves";
 
 const RUNS = Number(process.env.RUNS ?? 40);
@@ -44,12 +45,19 @@ function checkDemo(where: string, s: import("@/content/types").ExplainScreen) {
   if (!s.demo) return;
   if (!s.steps || s.demo.length !== s.steps.length) errors.push(`${where}: demo needs one frame per step`);
   if (!s.board?.fen) return errors.push(`${where}: demo needs a board position`);
-  const game = new Chess(s.board.fen);
+  // A position with both kings has to be a legal one; a teaching diagram may lack them.
+  const kings = (s.board.fen.split(" ")[0].match(/k/gi) ?? []).length;
+  let game: Chess;
+  try {
+    game = kings === 2 ? new Chess(s.board.fen) : load(s.board.fen);
+  } catch {
+    return errors.push(`${where}: demo starts from an illegal position ${s.board.fen}`);
+  }
   s.demo.forEach((frame, i) => {
     checkBoard(`${where} demo ${i + 1}`, { arrows: frame.arrows, marks: frame.marks, area: frame.area });
     for (const uci of frame.moves ?? []) {
       try {
-        game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+        playDemoMove(game, uci);
       } catch {
         errors.push(`${where} demo ${i + 1}: illegal move ${uci} in ${game.fen()}`);
         return;

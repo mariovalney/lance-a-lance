@@ -91,6 +91,17 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
 
   const marks = useMemo(() => ({ ...(spec.marks ?? {}), ...(overlay ?? {}) }), [spec.marks, overlay]);
   const area = useMemo(() => new Set<string>(spec.area ?? []), [spec.area]);
+  // The edge is drawn only around a full rectangle: around holes or scattered
+  // squares it would outline every square, and the tint reads better alone.
+  const outlined = useMemo(() => {
+    const squares = [...area];
+    if (!squares.length) return false;
+    const files = squares.map((sq) => FILES.indexOf(sq[0] as (typeof FILES)[number]));
+    const ranks = squares.map((sq) => Number(sq[1]));
+    const width = Math.max(...files) - Math.min(...files) + 1;
+    const height = Math.max(...ranks) - Math.min(...ranks) + 1;
+    return width * height === squares.length;
+  }, [area]);
   const labels = spec.labels ?? {};
   const interactive = Boolean(onSquareTap);
   const dots = interaction?.dots ?? [];
@@ -163,7 +174,7 @@ const BoardImpl: FC<BoardProps> = ({ spec, overlay, onSquareTap, interaction, cl
           {area.has(square) && (
             <div
               className="pointer-events-none absolute inset-0 transition-opacity duration-300"
-              style={{ background: "var(--mark-area)", boxShadow: areaEdge(square as Square, area, orientation) }}
+              style={{ background: "var(--mark-area)", boxShadow: outlined ? areaEdge(square as Square, area, orientation) : undefined }}
               data-area
             />
           )}

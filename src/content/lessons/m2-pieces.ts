@@ -1,4 +1,4 @@
-import type { BoardSpec, LessonDef, MarkKind, Screen } from "@/content/types";
+import type { DemoFrame, ExplainScreen, LessonDef, MarkKind, Screen } from "@/content/types";
 import { toFen, type PieceChar } from "@/lib/chess/fen";
 import { legalMoves, pieceDestinations, solvePath, uciOf } from "@/lib/chess/game";
 import { ALL_SQUARES, fileIndex, rankOf, toSquare, type Square } from "@/lib/chess/squares";
@@ -21,6 +21,18 @@ function reach(pieces: Pieces, from: Square): Square[] {
 /** Squares where a pawn may stand without looking odd (ranks 2 to 7). */
 const PAWN_SQUARES = ALL_SQUARES.filter((s) => rankOf(s) >= 2 && rankOf(s) <= 7);
 
+/**
+ * One step of a demonstration: its text, the piece's moves (UCI), and whether
+ * to draw the piece's reach (and, for the long-range pieces, its lines) once
+ * they are played.
+ */
+interface PieceStep {
+  text: string;
+  moves?: string[];
+  reach?: boolean;
+  lines?: boolean;
+}
+
 interface PieceInfo {
   char: "R" | "B" | "Q" | "K" | "N";
   name: string;
@@ -29,9 +41,14 @@ interface PieceInfo {
   /** "A torre", "O bispo" */
   The: string;
   moveText: string;
+  /** How it moves, played out from `showcase`, the reach counted in the text. */
+  moveSteps: PieceStep[];
   illegal: string;
   blockTitle: string;
   blockText: string;
+  /** What another piece in the way does: the reach with the pieces marked, then `blockMove`. */
+  blockSteps: [string, string];
+  blockMove: string;
   slider: boolean;
   tip?: string;
   /** Prefer start squares away from the edge for the first example. */
@@ -162,42 +179,77 @@ function pathRounds(p: PieceInfo, starCounts: number[]): Screen[] {
   });
 }
 
-function blockBoard(p: PieceInfo): BoardSpec {
-  if (p.char === "N") {
-    const pieces: Pieces = { b1: "N", a2: "P", b2: "P", c2: "P", d2: "P" };
-    return { fen: fenOf(pieces), arrows: [{ from: "b1", to: "a3" }, { from: "b1", to: "c3" }] };
-  }
-  if (p.char === "K") {
-    const pieces: Pieces = { e4: "K", d5: "p", f4: "P" };
-    return { fen: fenOf(pieces), marks: { ...marksFor(reach(pieces, "e4"), "soft"), d5: "focus" } };
-  }
+/** The board of the second explanation: what other pieces in the way do to the reach. */
+function blockPieces(p: PieceInfo): { pieces: Pieces; marks: Partial<Record<Square, MarkKind>> } {
+  if (p.char === "N") return { pieces: { b1: "N", a2: "P", b2: "P", c2: "P", d2: "P" }, marks: marksFor(["a2", "b2", "c2", "d2"], "soft") };
+  if (p.char === "K") return { pieces: { e4: "K", d5: "p", f4: "P" }, marks: { f4: "bad", d5: "focus" } };
   const pieces: Pieces = { d4: p.char, d6: "P", f6: "P", f4: "p", b2: "p" };
   const r = reach(pieces, "d4");
-  return { fen: fenOf(pieces), marks: { ...marksFor(r, "soft"), ...(r.includes("f4") ? { f4: "focus" } : {}), ...(r.includes("b2") ? { b2: "focus" } : {}) } };
+  const marks: Partial<Record<Square, MarkKind>> = {};
+  for (const own of ["d6", "f6"] as Square[]) {
+    // An own piece is marked where it stops the line: the square before it is reached.
+    const before = toSquare(fileIndex(own) + Math.sign(fileIndex("d4") - fileIndex(own)), rankOf(own) + Math.sign(rankOf("d4") - rankOf(own)));
+    if (before && (r.includes(before) || before === "d4")) marks[own] = "bad";
+  }
+  for (const theirs of ["f4", "b2"] as Square[]) if (r.includes(theirs)) marks[theirs] = "focus";
+  return { pieces, marks };
 }
 
-function showcaseBoard(p: PieceInfo): BoardSpec {
-  const sq = p.showcase;
-  const pieces: Pieces = { [sq]: p.char };
-  const r = reach(pieces, sq);
-  const far = (df: number, dr: number) => {
+/** The far end of each line of a long-range piece from `sq`, for its arrows. */
+function lines(p: PieceInfo, sq: Square): { from: Square; to: Square }[] {
+  const dirs: [number, number][] =
+    p.char === "R" ? [[0, 1], [0, -1], [1, 0], [-1, 0]] : p.char === "B" ? [[1, 1], [1, -1], [-1, 1], [-1, -1]] : [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  return dirs.flatMap(([df, dr]) => {
     let last: Square | null = null;
     for (let k = 1; k < 8; k++) {
-      const s = toSquare(fileIndex(sq) + df * k, rankOf(sq) + dr * k);
-      if (!s) break;
-      last = s;
-      if (!p.slider) break;
+      const next = toSquare(fileIndex(sq) + df * k, rankOf(sq) + dr * k);
+      if (!next) break;
+      last = next;
     }
-    return last;
+    return last ? [{ from: sq, to: last }] : [];
+  });
+}
+
+/** Plays a piece's moves on a set of pieces, returning where the moved piece stands. */
+function playOn(pieces: Pieces, moves: string[], at: Square): Square {
+  for (const uci of moves) {
+    const from = uci.slice(0, 2) as Square;
+    const to = uci.slice(2, 4) as Square;
+    pieces[to] = pieces[from];
+    delete pieces[from];
+    if (from === at) at = to;
+  }
+  return at;
+}
+
+/** "Como a torre anda": the piece's reach and a few of its moves, on the board. */
+function moveScreen(p: PieceInfo): ExplainScreen {
+  const start: Pieces = { [p.showcase]: p.char, ...(p.char === "N" ? { d5: "P", e5: "P" } : {}) };
+  const pieces: Pieces = { ...start };
+  let at = p.showcase;
+  const demo: DemoFrame[] = p.moveSteps.map((step) => {
+    at = playOn(pieces, step.moves ?? [], at);
+    return {
+      moves: step.moves,
+      area: step.reach ? reach(pieces, at) : undefined,
+      arrows: step.lines ? lines(p, at) : undefined,
+    };
+  });
+  return { kind: "explain", title: `Como ${p.the} anda`, text: p.moveText, steps: p.moveSteps.map((st) => st.text), board: { fen: fenOf(start) }, demo, tip: p.tip };
+}
+
+/** What another piece in the way does: the reach with the pieces marked, then the move past or onto one. */
+function blockScreen(p: PieceInfo): ExplainScreen {
+  const { pieces, marks } = blockPieces(p);
+  const from = Object.entries(pieces).find(([, c]) => c === p.char)![0] as Square;
+  return {
+    kind: "explain",
+    title: p.blockTitle,
+    text: p.blockText,
+    steps: p.blockSteps,
+    board: { fen: fenOf(pieces) },
+    demo: [{ area: reach(pieces, from), marks }, { moves: [p.blockMove] }],
   };
-  const dirs: [number, number][] =
-    p.char === "R" ? [[0, 1], [0, -1], [1, 0], [-1, 0]] : p.char === "B" ? [[1, 1], [1, -1], [-1, 1], [-1, -1]] : p.char === "N" ? [] : [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-  const arrows = dirs
-    .map(([df, dr]) => far(df, dr))
-    .filter((s): s is Square => !!s)
-    .map((to) => ({ from: sq, to }));
-  const knightArrows = p.char === "N" ? r.filter((to) => to === "e6" || to === "f3").map((to) => ({ from: sq, to })) : [];
-  return { fen: fenOf(pieces), marks: marksFor(r, "soft"), arrows: p.char === "N" ? knightArrows : arrows };
 }
 
 export function pieceLesson(id: string, p: PieceInfo): LessonDef {
@@ -207,10 +259,10 @@ export function pieceLesson(id: string, p: PieceInfo): LessonDef {
     summary: p.moveText.replace(/\*\*/g, ""),
     minutes: 3,
     build: () => [
-      { kind: "explain", title: `Como ${p.the} anda`, text: p.moveText, board: showcaseBoard(p), tip: p.tip },
+      moveScreen(p),
       ...reachRounds(p, 2, false),
       ...pathRounds(p, [1, 2]),
-      { kind: "explain", title: p.blockTitle, text: p.blockText, board: blockBoard(p) },
+      blockScreen(p),
       ...(p.slider ? reachRounds(p, 1, true) : []),
       ...captureRounds(p, 2),
       ...pathRounds(p, [3]),
@@ -225,10 +277,17 @@ export const lessonTorre = pieceLesson("m2-l1", {
   name: "torre",
   the: "a torre",
   The: "A torre",
-  moveText: "A **torre** anda em linha reta: para frente, para trás e para os lados, quantas casas quiser.",
+  moveText: "A **torre** anda em linha reta, quantas casas quiser.",
+  moveSteps: [
+    { text: "De `d4`, siga a coluna e a fileira, nas quatro direções: são 14 casas.", reach: true, lines: true },
+    { text: "Escolha uma direção e pare onde quiser, sem fazer curva.", moves: ["d4d7"] },
+    { text: "Em qualquer casa do tabuleiro vazio, a torre alcança as mesmas 14.", moves: ["d7a7"], reach: true },
+  ],
   illegal: "A torre só anda em linha reta, pela coluna ou pela fileira em que está.",
   blockTitle: "Ela não pula peças",
-  blockText: "A torre para antes de uma peça sua. Se a peça for do adversário, ela pode capturar, ocupando a casa dela.",
+  blockText: "A torre não passa por cima de ninguém.",
+  blockSteps: ["Uma peça sua no caminho: a torre para antes dela.", "Uma peça do adversário: ela captura e fica no lugar dela."],
+  blockMove: "d4f4",
   slider: true,
   showcase: "d4",
 });
@@ -238,10 +297,17 @@ export const lessonBispo = pieceLesson("m2-l2", {
   name: "bispo",
   the: "o bispo",
   The: "O bispo",
-  moveText: "O **bispo** anda na diagonal, quantas casas quiser. Por isso ele passa a partida inteira na mesma cor.",
+  moveText: "O **bispo** anda na diagonal, quantas casas quiser. Por isso fica a partida inteira na mesma cor.",
+  moveSteps: [
+    { text: "De `d4`, siga as quatro diagonais: são 13 casas.", reach: true, lines: true },
+    { text: "Escolha uma diagonal e pare onde quiser.", moves: ["d4h8"] },
+    { text: "No canto sobra uma diagonal só: 7 casas. Por isso o bispo rende mais no centro.", reach: true },
+  ],
   illegal: "O bispo só anda na diagonal.",
   blockTitle: "Ele não pula peças",
-  blockText: "O bispo para antes de uma peça sua e pode capturar a primeira peça adversária que encontrar na diagonal.",
+  blockText: "O bispo não passa por cima de ninguém.",
+  blockSteps: ["Uma peça sua na diagonal: o bispo para antes dela.", "Uma peça do adversário: ele captura e fica no lugar dela."],
+  blockMove: "d4b2",
   slider: true,
   tip: "Cada lado tem um bispo das casas claras e um das escuras.",
   showcase: "d4",
@@ -253,9 +319,16 @@ export const lessonDama = pieceLesson("m2-l3", {
   the: "a dama",
   The: "A dama",
   moveText: "A **dama** junta a torre e o bispo: anda em linha reta e na diagonal, quantas casas quiser.",
+  moveSteps: [
+    { text: "De `d4`, são as 14 casas da torre mais as 13 do bispo: 27.", reach: true, lines: true },
+    { text: "Escolha uma das oito direções e pare onde quiser.", moves: ["d4a7"] },
+    { text: "Na borda, ela perde casas: daqui, alcança 21.", reach: true },
+  ],
   illegal: "A dama anda em linha reta ou na diagonal, sem fazer curvas.",
   blockTitle: "Forte, mas sem pular",
-  blockText: "Como a torre e o bispo, a dama para antes de uma peça sua e captura a primeira peça adversária no caminho.",
+  blockText: "Como a torre e o bispo, a dama não passa por cima de ninguém.",
+  blockSteps: ["Uma peça sua no caminho: a dama para antes dela.", "Uma peça do adversário: ela captura a primeira que encontrar."],
+  blockMove: "d4f4",
   slider: true,
   tip: "É a peça mais forte. Vale quase o mesmo que duas torres.",
   showcase: "d4",
@@ -267,9 +340,16 @@ export const lessonRei = pieceLesson("m2-l4", {
   the: "o rei",
   The: "O rei",
   moveText: "O **rei** anda para qualquer lado, mas só uma casa por vez.",
+  moveSteps: [
+    { text: "De `e4`, são as 8 casas em volta dele.", reach: true },
+    { text: "Cada lance, uma casa.", moves: ["e4e5"] },
+    { text: "No canto, sobram 3.", moves: ["e5f6", "f6g7", "g7h8"], reach: true },
+  ],
   illegal: "O rei anda só uma casa por vez, em qualquer direção.",
   blockTitle: "O rei também captura",
-  blockText: "O rei pode capturar uma peça adversária que esteja ao lado dele. No módulo 3 você vai ver quando isso é perigoso.",
+  blockText: "O rei captura como as outras peças. No módulo 3 você vai ver quando isso é perigoso.",
+  blockSteps: ["Uma casa ao lado com peça sua fica fechada para ele.", "Uma peça do adversário ao lado: o rei pode capturá-la."],
+  blockMove: "e4d5",
   slider: false,
   tip: "O rei é lento, mas é a peça que decide a partida.",
   showcase: "e4",
@@ -280,10 +360,17 @@ export const lessonCavalo = pieceLesson("m2-l5", {
   name: "cavalo",
   the: "o cavalo",
   The: "O cavalo",
-  moveText: "O **cavalo** anda em L: duas casas para um lado e uma para o outro. É a única peça que pula as outras.",
+  moveText: "O **cavalo** anda em L e é a única peça que pula as outras.",
+  moveSteps: [
+    { text: "Duas casas em linha reta e mais uma para o lado: de `d4`, são 8 casas.", reach: true },
+    { text: "Peça no caminho não atrapalha: ele pula por cima.", moves: ["d4e6"] },
+    { text: "No canto, sobram 2. Cavalo na borda rende pouco.", moves: ["e6c7", "c7a8"], reach: true },
+  ],
   illegal: "O cavalo anda em L: duas casas em uma direção e depois uma para o lado.",
   blockTitle: "O cavalo pula",
-  blockText: "Peças no caminho não atrapalham o cavalo. Ele só não pode cair numa casa ocupada por peça sua.",
+  blockText: "O cavalo só não pode cair numa casa com peça sua.",
+  blockSteps: ["No começo, os peões cercam o cavalo, e `d2` está ocupada.", "Ele sai mesmo assim, pulando por cima dos peões."],
+  blockMove: "b1c3",
   slider: false,
   tip: "A cada lance, o cavalo troca de cor: de casa clara vai para escura e vice-versa.",
   showcase: "d4",

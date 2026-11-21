@@ -1,7 +1,7 @@
 import type { Chess, Move } from "chess.js";
 import { readMove } from "@shared/notation";
 import { FILES, fileIndex, rankOf, toSquare, type Square } from "@/lib/chess/squares";
-import { load, parseUci } from "@/lib/chess/game";
+import { load, playDemoMove } from "@/lib/chess/game";
 import type { DemoFrame } from "@/content/types";
 
 /*
@@ -161,7 +161,7 @@ export function boxSquares(fen: string): Square[] {
 export function boxDemo(fen: string, frames: (DemoFrame & { box?: boolean })[]): DemoFrame[] {
   const game = load(fen);
   return frames.map(({ box, ...frame }) => {
-    for (const uci of frame.moves ?? []) game.move(parseUci(uci));
+    for (const uci of frame.moves ?? []) playDemoMove(game, uci);
     if (!box) return frame;
     const now = game.fen();
     const { board, turn } = parse(now);

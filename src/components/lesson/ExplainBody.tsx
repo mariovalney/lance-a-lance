@@ -4,7 +4,7 @@ import type { DemoFrame, ExplainScreen } from "@/content/types";
 import { Board } from "@/components/board/Board";
 import { Button } from "@/components/ui/button";
 import { RichText } from "@/components/common/RichText";
-import { load, parseUci } from "@/lib/chess/game";
+import { load, playDemoMove } from "@/lib/chess/game";
 import type { Square } from "@/lib/chess/squares";
 
 /** How long a demonstration waits before a step's first move, and between its moves. */
@@ -16,7 +16,7 @@ function stepStarts(fen: string, demo: DemoFrame[]): string[] {
   const game = load(fen);
   return demo.map((frame) => {
     const start = game.fen();
-    for (const uci of frame.moves ?? []) game.move(parseUci(uci));
+    for (const uci of frame.moves ?? []) playDemoMove(game, uci);
     return start;
   });
 }
@@ -34,7 +34,7 @@ const DemoStep: FC<{ screen: ExplainScreen; start: string; frame: DemoFrame }> =
     const game = load(start);
     const timers = (frame.moves ?? []).map((uci, i) =>
       window.setTimeout(() => {
-        const move = game.move(parseUci(uci));
+        const move = playDemoMove(game, uci);
         setShown({ fen: game.fen(), lastMove: [move.from as Square, move.to as Square], played: i + 1 });
       }, FIRST_MOVE_MS + i * NEXT_MOVE_MS),
     );
@@ -47,7 +47,8 @@ const DemoStep: FC<{ screen: ExplainScreen; start: string; frame: DemoFrame }> =
         spec={{
           ...screen.board,
           fen: shown.fen,
-          lastMove: shown.lastMove ?? undefined,
+          // Once the area is drawn it is the point; the last move would only blur it.
+          lastMove: done && frame.area ? undefined : (shown.lastMove ?? undefined),
           arrows: done ? frame.arrows : undefined,
           marks: done ? frame.marks : undefined,
           area: done ? frame.area : undefined,

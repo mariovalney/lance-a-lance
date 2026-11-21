@@ -53,6 +53,19 @@ export function play(fen: string, input: MoveInput): PlayedMove | null {
   }
 }
 
+/**
+ * Plays a move of a demonstration. On a teaching diagram where the side to
+ * move has no king (one side only, such as a lone rook showing how it moves),
+ * that side passes, so the same piece can move again; anywhere else the turns
+ * are the game's. Throws on an illegal move.
+ */
+export function playDemoMove(game: Chess, uci: string): Move {
+  const piece = game.get(uci.slice(0, 2) as Square);
+  const kingless = !game.board().some((row) => row.some((p) => p?.type === "k" && p.color === game.turn()));
+  if (piece && piece.color !== game.turn() && kingless) game.load(withTurn(game.fen(), piece.color), { skipValidation: true });
+  return game.move(parseUci(uci));
+}
+
 export function uciOf(m: Pick<Move, "from" | "to" | "promotion">): string {
   return `${m.from}${m.to}${m.promotion ?? ""}`;
 }
