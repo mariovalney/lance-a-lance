@@ -149,8 +149,14 @@ export const lessonItaliana: LessonDef = {
     {
       kind: "explain",
       title: "Abertura Italiana",
-      text: "Uma das aberturas mais antigas: 1.`e4` `e5` 2.`Nf3` `Nc6` 3.`Bc4`. O bispo mira `f7`, as peças saem rápido e o rei roca cedo.",
-      board: { fen: fenAfter(["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"]), arrows: [{ from: "c4", to: "f7" }] },
+      text: "Uma das aberturas mais antigas. As peças saem rápido e o rei roca cedo.",
+      steps: [
+        "1.`e4` `e5`: cada lado põe um peão no centro.",
+        "2.`Nf3` `Nc6`: o cavalo branco ataca `e5`, e o preto defende.",
+        "3.`Bc4`: o bispo sai mirando `f7`, o peão que só o rei defende.",
+      ],
+      board: { fen: START_FEN },
+      demo: [{ moves: ["e2e4", "e7e5"] }, { moves: ["g1f3", "b8c6"], arrows: [{ from: "f3", to: "e5" }] }, { moves: ["f1c4"], arrows: [{ from: "c4", to: "f7" }] }],
     },
     lineScreen({
       key: "italiana-linha",
@@ -180,8 +186,14 @@ export const lessonItaliana: LessonDef = {
     {
       kind: "explain",
       title: "O plano",
-      text: "Depois da abertura, o plano das brancas é simples:",
-      steps: ["Faça o roque e leve a torre para `e1`.", "Jogue `c3` e depois `d4`: o centro fica seu.", "Se as pretas descuidarem de `f7`, ataque com `Ng5`."],
+      text: "Depois da abertura, o plano das brancas é simples.",
+      steps: ["Faça o roque e leve a torre para `e1`.", "Com `c3` já jogado, avance `d4`: o centro fica seu.", "Se as pretas descuidarem de `f7`, ataque com `Ng5`."],
+      board: { fen: fenAfter(["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5", "c2c3", "g8f6", "d2d3", "d7d6"]) },
+      demo: [
+        { moves: ["e1g1", "e8g8", "f1e1"] },
+        { moves: ["a7a6", "d3d4"], area: ["c3", "d4", "e4"] },
+        { fen: fenAfter(["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6"]), moves: ["f3g5"], arrows: [{ from: "g5", to: "f7" }, { from: "c4", to: "f7" }], marks: { f7: "focus" } },
+      ],
     },
     nextMove(
       "italiana-c3",
@@ -226,8 +238,18 @@ export const lessonLondon: LessonDef = {
     {
       kind: "explain",
       title: "Sistema London",
-      text: "A London é um **sistema**: as brancas montam quase sempre a mesma estrutura, sem importar o que as pretas fazem. Ótima para economizar teoria.",
-      board: { fen: fenAfter(["d2d4", "d7d5", "c1f4", "g8f6", "e2e3", "e7e6", "g1f3", "c7c5", "c2c3", "b8c6", "b1d2", "f8d6", "f4g3"]), marks: { c3: "soft", d4: "soft", e3: "soft", g3: "good" } },
+      text: "A London é um **sistema**: as brancas montam quase sempre a mesma estrutura, sem importar o que as pretas fazem. Assim, há pouca teoria para decorar.",
+      steps: [
+        "1.`d4` `d5` 2.`Bf4`: o bispo sai antes de `e3` fechar o caminho dele.",
+        "Depois vêm `e3`, `Nf3` e `c3`, quase sem olhar o que as pretas fazem.",
+        "A estrutura fica de pé: a pirâmide `c3`, `d4`, `e3`, com o bispo fora dela.",
+      ],
+      board: { fen: START_FEN },
+      demo: [
+        { moves: ["d2d4", "d7d5", "c1f4"] },
+        { moves: ["g8f6", "e2e3", "e7e6", "g1f3", "c7c5", "c2c3"] },
+        { moves: ["b8c6", "b1d2"], area: ["c3", "d4", "e3"], marks: { f4: "good" } },
+      ],
     },
     lineScreen({
       key: "london-linha",
@@ -257,8 +279,14 @@ export const lessonLondon: LessonDef = {
     {
       kind: "explain",
       title: "O plano",
-      text: "A London quase sempre segue o mesmo roteiro:",
-      steps: ["Monte a pirâmide `c3`, `d4` e `e3`.", "Complete com `Bd3`, `Nbd2` e o roque.", "Depois, o cavalo pode pular para `e5`."],
+      text: "A London quase sempre segue o mesmo roteiro.",
+      steps: ["Monte a pirâmide `c3`, `d4` e `e3`.", "Complete com `Nbd2`, `Bd3` e o roque.", "Depois, o cavalo pode pular para `e5`."],
+      board: { fen: fenAfter(["d2d4", "d7d5", "c1f4", "g8f6", "e2e3", "e7e6", "g1f3", "c7c5", "c2c3", "b8c6"]) },
+      demo: [
+        { area: ["c3", "d4", "e3"] },
+        { moves: ["b1d2", "f8d6", "f1d3", "e8g8", "e1g1"] },
+        { moves: ["b7b6", "f3e5"], marks: { e5: "good" } },
+      ],
     },
     nextMove(
       "london-c3",
@@ -281,8 +309,13 @@ export const lessonLondon: LessonDef = {
     {
       kind: "explain",
       title: "O ponto de atenção",
-      text: "Com o bispo em `f4`, o peão de `b2` fica sem o bispo para defender. Muitas pretas jogam `Qb6` para atacá-lo.",
-      board: { fen: fenAfter(["d2d4", "d7d5", "c1f4", "c7c5", "e2e3", "d8b6"]), arrows: [{ from: "b6", to: "b2" }], marks: { b2: "focus" } },
+      text: "A London tem um ponto fraco conhecido.",
+      steps: ["Com o bispo em `f4`, o peão de `b2` fica sem o bispo para defender.", "Muitas pretas jogam `Qb6` e atacam esse peão."],
+      board: { fen: START_FEN },
+      demo: [
+        { moves: ["d2d4", "d7d5", "c1f4", "c7c5", "e2e3"], marks: { b2: "focus" } },
+        { moves: ["d8b6"], arrows: [{ from: "b6", to: "b2" }], marks: { b2: "focus" } },
+      ],
     },
     keepEverythingSafe(
       "london-b2",
@@ -306,8 +339,18 @@ export const lessonGambitoDama: LessonDef = {
     {
       kind: "explain",
       title: "Gambito da Dama",
-      text: "Um **gambito** oferece material em troca de centro, tempo ou ataque. Em 2.`c4`, se as pretas capturarem, as brancas ficam com o centro e recuperam o peão depois.",
-      board: { fen: fenAfter(["d2d4", "d7d5", "c2c4"]), arrows: [{ from: "c4", to: "d5" }] },
+      text: "Um **gambito** oferece material em troca de centro, tempo ou ataque.",
+      steps: [
+        "1.`d4` `d5` 2.`c4`: as brancas oferecem o peão de `c4`.",
+        "Se as pretas capturarem, o centro fica com as brancas, que jogam `e4`.",
+        "Depois, o bispo recupera o peão.",
+      ],
+      board: { fen: START_FEN },
+      demo: [
+        { moves: ["d2d4", "d7d5", "c2c4"], arrows: [{ from: "c4", to: "d5" }] },
+        { moves: ["d5c4", "e2e4"], area: ["d4", "e4"] },
+        { moves: ["e7e6", "f1c4"] },
+      ],
     },
     lineScreen({
       key: "gambito-recusado",
@@ -328,8 +371,14 @@ export const lessonGambitoDama: LessonDef = {
     {
       kind: "explain",
       title: "O plano",
-      text: "As brancas querem que as pretas larguem `d5`. Por isso:",
+      text: "As brancas querem que as pretas larguem `d5`.",
       steps: ["Pressione `d5` com `c4` e `Nc3`.", "Crave o cavalo de `f6`, que defende `d5`, com `Bg5`.", "Complete com `e3`, `Nf3`, `Bd3` e o roque."],
+      board: { fen: fenAfter(["d2d4", "d7d5", "c2c4", "e7e6"]) },
+      demo: [
+        { moves: ["b1c3", "g8f6"], arrows: [{ from: "c4", to: "d5" }, { from: "c3", to: "d5" }], marks: { d5: "focus" } },
+        { moves: ["c1g5"], arrows: [{ from: "g5", to: "d8" }], marks: { f6: "focus" } },
+        { moves: ["f8e7", "e2e3", "e8g8", "g1f3", "b8d7", "f1d3", "c7c6", "e1g1"] },
+      ],
     },
     ideaMove(
       "gambito-bg5",
@@ -352,8 +401,14 @@ export const lessonGambitoDama: LessonDef = {
     {
       kind: "explain",
       title: "Se as pretas aceitarem",
-      text: "Depois de 2...`dxc4`, não corra atrás do peão com pressa. Jogue `e3` e recupere com o bispo: ele sai já ativo.",
-      board: { fen: fenAfter(["d2d4", "d7d5", "c2c4", "d5c4"]), arrows: [{ from: "f1", to: "c4", tone: "good" }], marks: { c4: "focus" } },
+      text: "Depois de 2...`dxc4`, não corra atrás do peão com pressa.",
+      steps: ["As pretas capturam em `c4`.", "Jogue `e3`: o peão abre o caminho do bispo.", "O bispo recupera o peão e já sai ativo."],
+      board: { fen: START_FEN },
+      demo: [
+        { moves: ["d2d4", "d7d5", "c2c4", "d5c4"], marks: { c4: "focus" } },
+        { moves: ["e2e3", "g8f6"], arrows: [{ from: "f1", to: "c4", tone: "good" }] },
+        { moves: ["f1c4"] },
+      ],
     },
     lineScreen({
       key: "gambito-aceito",
@@ -389,8 +444,13 @@ export const lessonPretasE4: LessonDef = {
       kind: "explain",
       title: "1...e5",
       text: "Contra 1.`e4`, responder 1...`e5` segue os mesmos princípios: centro, desenvolvimento e roque. Você aprende a jogar dos dois lados.",
-      board: { fen: fenAfter(["e2e4", "e7e5"]), orientation: "black" },
+      board: { fen: START_FEN, orientation: "black" },
       steps: ["Responda `e5` e defenda com `Nc6`.", "Desenvolva o bispo e o cavalo de `g8`, e faça o roque.", "Quando der, jogue `d5`: é o lance que solta as pretas."],
+      demo: [
+        { moves: ["e2e4", "e7e5", "g1f3", "b8c6"] },
+        { moves: ["f1c4", "f8c5", "d2d3", "g8f6", "b1c3", "e8g8"] },
+        { moves: ["h2h3", "d7d5"], arrows: [{ from: "d5", to: "e4" }] },
+      ],
     },
     nextMove(
       "pretas-nc6",
@@ -422,8 +482,13 @@ export const lessonPretasE4: LessonDef = {
     {
       kind: "explain",
       title: "Contra o ataque em f7",
-      text: "Se as brancas jogarem `Ng5` mirando `f7`, a resposta é `d5`: fecha a diagonal do bispo e contra-ataca no centro.",
-      board: { fen: fenAfter(["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6", "f3g5"]), orientation: "black", marks: { f7: "focus" }, arrows: [{ from: "g5", to: "f7" }] },
+      text: "O ataque mais rápido contra as pretas mira `f7`.",
+      steps: ["As brancas jogam `Ng5`: cavalo e bispo contra `f7`.", "Responda `d5`: o peão fecha a diagonal do bispo e contra-ataca no centro."],
+      board: { fen: fenAfter(["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6"]), orientation: "black" },
+      demo: [
+        { moves: ["f3g5"], arrows: [{ from: "g5", to: "f7" }, { from: "c4", to: "f7" }], marks: { f7: "focus" } },
+        { moves: ["d7d5"], arrows: [{ from: "d5", to: "c4", tone: "good" }] },
+      ],
     },
     {
       kind: "move",
@@ -461,8 +526,13 @@ export const lessonPretasD4: LessonDef = {
       kind: "explain",
       title: "Recusando o gambito",
       text: "Contra 1.`d4` `d5` 2.`c4`, o lance `e6` defende `d5` com um peão e mantém o centro. É uma das defesas mais sólidas do xadrez.",
-      board: { fen: fenAfter(["d2d4", "d7d5", "c2c4", "e7e6"]), orientation: "black", marks: { d5: "good" } },
+      board: { fen: START_FEN, orientation: "black" },
       steps: ["Segure `d5` com `e6` e `Nf6`.", "Coloque o bispo em `e7` e faça o roque.", "Depois, prepare `c5` para ganhar espaço."],
+      demo: [
+        { moves: ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6"], marks: { d5: "good" } },
+        { moves: ["c1g5", "f8e7", "e2e3", "e8g8"] },
+        { moves: ["g1f3", "c7c5"], arrows: [{ from: "c5", to: "d4" }] },
+      ],
     },
     nextMove(
       "pretas-e6",
@@ -504,12 +574,12 @@ export const lessonPretasD4: LessonDef = {
       kind: "explain",
       title: "A armadilha do elefante",
       text: "Se as brancas capturarem o peão de `d5` com o cavalo cedo demais, uma sequência de xeques ganha uma peça para as pretas.",
-      board: {
-        fen: fenAfter(["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5", "b8d7", "c4d5", "e6d5", "c3d5"]),
-        orientation: "black",
-        lastMove: ["c3", "d5"],
-        marks: { d5: "focus" },
-      },
+      steps: ["As brancas cravam o cavalo de `f6` e trocam os peões no centro.", "`Nxd5` parece ganhar um peão, porque o cavalo de `f6` parece preso pela cravada."],
+      board: { fen: START_FEN, orientation: "black" },
+      demo: [
+        { moves: ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5", "b8d7", "c4d5", "e6d5"], arrows: [{ from: "g5", to: "d8" }] },
+        { moves: ["c3d5"], marks: { d5: "focus" } },
+      ],
     },
     lineScreen({
       key: "pretas-elefante",

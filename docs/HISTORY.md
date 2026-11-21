@@ -761,3 +761,8 @@ Reading 5.5, Mário asked for explanations that are more human, with the moves d
 - **The example of the deflection is fixed** to the Lichess puzzle 0JCIA (CC0), 29.Qh7+ Kf8 30.Qxh8#, kept out of the lesson's rounds, so its text can name the squares.
 - **The success lines lost their exclamations** ("Garfo!", "Espeto!", "Xeque duplo!"), which cheered on top of the "Certo!" title.
 
+### Module 9
+
+- **Each opening is played from the first move**, a step per idea: 1.e4 e5 2.Nf3 Nc6 3.Bc4 with the bishop's aim at `f7`; the London's bishop out before `e3`, then the pyramid drawn as an area; the Queen's Gambit offered, taken, and the pawn won back; 1...e5 for Black up to the freeing `d5`; the Queen's Gambit Declined up to `c5`. The plans, which had no board, now play their steps from the position the lesson's line reaches, and a step starts over from another position where the plan needs one (`Ng5` against `f7`).
+- **Nothing an exercise asks is played before it.** The weak `b2` of the London shows the attack, not the defence the next screen asks for, and the elephant trap stops at `Nxd5`, which only looks safe because the knight on `f6` seems pinned; the lesson's line then asks for the refutation.
+
