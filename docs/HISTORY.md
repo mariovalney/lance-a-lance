@@ -776,3 +776,9 @@ Reading 5.5, Mário asked for explanations that are more human, with the moves d
 - **Areas carry the definitions**: the empty neighbouring file that makes a pawn isolated, and the files ahead of a passed pawn with no enemy pawn; the open file a rook goes to; the bad bishop's 6 squares beside the good bishop's 11 with the same pawns, and the 9 the bad one reaches once it leaves the chain (counted with chess.js).
 - **The plans are played**: the blockade of an isolated pawn, a rook going after doubled pawns, a passed pawn pushed; the rooks doubled on the open file and the one that reaches the seventh rank; the knight to the outpost; the bad bishop offering its trade; and the planning routine on one position, from reading the pawns to the worst piece (a knight with 3 squares) taking the outpost and the rook trade offered on the open file.
 
+
+### Module 7
+
+- **The centre is drawn as an area**, then the knight's 2 squares in the corner and its 8 on `d4`. Fighting for it is played from the first move (the pawns, then the knights pointed at it), next to a game where Black spent two moves on the edge and left all four squares to White.
+- **Development and castling are played as one game**, an Italian up to the rooks that see each other along the first rank (an area), and the king's side lesson shows the squares the knight and bishop cleared, the castling, and the three pawns of the shield.
+- **The common errors use examples the exercises do not.** The exercises play the fool's mate and punish an early `Qh5`, so the explanation shows `f6` punished by the knight sacrifice on `e5` and the queen's check on the open diagonal (the Damiano), the queen taken back on `d5` and chased by the knight from `c3` (the Scandinavian), and the two pawns taken in the Danish while both White bishops aim at `f7` and `g7`.

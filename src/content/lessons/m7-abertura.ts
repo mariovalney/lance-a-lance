@@ -374,18 +374,36 @@ export const lessonCentro: LessonDef = {
     {
       kind: "explain",
       title: "O centro",
-      text: `As casas \`d4\`, \`e4\`, \`d5\` e \`e5\` são o **centro**. Do meio, uma peça alcança mais casas: o cavalo no canto só tem ${KNIGHT_REACH.corner.length}; no centro, ${KNIGHT_REACH.center.length}.`,
-      board: {
-        fen: "8/8/8/8/3N4/8/8/N7 w - - 0 1",
-        marks: Object.fromEntries([...KNIGHT_REACH.corner, ...KNIGHT_REACH.center].map((sq) => [sq, "soft"])),
-      },
+      text: "As quatro casas do meio são o **centro**. Dali, uma peça alcança mais casas.",
+      steps: [
+        "O centro: `d4`, `e4`, `d5` e `e5`.",
+        `No canto, o cavalo alcança só ${KNIGHT_REACH.corner.length} casas.`,
+        `Leve o mesmo cavalo para o centro: em \`d4\`, ele alcança ${KNIGHT_REACH.center.length}.`,
+      ],
+      board: { fen: "8/8/8/8/8/8/8/N7 w - - 0 1" },
+      demo: [{ area: CENTER }, { area: KNIGHT_REACH.corner }, { moves: ["a1b3", "b3d4"], area: KNIGHT_REACH.center }],
     },
     {
       kind: "explain",
       title: "Como brigar pelo centro",
       text: "No começo, todo lance deve ajudar no centro de algum jeito.",
-      steps: ["Ocupe com peões: `e4` e `d4` (ou `e5` e `d5`, de pretas).", "Traga peças que olham para ele, como os cavalos em `f3` e `c3`.", "Não deixe o adversário ficar com o centro sozinho."],
-      board: { marks: { d4: "focus", e4: "focus", d5: "focus", e5: "focus" } },
+      steps: [
+        "Ocupe com peões: `e4` e `d4` (ou `e5` e `d5`, de pretas).",
+        "Traga peças que olham para ele, como os cavalos em `f3` e `c3`.",
+        "Não deixe o adversário ficar com o centro sozinho. Com `a6` e `h6`, as pretas deixaram as quatro casas para as brancas.",
+      ],
+      board: { fen: START_FEN },
+      demo: [
+        { moves: ["e2e4", "e7e5"], area: CENTER },
+        {
+          moves: ["g1f3", "b8c6", "b1c3", "g8f6"],
+          arrows: [
+            { from: "f3", to: "e5" },
+            { from: "c3", to: "d5" },
+          ],
+        },
+        { fen: START_FEN, moves: ["e2e4", "a7a6", "d2d4", "h7h6"], area: CENTER, marks: { a6: "bad", h6: "bad" } },
+      ],
     },
     {
       kind: "tapAll",
@@ -419,7 +437,13 @@ export const lessonDesenvolvimento: LessonDef = {
         "Faça o roque.",
         "Quando as duas torres se enxergam, o desenvolvimento acabou.",
       ],
-      board: { fen: "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4", marks: { f3: "good", c4: "good" } },
+      board: { fen: START_FEN },
+      demo: [
+        { moves: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"], marks: { f3: "good", c4: "good" } },
+        { moves: ["b1c3", "g8f6", "d2d3", "d7d6", "c1e3", "c5b6"], marks: { c3: "good", e3: "good" } },
+        { moves: ["e1g1", "e8g8"], marks: { g1: "good", f1: "good" } },
+        { moves: ["d1d2"], area: ["a1", "b1", "c1", "d1", "e1", "f1"] },
+      ],
       tip: "A dama e as torres entram depois. Se saírem cedo, viram alvo das peças menores dele.",
     },
     undevelopedRound(),
@@ -443,7 +467,12 @@ export const lessonReiSeguro: LessonDef = {
         "Faça o roque. Do lado do rei é o mais rápido.",
         "Deixe quietos os três peões na frente do rei: eles são o escudo.",
       ],
-      board: { fen: "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 w - - 6 5", marks: { g1: "good", g8: "good" } },
+      board: { fen: START_FEN },
+      demo: [
+        { moves: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"], area: ["f1", "g1"] },
+        { moves: ["e1g1"], marks: { g1: "good", f1: "good" } },
+        { area: ["f2", "g2", "h2"], marks: { g1: "focus" } },
+      ],
       tip: "O peão de `f` é o mais perigoso de mexer no começo: ele abre a diagonal até o rei.",
     },
     ...castleSafetyRounds(3),
@@ -461,13 +490,25 @@ export const lessonErrosAbertura: LessonDef = {
     {
       kind: "explain",
       title: "Aprender com os erros",
-      text: "Três erros aparecem toda hora no começo da partida. Cada um tem um castigo:",
+      text: "Estes erros aparecem toda hora no começo da partida, e cada um tem o seu castigo.",
       steps: [
-        "Peões na frente do rei: abrem caminho até ele. Ataque direto.",
-        "Dama cedo: desenvolva atacando ela. Cada fuga é um lance perdido.",
-        "Pegar peão e esquecer as peças: você fica para trás. Desenvolva e abra o jogo.",
+        "Peões mexidos na frente do rei abrem caminho até ele. Depois de `f6`, as brancas entregam o cavalo em `e5`, e a dama entra com xeque pela diagonal aberta.",
+        "Dama cedo: desenvolva atacando ela. Cada fuga é um lance perdido. Aqui o cavalo sai de casa já atacando a dama, que vai ter que andar de novo.",
+        "Pegar peão e esquecer as peças deixa você para trás: quem entregou os peões desenvolve e abre o jogo. As pretas pegaram dois, e os bispos brancos já miram `f7` e `g7`.",
       ],
-      board: { fen: "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3", marks: { e1: "bad" }, arrows: [{ from: "h4", to: "e1" }] },
+      board: { fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2" },
+      demo: [
+        { moves: ["f7f6", "f3e5", "f6e5", "d1h5"], arrows: [{ from: "h5", to: "e8" }], marks: { e8: "bad" } },
+        { fen: START_FEN, moves: ["e2e4", "d7d5", "e4d5", "d8d5", "b1c3"], arrows: [{ from: "c3", to: "d5" }], marks: { d5: "bad" } },
+        {
+          fen: "rnbqkbnr/pppp1ppp/8/8/3pP3/2P5/PP3PPP/RNBQKBNR b KQkq - 0 3",
+          moves: ["d4c3", "f1c4", "c3b2", "c1b2"],
+          arrows: [
+            { from: "c4", to: "f7" },
+            { from: "b2", to: "g7" },
+          ],
+        },
+      ],
     },
     foolsMate(),
     earlyQueen(),
