@@ -234,9 +234,26 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
   } else {
     const last = current.game.moves.length;
     const step = (to: number) => setPly(Math.max(0, Math.min(last, to)));
+    // The analysis, while there is one to run, gets a row of its own above the
+    // rest, so the arrows and Fechar keep their place.
     footer = (
       <div className="border-t bg-card px-4 pt-3 pb-safe">
         <div className="mx-auto flex w-full max-w-[30rem] flex-col gap-2">
+          {toAnalyse &&
+            (analysing.kind === "running" ? (
+              <Button variant="outline" className="h-11 rounded-xl font-bold" aria-label="Cancelar a análise" onClick={cancel}>
+                <Loader2 className="!h-4 !w-4 animate-spin" />
+                <span className="font-mono tabular">
+                  {analysing.done}/{analysing.total}
+                </span>
+                · Cancelar
+              </Button>
+            ) : (
+              <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void analyse(current.game)}>
+                <Sparkles className="!h-4 !w-4" />
+                {!current.game.analysis ? "Analisar" : outdated(current.game) ? "Analisar de novo" : "Continuar análise"}
+              </Button>
+            ))}
           <div className="grid grid-cols-4 gap-2">
             <Button variant="outline" className="h-11 rounded-xl" aria-label="Início da partida" disabled={ply === 0} onClick={() => step(0)}>
               <ChevronsLeft className="!h-5 !w-5" />
@@ -251,26 +268,22 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
               <ChevronsRight className="!h-5 !w-5" />
             </Button>
           </div>
-          <div className={cn("grid gap-2", toAnalyse ? "grid-cols-3" : "grid-cols-2")}>
-            {toAnalyse &&
-              (analysing.kind === "running" ? (
-                <Button variant="outline" className="h-11 rounded-xl font-bold" aria-label="Cancelar a análise" onClick={cancel}>
-                  <Loader2 className="!h-4 !w-4 animate-spin" />
-                  <span className="font-mono tabular">
-                    {analysing.done}/{analysing.total}
-                  </span>
-                </Button>
-              ) : (
-                <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void analyse(current.game)}>
-                  <Sparkles className="!h-4 !w-4" />
-                  {!current.game.analysis ? "Analisar" : outdated(current.game) ? "Analisar de novo" : "Continuar análise"}
-                </Button>
-              ))}
-            <Button variant="outline" className="h-11 rounded-xl font-bold" onClick={() => void exportPgn(current.game).then(setExported)}>
-              {exported ? <Check className="!h-4 !w-4" /> : <Copy className="!h-4 !w-4" />}
-              {exported === "copied" ? "Copiado" : exported === "saved" ? "Arquivo salvo" : "Copiar PGN"}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="h-11 w-11 shrink-0 rounded-xl p-0"
+              aria-label={exported === "copied" ? "PGN copiado" : exported === "saved" ? "PGN salvo em arquivo" : "Copiar PGN"}
+              data-exported={exported ?? undefined}
+              onClick={() => void exportPgn(current.game).then(setExported)}
+            >
+              {exported ? <Check className="!h-5 !w-5" /> : <Copy className="!h-5 !w-5" />}
             </Button>
-            <Button className="h-11 rounded-xl font-bold" onClick={close}>
+            {/* A study starts from the position on the board, after the move picked. */}
+            <Button variant="outline" className="h-11 shrink-0 rounded-xl px-4 font-bold" disabled={!playable} onClick={() => setStudyOpen(true)}>
+              <Swords className="!h-4 !w-4" />
+              Rejogar
+            </Button>
+            <Button className="h-11 flex-1 rounded-xl font-bold" onClick={close}>
               Fechar
             </Button>
           </div>
@@ -349,15 +362,6 @@ export const GameReview: FC<{ gameId: string }> = ({ gameId }) => {
                     </>
                   ) : null}
                 </p>
-              )}
-              {playable && (
-                <button
-                  type="button"
-                  onClick={() => setStudyOpen(true)}
-                  className="-mt-2 inline-flex items-center gap-1.5 self-start text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  <Swords className="h-4 w-4" aria-hidden /> Jogar a partir daqui
-                </button>
               )}
               <MoveList
                 sans={current.sans}

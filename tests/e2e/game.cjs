@@ -47,6 +47,12 @@ const { chromium } = require("playwright");
     return rating();
   };
   const waitFor = async (text) => p.getByText(text).first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  /** The review's copy button, an icon, once it says the PGN went to the clipboard; then it is reset for the next copy. */
+  const copied = async () => {
+    const done = await p.locator("[data-exported='copied']").waitFor({ timeout: 10_000 }).then(() => true, () => false);
+    await p.locator("[data-exported]").waitFor({ state: "detached", timeout: 5_000 }).catch(() => undefined);
+    return done;
+  };
   const card = p.locator("section[aria-label='Partida contra o computador']");
   /** A judged move opens the engine's line in a dialog of its own; the review stays put. */
   const checkLine = async (marks) => {
@@ -208,7 +214,7 @@ const { chromium } = require("playwright");
   await p.screenshot({ path: `${OUT}/game-review.png` });
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
   await p.getByRole("button", { name: "Copiar PGN" }).click();
-  check(await waitFor("Copiado"), "the game is copied");
+  check(await copied(), "the game is copied");
   const pgn = await p.evaluate(() => navigator.clipboard.readText());
   check(/\[Result "(1-0|0-1|1\/2-1\/2)"\]/.test(pgn) && /\n1\. \S+/.test(pgn) && /\[Site "Lance a Lance"\]/.test(pgn), `as PGN (${pgn.split("\n").slice(0, 2).join(" ")})`);
 
@@ -237,7 +243,7 @@ const { chromium } = require("playwright");
   check((await game()).analysis === "done" && (await p.getByRole("button", { name: "Analisar" }).count()) === 0, "a reload keeps it, and nothing is left to analyse");
   await p.getByRole("button", { name: "Copiar PGN" }).click();
   // The clipboard still holds the copy made before the analysis until this one lands.
-  await waitFor("Copiado");
+  await copied();
   const analysed = await p.evaluate(() => navigator.clipboard.readText());
   const judged = g.marks.filter(Boolean).length;
   check(judged === 0 || /\$[246] \{ [^}]*Melhor era [^}]+\}/.test(analysed), `the PGN carries the judgements (${judged} judged: ${analysed.split("\n\n")[1]?.slice(0, 200)})`);
@@ -260,7 +266,7 @@ const { chromium } = require("playwright");
     check(/^Lance único\. Qualquer outro seria um erro grave\. O melhor deles era N[fc]3 \(cavalo para [fc]3\)\. Ver lances$/.test(said), `with the best of the others named under the board (${said})`);
     await p.screenshot({ path: `${OUT}/game-only-move.png` });
     await p.getByRole("button", { name: "Copiar PGN" }).click();
-    await waitFor("Copiado");
+    await copied();
     const withOnly = await p.evaluate(() => navigator.clipboard.readText());
     check(/\$1\s+\{ Lance único\.\s+Qualquer\s+outro\s+seria\s+um\s+erro\s+grave\./.test(withOnly), `and in the PGN as $1 (${withOnly.split("\n\n")[1]?.slice(0, 120)})`);
   }
@@ -281,10 +287,10 @@ const { chromium } = require("playwright");
   await p.locator("main[data-game*='\"phase\":\"review\"']").waitFor({ timeout: 10_000 }).catch(() => undefined);
   const source = await game();
   await p.getByRole("button", { name: "Início da partida" }).click();
-  check((await p.getByRole("button", { name: "Jogar a partir daqui" }).count()) === 0, "the initial position offers no study");
+  check(await p.getByRole("button", { name: "Rejogar" }).isDisabled(), "the initial position offers no study");
   await p.locator("ol[aria-label='Lances da partida'] button").nth(1).click();
   check((await game()).ply === 2, "a move picked in the review");
-  await p.getByRole("button", { name: "Jogar a partir daqui" }).click();
+  await p.getByRole("button", { name: "Rejogar" }).click();
   const studyDialog = p.locator("[data-study-dialog]");
   await studyDialog.waitFor({ timeout: 5_000 }).catch(() => undefined);
   check((await studyDialog.getByText(/^Começa depois de 1\.\.\. .+Partida de estudo, não vale rating\.$/).count()) === 1, `the dialog says where the study starts (${(await studyDialog.textContent())?.slice(0, 120)})`);
@@ -328,7 +334,7 @@ const { chromium } = require("playwright");
     "its analysis reuses the original game's for the positions it carries",
   );
   await p.getByRole("button", { name: "Copiar PGN" }).click();
-  await waitFor("Copiado");
+  await copied();
   const studyPgn = await p.evaluate(() => navigator.clipboard.readText());
   check(/\[Event "Estudo contra o computador"\]/.test(studyPgn) && /\{ Início do estudo \}/.test(studyPgn), `its PGN marks the start (${studyPgn.split("\n\n")[1]?.slice(0, 80)})`);
   await p.screenshot({ path: `${OUT}/game-study-review.png` });
@@ -374,7 +380,7 @@ const { chromium } = require("playwright");
     check(/^Brilhante\. Com Nxe5, você entrega a dama e dá xeque-mate em 2 lances\. Ver lances$/.test(said), `with what it gives up and what it brings (${said})`);
     await p.screenshot({ path: `${OUT}/game-brilliant.png` });
     await p.getByRole("button", { name: "Copiar PGN" }).click();
-    await waitFor("Copiado");
+    await copied();
     const withBrilliant = await p.evaluate(() => navigator.clipboard.readText());
     check(/Nxe5 \$3\s+\{ Brilhante\.\s+Com\s+Nxe5,/.test(withBrilliant), `and in the PGN as $3 (${withBrilliant.split("\n\n")[1]?.slice(0, 120)})`);
   }
