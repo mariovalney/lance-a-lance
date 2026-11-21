@@ -53,6 +53,7 @@ const DemoStep: FC<{ screen: ExplainScreen; start: string; frame: DemoFrame }> =
           arrows: done ? frame.arrows : undefined,
           marks: done ? frame.marks : undefined,
           area: done ? frame.area : undefined,
+          labels: done && frame.labels ? frame.labels : screen.board?.labels,
         }}
         ariaLabel={`Exemplo: ${screen.title}`}
       />

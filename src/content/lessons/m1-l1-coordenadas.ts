@@ -1,6 +1,7 @@
 import type { LessonDef, Screen, MarkKind } from "@/content/types";
 import {
   ALL_SQUARES,
+  EMPTY_FEN,
   FILES,
   RANKS,
   fileIndex,
@@ -116,34 +117,27 @@ export const lessonCoordenadas: LessonDef = {
         kind: "explain",
         title: "Colunas",
         text: "As **colunas** são as linhas em pé. Cada uma tem uma letra, de `a` até `h`, escrita na borda de baixo.",
-        board: {
-          marks: marksFor(squaresOfFile("e"), "soft"),
-          arrows: [{ from: "e1", to: "e8" }],
-        },
+        board: { area: squaresOfFile("e") },
       },
       ...fileRounds(3),
       {
         kind: "explain",
         title: "Fileiras",
         text: "As **fileiras** são as linhas deitadas. Elas têm números de `1` a `8`, contando a partir do lado das brancas.",
-        board: {
-          marks: marksFor(squaresOfRank(4), "soft"),
-          arrows: [{ from: "a4", to: "h4" }],
-        },
+        board: { area: squaresOfRank(4) },
       },
       ...rankRounds(3),
       {
         kind: "explain",
         title: "O nome de cada casa",
-        text: "Cada casa tem um nome: a letra da coluna e depois o número da fileira. A coluna `e` cruza a fileira `4` na casa `e4`.",
-        board: {
-          marks: {
-            ...marksFor(squaresOfFile("e"), "soft"),
-            ...marksFor(squaresOfRank(4), "soft"),
-            e4: "focus",
-          },
-          labels: { e4: "e4" },
-        },
+        text: "Cada casa tem um nome: a letra da coluna e depois o número da fileira.",
+        steps: ["Ache a coluna pela letra: `e`.", "Ache a fileira pelo número: `4`.", "A casa fica onde as duas se cruzam: `e4`."],
+        board: { fen: EMPTY_FEN },
+        demo: [
+          { area: squaresOfFile("e") },
+          { area: squaresOfRank(4) },
+          { area: [...squaresOfFile("e"), ...squaresOfRank(4)], marks: { e4: "focus" }, labels: { e4: "e4" } },
+        ],
         tip: "Primeiro a letra, depois o número. Sempre.",
       },
       ...squares,

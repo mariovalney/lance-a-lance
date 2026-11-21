@@ -145,21 +145,20 @@ export const lessonPosicaoInicial: LessonDef = {
       kind: "explain",
       title: "As peças",
       text: "Cada lado começa com 16 peças: 8 **peões** na frente e, atrás, torres, cavalos, bispos, a **dama** e o **rei**.",
-      board: { fen: START_FEN },
+      board: { fen: START_FEN, area: [...squaresOfRank(1), ...squaresOfRank(2)] },
     },
     ...whatPieceRounds(3),
     {
       kind: "explain",
       title: "Do canto para o meio",
-      text: "Na fileira de trás, saindo do canto: **torre**, **cavalo** e **bispo**. Os dois lados são iguais, como um espelho.",
-      board: {
-        fen: START_FEN,
-        marks: { a1: "ring", h1: "ring", b1: "soft", g1: "soft", c1: "focus", f1: "focus" },
-        arrows: [
-          { from: "a1", to: "c1" },
-          { from: "h1", to: "f1" },
-        ],
-      },
+      text: "Na fileira de trás, os dois lados são iguais, como num espelho.",
+      steps: ["Nos cantos, as **torres**.", "Ao lado delas, os **cavalos**.", "Depois, os **bispos**."],
+      board: { fen: START_FEN },
+      demo: [
+        { marks: { a1: "focus", h1: "focus", a8: "focus", h8: "focus" } },
+        { marks: { b1: "focus", g1: "focus", b8: "focus", g8: "focus" } },
+        { marks: { c1: "focus", f1: "focus", c8: "focus", f8: "focus" } },
+      ],
     },
     ...whereRounds(pickDistinct(["R", "N", "B", "r", "n", "b"] as PieceChar[], 3)),
     {
@@ -174,8 +173,14 @@ export const lessonPosicaoInicial: LessonDef = {
     {
       kind: "explain",
       title: "Confira antes de jogar",
-      text: "Antes de começar, olhe três coisas: casa clara à direita, torres nos cantos e dama na casa da sua cor.",
-      board: { fen: START_FEN, marks: { h1: "ring", a8: "ring", d1: "focus", d8: "focus" } },
+      text: "Antes de começar, confira o tabuleiro.",
+      steps: ["Casa clara no canto direito de cada jogador.", "Torres nos cantos.", "Dama na casa da sua cor."],
+      board: { fen: START_FEN },
+      demo: [
+        { marks: { h1: "ring", a8: "ring" } },
+        { marks: { a1: "focus", h1: "focus", a8: "focus", h8: "focus" } },
+        { marks: { d1: "focus", d8: "focus" } },
+      ],
     },
     ...setupRounds(),
   ],

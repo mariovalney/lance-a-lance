@@ -1,6 +1,7 @@
 import type { LessonDef, MarkKind, Screen } from "@/content/types";
 import {
   ALL_SQUARES,
+  EMPTY_FEN,
   diagonalBetween,
   fileIndex,
   isLight,
@@ -184,23 +185,16 @@ export const lessonCoresDiagonais: LessonDef = {
       kind: "explain",
       title: "Diagonais",
       text: "Uma **diagonal** é uma linha inclinada de casas. Todas as casas de uma diagonal têm a mesma cor.",
-      board: {
-        marks: marksFor(diagonalBetween("c1", "h6")!, "soft"),
-        arrows: [{ from: "c1", to: "h6" }],
-      },
+      board: { area: diagonalBetween("c1", "h6")! },
     },
     ...completeRounds(2),
     {
       kind: "explain",
       title: "As duas grandes diagonais",
-      text: "As maiores diagonais têm 8 casas: de `a1` a `h8` e de `h1` a `a8`. Elas se cruzam bem no centro.",
-      board: {
-        marks: { ...marksFor(LONG_A1H8, "soft"), ...marksFor(LONG_H1A8, "soft") },
-        arrows: [
-          { from: "a1", to: "h8" },
-          { from: "h1", to: "a8" },
-        ],
-      },
+      text: "As duas maiores diagonais têm 8 casas cada uma.",
+      steps: ["Uma vai de `a1` a `h8`, só por casas escuras.", "A outra vai de `h1` a `a8`, só por casas claras.", "As duas se cruzam bem no meio do tabuleiro."],
+      board: { fen: EMPTY_FEN },
+      demo: [{ area: LONG_A1H8 }, { area: LONG_H1A8 }, { area: [...LONG_A1H8, ...LONG_H1A8] }],
     },
     ...sameDiagonalRounds(3),
   ],

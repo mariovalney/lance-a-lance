@@ -57,7 +57,7 @@ function checkDemo(where: string, s: import("@/content/types").ExplainScreen) {
   let game = open(s.board.fen);
   if (!game) return;
   s.demo.forEach((frame, i) => {
-    checkBoard(`${where} demo ${i + 1}`, { fen: frame.fen, arrows: frame.arrows, marks: frame.marks, area: frame.area });
+    checkBoard(`${where} demo ${i + 1}`, { fen: frame.fen, arrows: frame.arrows, marks: frame.marks, area: frame.area, labels: frame.labels });
     if (frame.fen) game = open(frame.fen) ?? game;
     if (!game) return;
     for (const uci of frame.moves ?? []) {

@@ -41,6 +41,8 @@ export interface DemoFrame {
   arrows?: BoardSpec["arrows"];
   marks?: BoardSpec["marks"];
   area?: Square[];
+  /** Replaces the board's labels once the step's moves are played. */
+  labels?: BoardSpec["labels"];
 }
 
 /**
