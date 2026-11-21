@@ -323,15 +323,23 @@ export const lessonDetalhesNotacao: LessonDef = {
     {
       kind: "explain",
       title: "Qual das duas?",
-      text: "Quando duas peças iguais podem ir para a mesma casa, a notação diz de onde a peça sai: a **coluna** (`Nbd2`, cavalo da coluna b para d2) ou, se a coluna for a mesma, a **fileira** (`R1e2`, torre da fileira 1 para e2).",
-      board: {
-        fen: "4k3/8/8/8/8/5N2/8/1N2K3 w - - 0 1",
-        arrows: [
-          { from: "b1", to: "d2", tone: "good" },
-          { from: "f3", to: "d2" },
-        ],
-      },
-      tip: "Aqui os dois cavalos chegam em `d2`. A seta verde é `Nbd2`, a outra é `Nfd2`.",
+      text: "Quando duas peças iguais podem ir para a mesma casa, a notação diz de onde a peça sai.",
+      steps: [
+        "Aqui os dois cavalos chegam em `d2`.",
+        "A **coluna** diz qual foi: `Nbd2` (cavalo da coluna b para d2).",
+        "Se a coluna for a mesma, vale a **fileira**: `R1e2` (torre da fileira 1 para e2).",
+      ],
+      board: { fen: "4k3/8/8/8/8/5N2/8/1N2K3 w - - 0 1" },
+      demo: [
+        {
+          arrows: [
+            { from: "b1", to: "d2" },
+            { from: "f3", to: "d2" },
+          ],
+        },
+        { moves: ["b1d2"] },
+        { fen: "k7/8/8/8/8/4R3/8/4R1K1 w - - 0 1", moves: ["e1e2"] },
+      ],
     },
     ...([ambiguousReadRound(), ambiguousReadRound(), ambiguousPlayRound(), ambiguousPlayRound()].filter(Boolean) as Screen[]),
   ],

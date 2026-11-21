@@ -787,3 +787,8 @@ Reading 5.5, Mário asked for explanations that are more human, with the moves d
 
 - **Files, ranks and diagonals are areas** instead of marked squares with an arrow: the `e` file and the fourth rank outlined, a diagonal tinted. The name of a square is found in steps, the file, then the rank, then the square where they cross, labelled only on the last step (`DemoFrame.labels`, which replaces the board's labels once the step is played).
 - **The long diagonals are drawn one at a time**, each with the colour of its squares, and then together. The starting position shows each side's 16 squares, the rooks, knights and bishops one pair of files at a time, and the check before playing as three steps on the board (light square on the right, rooks in the corners, queen on her colour) instead of a sentence that announced "três coisas".
+
+### Module 4
+
+- **Material and trades are counted on the board.** The material screen adds up each side, pieces marked, and subtracts; a trade and the capture of a protected queen are played capture by capture, each step with the points won or lost and the balance on the last one (3 - 5 = -2, 9 - 3 = +6).
+- **Notation is read as it is played**: `e4` and `e5` with no letter for the pawn, `Nf3` and `Nc6` with the reason the knight is `N` (the `K` is the king's), `Bb5` with the capital for the piece and the lowercase for the file. The symbols get a move each (`Bxc6`, castling, `Rd8#`, `e8=Q`) instead of one sentence listing six, and the two knights that reach `d2` are shown before `Nbd2` is played and `R1e2` is played on a board of its own.
