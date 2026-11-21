@@ -755,3 +755,9 @@ Reading 5.5, Mário asked for explanations that are more human, with the moves d
 - **A step can start over from a position of its own** (`DemoFrame.fen`), to show another answer to the same position: the three ways out of a check (flee, block, capture, from one position where all three exist), the check that is not mate next to the one that is, and the queen move that stalemates next to the one that mates.
 - **Module 3** plays a capture with a piece and with a pawn, a protected knight that the rook would take at a loss, a check given and answered, the safe squares around a king next to an attacked file (as an area), the back rank mate checked step by step, the stalemate that comes from a careless queen move, castling on both sides, a knight promotion that forks king and queen, and en passant from the double step on.
 
+### Module 8
+
+- **Each tactic is played on its example twice.** The concept screen plays the blow and what it wins (the fork on `c7` and the rook taken; the pinned knight attacked by a pawn; the skewer through the king to the queen; the bishop leaving with check to uncover the rook; the knight's double check that leaves the king three squares; the defender taken before the bishop; the deflection of a real game). The "como montar" screen, which had no board, now has the same example and shows the search: the targets marked, the square or line found, then the move.
+- **The example of the deflection is fixed** to the Lichess puzzle 0JCIA (CC0), 29.Qh7+ Kf8 30.Qxh8#, kept out of the lesson's rounds, so its text can name the squares.
+- **The success lines lost their exclamations** ("Garfo!", "Espeto!", "Xeque duplo!"), which cheered on top of the "Certo!" title.
+
